@@ -10,6 +10,7 @@ struct StatusInfo
 {
     int device{};
     double speed{};
+    double seconds{};
     uint64_t total{};
     uint64_t totalTime{};
     std::string deviceName;
@@ -25,7 +26,7 @@ struct Secp256k1KeyPair
 };
 
 using Secp256k1KeyPairs = thrust::host_vector<Secp256k1KeyPair>;
-using DataQueue = boost::lockfree::spsc_queue<Secp256k1KeyPairs*, boost::lockfree::capacity<1024>>;
+using DataQueue = boost::lockfree::spsc_queue<Secp256k1KeyPairs*, boost::lockfree::capacity<32*256*32>>;
 
 struct Context
 {

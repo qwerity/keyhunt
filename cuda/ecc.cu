@@ -45,24 +45,24 @@ struct ECC::Impl
         release(d_gPoints);
     }
 
-    uint32_t getIndex(const uint32_t block, const uint32_t thread, const uint32_t idx) const
+    uint32_t getIndex(const uint32_t grid, const uint32_t block, const uint32_t idx) const
     {
         // Total number of threads
         const uint32_t totalThreads = mGridSize * mBlockSize;
         const uint32_t base = idx * totalThreads;
 
         // Global ID of the current thread
-        const uint32_t threadId = block * mBlockSize + thread;
+        const uint32_t threadId = grid * mBlockSize + block;
         return base + threadId;
     }
 
-    void splatBigInt(uint32_t *dest, const uint32_t block, const uint32_t thread, const uint32_t idx, const secp256k1::uint256 &i) const
+    void splatBigInt(uint32_t *dest, const uint32_t grid, const uint32_t block, const uint32_t idx, const secp256k1::uint256 &i) const
     {
         uint32_t value[8];
         i.exportWords(value, 8, secp256k1::uint256::BigEndian);
 
         const uint32_t totalThreads = mGridSize * mBlockSize;
-        const uint32_t threadId = block * mBlockSize * 4 + thread * 4;
+        const uint32_t threadId = grid * mBlockSize * 4 + block * 4;
         const uint32_t base = idx * mGridSize * mBlockSize * 8;
 
         uint32_t index = base + threadId;
@@ -80,11 +80,11 @@ struct ECC::Impl
         }
     }
 
-    secp256k1::uint256 readBigInt(const uint32_t *src, const uint32_t block, const uint32_t thread, const uint32_t idx) const
+    secp256k1::uint256 readBigInt(const uint32_t *src, const uint32_t grid, const uint32_t block, const uint32_t idx) const
     {
         uint32_t value[8];
         const uint32_t totalThreads = mGridSize * mBlockSize;
-        const uint32_t threadId = block * mBlockSize * 4 + thread * 4;
+        const uint32_t threadId = grid * mBlockSize * 4 + block * 4;
         const uint32_t base = idx * mGridSize * mBlockSize * 8;
 
         uint32_t index = base + threadId;
@@ -211,7 +211,7 @@ struct ECC::Impl
         {
             mPointsPerThread = 32;
 
-            if (keysNumber / mPointsPerThread < blockSize)
+            if (keysNumber / mPointsPerThread < static_cast<uint32_t>(blockSize))
             {
                 mBlockSize = keysNumber / mPointsPerThread;
             }
@@ -226,7 +226,7 @@ struct ECC::Impl
 
         const auto totalKeysPerStep = mGridSize * mBlockSize * mPointsPerThread;
 
-        std::cout << "Keys will be generated: " << totalKeysPerStep << ", requested: " << keysNumber << ", skipped: " << std::abs(int(totalKeysPerStep) - int(keysNumber)) << std::endl;
+        std::cout << "Keys will be generated: " << totalKeysPerStep << ", requested: " << keysNumber << ", skipped: " << std::abs(static_cast<int>(totalKeysPerStep) - static_cast<int>(keysNumber)) << std::endl;
         std::cout << "mGridSize: " << mGridSize << ", mBlockSize: " << mBlockSize  << ", mPointsPerThread: " << mPointsPerThread << std::endl;
 
         // Allocate private keys on device
@@ -239,20 +239,22 @@ struct ECC::Impl
         allocateMultChainDeviceMemory();
     }
 
-    cudaError_t getResults(thrust::host_vector<secp256k1::ecpoint> &publicKeys) const
+    cudaError_t getResults(thrust::host_vector<std::pair<uint32_t, secp256k1::ecpoint>> &results) const
     {
         thrust::host_vector<uint32_t> h_publicKeysX = d_publicKeysX;
         thrust::host_vector<uint32_t> h_publicKeysY = d_publicKeysY;
 
-        for (uint32_t block = 0; block < mGridSize; block++)
+        for (uint32_t grid = 0; grid < mGridSize; grid++)
         {
-            for (uint32_t thread = 0; thread < mBlockSize; thread++)
+            for (uint32_t block = 0; block < mBlockSize; block++)
             {
                 for (uint32_t idx = 0; idx < mPointsPerThread; idx++)
                 {
-                    secp256k1::uint256 x = readBigInt(h_publicKeysX.data(), block, thread, idx);
-                    secp256k1::uint256 y = readBigInt(h_publicKeysY.data(), block, thread, idx);
-                    publicKeys.push_back({x, y});
+                    secp256k1::uint256 x = readBigInt(h_publicKeysX.data(), grid, block, idx);
+                    secp256k1::uint256 y = readBigInt(h_publicKeysY.data(), grid, block, idx);
+
+                    const auto privateKeyIndex = getIndex(grid, block, idx);
+                    results.push_back({privateKeyIndex, {x, y}});
                 }
             }
         }
@@ -290,17 +292,17 @@ struct ECC::Impl
         thrust::host_vector<uint32_t> h_publicKeysY = d_publicKeysY;
 
         bool result{true};
-        for (uint32_t block = 0; block < mGridSize; block++)
+        for (uint32_t grid = 0; grid < mGridSize; grid++)
         {
-            for (uint32_t thread = 0; thread < mBlockSize; thread++)
+            for (uint32_t block = 0; block < mBlockSize; block++)
             {
                 for (uint32_t idx = 0; idx < mPointsPerThread; idx++)
                 {
-                    const auto index = getIndex(block, thread, idx);
+                    const auto index = getIndex(grid, block, idx);
                     const secp256k1::uint256 privateKey = privateKeys[index];
 
-                    secp256k1::uint256 x = readBigInt(h_publicKeysX.data(), block, thread, idx);
-                    secp256k1::uint256 y = readBigInt(h_publicKeysY.data(), block, thread, idx);
+                    secp256k1::uint256 x = readBigInt(h_publicKeysX.data(), grid, block, idx);
+                    secp256k1::uint256 y = readBigInt(h_publicKeysY.data(), grid, block, idx);
 
                     const secp256k1::ecpoint pGPU(x, y);
                     if (!secp256k1::pointExists(pGPU))
@@ -406,9 +408,9 @@ void ECC::init(const thrust::host_vector<secp256k1::uint256> &privateKeys) const
     mImpl->init(privateKeys);
 }
 
-cudaError_t ECC::getResults(thrust::host_vector<secp256k1::ecpoint> &publicKeys) const
+cudaError_t ECC::getResults(thrust::host_vector<std::pair<uint32_t, secp256k1::ecpoint>> &results) const
 {
-    return mImpl->getResults(publicKeys);
+    return mImpl->getResults(results);
 }
 
 cudaError_t ECC::generatePublicKeys() const

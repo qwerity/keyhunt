@@ -8,10 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 ####################################################################################################################################################################################
-find_package(fmt CONFIG REQUIRED)
-
-####################################################################################################################################################################################
-find_package(Boost 1.80 REQUIRED COMPONENTS system)
+find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log program_options)
 
 include_directories(${Boost_INCLUDE_DIRS})
 
@@ -46,6 +43,5 @@ target_link_libraries(cuda-keyhunt-pvk PUBLIC secp256k1lib)
 target_link_libraries(cuda-keyhunt-pvk PUBLIC util)
 target_link_libraries(cuda-keyhunt-pvk PUBLIC cuda_keys)
 target_link_libraries(cuda-keyhunt-pvk PUBLIC ${Boost_LIBRARIES})
-target_link_libraries(cuda-keyhunt-pvk PRIVATE fmt::fmt)
 
 ####################################################################################################################################################################################

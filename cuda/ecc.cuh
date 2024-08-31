@@ -20,7 +20,7 @@ public:
 
     [[nodiscard]] bool selfTest(const thrust::host_vector<secp256k1::uint256>& privateKeys) const;
 
-    cudaError_t getResults(thrust::host_vector<secp256k1::ecpoint>& vector) const;
+    cudaError_t getResults(thrust::host_vector<std::pair<uint32_t, secp256k1::ecpoint>>& results) const;
 
     cudaError_t generatePublicKeys() const;
 

@@ -1,8 +1,9 @@
 #include "key_generator.h"
 
+#include <format>
 #include <utility>
 #include <functional>
-#include <fmt/core.h>
+#include <boost/log/trivial.hpp>
 
 #include "cuda/ecc.cuh"
 #include "util/cuda_util.h"
@@ -37,6 +38,8 @@ struct KeyGenerator::Impl
 
     thrust::host_vector<secp256k1::uint256> mCurrentPrivateKeys;
     std::unique_ptr<ECC> mCuECC;
+
+    mutable utils::Timer mTimer;
 
     std::shared_ptr<DataQueue> mDataQueue;
     std::atomic<bool> mStopFlag{false};
@@ -85,7 +88,8 @@ struct KeyGenerator::Impl
 
     void selfTest(const uint32_t keysNumberToGenerate) const
     {
-        fmt::print("KeyGenerator::selfTest started\n");
+        BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest started";
+
         const thrust::host_vector<secp256k1::uint256> privateKeys = generateRandomPrivateKeys(keysNumberToGenerate);
 
         mCuECC->init(privateKeys);
@@ -94,23 +98,23 @@ struct KeyGenerator::Impl
 
         if (mCuECC->selfTest(privateKeys))
         {
-            fmt::print("KeyGenerator::selfTest done\n");
+            BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest done";
         }
         else
         {
-            fmt::print("KeyGenerator::selfTest fails\n");
+            BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest fails";
         }
 
-        thrust::host_vector<secp256k1::ecpoint> publicKeys;
-        cu::cudaSafeCall(mCuECC->getResults(publicKeys));
+        thrust::host_vector<std::pair<uint32_t, secp256k1::ecpoint>> results;
+        cu::cudaSafeCall(mCuECC->getResults(results));
 
         // bool compressed{false};
         // for (uint32_t i = 0; i < publicKeys.size(); i++)
         // {
-        //     std::cout << privateKeys[i].toString(compressed) << " ";
-        //     std::cout << publicKeys[i].toString(compressed) << " " << std::endl;
-        //     // std::string address = Address::fromPublicKey(publicKeys[i], compressed);
-        //     // std::cout << address << endl;
+        //    std::string address = Address::fromPublicKey(publicKeys[i], compressed);
+        //     BOOST_LOG_TRIVIAL(info) << privateKeys[i].toString(compressed) << " ";
+        //                             << publicKeys[i].toString(compressed) << " "
+        //                             << address;
         // }
     }
 
@@ -118,40 +122,36 @@ struct KeyGenerator::Impl
     {
         std::cout << "KeyGenerator Thread ID: " << std::this_thread::get_id() << std::endl;
 
-        utils::Timer timer;
-
         uint64_t generatedPointsCounter{0};
         while (!mStopFlag && !mDone)
         {
-            timer.start();
+            mTimer.start();
             cu::cudaSafeCall(mCuECC->generatePublicKeys());
             generatedPointsCounter += mCurrentPrivateKeys.size();
 
-            const uint64_t t = timer.getTime();
-            const auto seconds = static_cast<double>(t) / 1000.0;
+            const auto seconds = static_cast<double>(mTimer.getTime()) / 1000.0;
             // if (seconds >= 1000.0)
             {
                 StatusInfo info;
                 info.total = generatedPointsCounter;
+                info.seconds = seconds;
                 info.speed = static_cast<double>(generatedPointsCounter) / seconds;
                 generatedPointsCounter = 0;
                 mStatusCallback(info);
-
-                fmt::print("KeyGenerator: generated done, speed: {}, seconds: {}\n", info.speed, seconds);
             }
 
-            fmt::print("KeyGenerator: generated done\n");
+            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: generated done";
 
-            thrust::host_vector<secp256k1::ecpoint> publicKeys;
-            cu::cudaSafeCall(mCuECC->getResults(publicKeys));
+            thrust::host_vector<std::pair<uint32_t, secp256k1::ecpoint>> results;
+            cu::cudaSafeCall(mCuECC->getResults(results));
 
-            fmt::print("KeyGenerator: generated {} keys\n", publicKeys.size());
+            BOOST_LOG_TRIVIAL(info) << std::format("KeyGenerator: generated {} keys\n", results.size());
 
             // to be deleted in KeyProcessor
             auto* pairs = new Secp256k1KeyPairs;
-            for (uint32_t i = 0; i < publicKeys.size(); i++)
+            for (uint32_t i = 0; i < results.size(); i++)
             {
-                pairs->push_back({mCurrentPrivateKeys[i], publicKeys[i]});
+                pairs->push_back({mCurrentPrivateKeys[results[i].first], results[i].second});
             }
 
             while (!mDataQueue->push(pairs))
@@ -163,8 +163,9 @@ struct KeyGenerator::Impl
                 std::this_thread::yield();
             }
 
+
             mDone = true;
-            fmt::print("KeyGenerator: done\n");
+            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: done";
         }
     }
 };

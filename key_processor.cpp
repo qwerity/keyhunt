@@ -1,8 +1,8 @@
 #include "key_processor.h"
 
+#include <format>
 #include <thread>
-#include <fmt/os.h>
-#include <fmt/core.h>
+#include <boost/log/trivial.hpp>
 
 struct KeyProcessor::Impl
 {
@@ -10,9 +10,6 @@ struct KeyProcessor::Impl
     std::atomic<bool> mStopFlag{false};
 
     std::thread mThread;
-
-    const std::string mOutputPath{"output.txt"};
-    fmt::ostream mResultOutFile = fmt::output_file(mOutputPath);
 
     explicit Impl(const std::shared_ptr<DataQueue> &dataQueue) : mDataQueue(dataQueue) {}
     ~Impl()
@@ -40,18 +37,24 @@ struct KeyProcessor::Impl
 
                 if (!keyPairs)
                 {
-                    fmt::print("KeyProcessor: someone added nullptr item to queue\n");
+                    BOOST_LOG_TRIVIAL(info) << "KeyProcessor: someone added nullptr item to queue";
                     continue;
                 }
 
-                fmt::print("KeyProcessor: New data to process\n");
+                // BOOST_LOG_TRIVIAL(info) << "KeyProcessor: New data to process";
 
                 constexpr bool compressed{false};
-                for (const auto& [privateKey, publicKey] : *keyPairs)
+                // std::string address = Address::fromPublicKey(publicKeys[i], compressed);
+
+                for (const auto& [gpuPrivateKey, gpuPublicKey] : *keyPairs)
                 {
-                    // std::string address = Address::fromPublicKey(publicKeys[i], compressed);
-                    mResultOutFile.print("{} {}\n", privateKey.toString(compressed), publicKey.toString(compressed));
-                    mResultOutFile.flush();
+                    const secp256k1::ecpoint pCPU = secp256k1::multiplyPoint(gpuPrivateKey, secp256k1::G());
+                    if (pCPU != gpuPublicKey)
+                    {
+                       BOOST_LOG_TRIVIAL(info) << "KeyProcessor: gen key is not correct";
+                       BOOST_LOG_TRIVIAL(info) << std::format("{} {}\n", gpuPrivateKey.toString(compressed), gpuPublicKey.toString(compressed));
+                    }
+                    BOOST_LOG_TRIVIAL(info) << std::format("{} {}\n", gpuPrivateKey.toString(compressed), gpuPublicKey.toString(compressed));
                 }
 
                 delete keyPairs;
