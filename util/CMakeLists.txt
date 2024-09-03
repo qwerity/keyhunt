@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.10)
-project(util CXX)
 
 set(SRC_FILES
     crypto_util.h
@@ -16,7 +15,13 @@ set(SRC_FILES
 
     utils.h
     utils.cpp
+
+    address_util.h
+    base58.cpp
+
+    secp256k1.cpp
+    secp256k1.h
 )
 
 # Define the static library target
-add_library(${PROJECT_NAME} STATIC ${SRC_FILES})
+add_library(util STATIC ${SRC_FILES})

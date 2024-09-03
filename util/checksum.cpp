@@ -2,11 +2,6 @@
 
 #include <cstring>
 
-[[maybe_unused]] static uint32_t endian(uint32_t x)
-{
-    return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
-}
-
 uint32_t crypto::checksum(const uint32_t *hash)
 {
     uint32_t msg[16]{};

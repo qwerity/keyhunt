@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <format>
 #include <functional>
 
 namespace utils
@@ -13,7 +14,7 @@ namespace utils
         Timer();
 
         void start();
-        uint64_t getTime() const;
+        [[nodiscard]] uint64_t getTime() const;
 
     private:
         uint64_t _startTime;
@@ -25,8 +26,7 @@ namespace utils
         explicit ScopeOutRunner(std::function<void()> f, bool enabled = true) : mf(std::move(f)), mEnabled(enabled) {};
         ~ScopeOutRunner()
         {
-            if(mEnabled && mf)
-                mf();
+            if(mEnabled && mf) { mf(); }
         }
 
         void setEnabled(bool e) { mEnabled = e; };
@@ -55,14 +55,15 @@ namespace utils
     bool readLinesFromStream(std::istream &in, std::vector<std::string> &lines);
     bool readLinesFromStream(const std::string &fileName, std::vector<std::string> &lines);
 
-    std::string format(const char *formatStr, double value);
-    std::string format(uint32_t value);
-    std::string format(uint64_t value);
-    std::string format(int value);
+    template <typename T>
+    std::string format(const std::string& formatStr, T value) { return std::format(formatStr, value); }
+
+    template <typename T>
+    std::string format(T value) { return std::format("{}", value); }
 
     void removeNewline(std::string &s);
 
-    unsigned int endian(unsigned int x);
+    inline unsigned int endian(unsigned int x) { return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24); }
 
     std::string toLower(const std::string &s);
 

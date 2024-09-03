@@ -16,13 +16,13 @@ public:
     ECC(ECC&& rhs) noexcept;
     ECC& operator=(ECC&& rhs) noexcept;
 
-    void init(const thrust::host_vector<secp256k1::uint256>& privateKeys) const;
+    void init(uint32_t pointsPerThread, const thrust::host_vector<secp256k1::uint256>& privateKeys) const;
 
     [[nodiscard]] bool selfTest(const thrust::host_vector<secp256k1::uint256>& privateKeys) const;
 
     cudaError_t getResults(thrust::host_vector<std::pair<uint32_t, secp256k1::ecpoint>>& results) const;
 
-    cudaError_t generatePublicKeys() const;
+    [[nodiscard]] cudaError_t generatePublicKeys() const;
 
 private:
     struct Impl;

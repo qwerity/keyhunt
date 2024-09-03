@@ -54,7 +54,6 @@ struct KeyProcessor::Impl
                        BOOST_LOG_TRIVIAL(info) << "KeyProcessor: gen key is not correct";
                        BOOST_LOG_TRIVIAL(info) << std::format("{} {}\n", gpuPrivateKey.toString(compressed), gpuPublicKey.toString(compressed));
                     }
-                    BOOST_LOG_TRIVIAL(info) << std::format("{} {}\n", gpuPrivateKey.toString(compressed), gpuPublicKey.toString(compressed));
                 }
 
                 delete keyPairs;

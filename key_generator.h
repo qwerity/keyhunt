@@ -15,8 +15,8 @@ public:
     KeyGenerator(KeyGenerator&& rhs) noexcept;
     KeyGenerator& operator=(KeyGenerator&& rhs) noexcept;
 
-    void start(const thrust::host_vector<secp256k1::uint256>& privateKeys) const;
-    void startRandom(uint32_t keysNumberToGenerate = 5) const;
+    void start(const thrust::host_vector<secp256k1::uint256>& privateKeys, uint32_t pointsPerThread = 32) const;
+    void startRandom(uint32_t keysNumberToGenerate = 5, uint32_t pointsPerThread = 32) const;
     void stop() const;
 
     [[nodiscard]] bool isDone() const;

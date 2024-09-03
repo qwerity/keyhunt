@@ -16,7 +16,6 @@ namespace crypto
         void get(unsigned char *buf, int len);
     };
 
-
     void ripemd160(uint32_t *msg, uint32_t *digest);
     void sha256Init(uint32_t *digest);
     void sha256(uint32_t *msg, uint32_t *digest);

@@ -23,10 +23,10 @@ namespace
         privateKeys.push_back(std::string("d7ae6ac85e67dfe75b3a42c6453abed4bb34a26d2988481fc134b2d845976a56"));
         privateKeys.push_back(k);
 
-        for (uint32_t i = 0; i < keysNumberToGenerate; i++)
-        {
-            privateKeys.push_back(secp256k1::generatePrivateKey());
-        }
+        // for (uint32_t i = 0; i < keysNumberToGenerate; i++)
+        // {
+        //     privateKeys.push_back(secp256k1::generatePrivateKey());
+        // }
 
         return privateKeys;
     }
@@ -59,18 +59,18 @@ struct KeyGenerator::Impl
         stop();
     }
 
-    void start(const thrust::host_vector<secp256k1::uint256>& privateKeys)
+    void start(const thrust::host_vector<secp256k1::uint256>& privateKeys, const uint32_t pointsPerThread)
     {
         mCurrentPrivateKeys = privateKeys;
-        mCuECC->init(privateKeys);
+        mCuECC->init(pointsPerThread, privateKeys);
 
         mThread = std::thread(&Impl::run, this);
     }
 
-    void startRandom(const uint32_t keysNumberToGenerate)
+    void startRandom(const uint32_t keysNumberToGenerate, const uint32_t pointsPerThread)
     {
         mCurrentPrivateKeys = generateRandomPrivateKeys(keysNumberToGenerate);
-        mCuECC->init(mCurrentPrivateKeys);
+        mCuECC->init(pointsPerThread, mCurrentPrivateKeys);
 
         mThread = std::thread(&Impl::run, this);
     }
@@ -92,7 +92,7 @@ struct KeyGenerator::Impl
 
         const thrust::host_vector<secp256k1::uint256> privateKeys = generateRandomPrivateKeys(keysNumberToGenerate);
 
-        mCuECC->init(privateKeys);
+        mCuECC->init(32, privateKeys);
 
         cu::cudaSafeCall(mCuECC->generatePublicKeys());
 
@@ -179,14 +179,14 @@ KeyGenerator::KeyGenerator(KeyGenerator &&rhs) noexcept = default;
 
 KeyGenerator& KeyGenerator::operator=(KeyGenerator &&rhs) noexcept = default;
 
-void KeyGenerator::start(const thrust::host_vector<secp256k1::uint256>& privateKeys) const
+void KeyGenerator::start(const thrust::host_vector<secp256k1::uint256>& privateKeys, const uint32_t pointsPerThread) const
 {
-    mImpl->start(privateKeys);
+    mImpl->start(privateKeys, pointsPerThread);
 }
 
-void KeyGenerator::startRandom(const uint32_t keysNumberToGenerate) const
+void KeyGenerator::startRandom(const uint32_t keysNumberToGenerate, const uint32_t pointsPerThread) const
 {
-    mImpl->startRandom(keysNumberToGenerate);
+    mImpl->startRandom(keysNumberToGenerate, pointsPerThread);
 }
 
 void KeyGenerator::stop() const

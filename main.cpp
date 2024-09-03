@@ -44,7 +44,7 @@ int main()
     const KeyProcessor keyProcessor(sharedDataQueue);
     // keyGenerator.selfTest(896);
 
-    keyGenerator.startRandom(9);
+    keyGenerator.startRandom(10'000'000, 128);
     keyProcessor.start();
 
     // Giving some time to process, otherwise main thread will force stop the processing

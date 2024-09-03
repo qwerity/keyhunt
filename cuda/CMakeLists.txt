@@ -1,16 +1,19 @@
 cmake_minimum_required(VERSION 3.10)
 project(cuda_keys CUDA)
 
-set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
-set(THRUST_CPP_DIALECT 17)
+set(THRUST_CPP_DIALECT 20)
 
 # Set the CUDA compiler flags for Debug and Release configurations
 set(CMAKE_CUDA_FLAGS "--extended-lambda -rdc=true --default-stream per-thread --expt-relaxed-constexpr")
 set(CMAKE_CUDA_FLAGS_DEBUG "-g -G -O0")
 set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -DNDEBUG")
 set(CMAKE_CUDA_FLAGS_RELWITHDEBINFO "-O2 -g -G")
+
+####################################################################################################################################################################################
+include_directories(${CMAKE_SOURCE_DIR}/util)
 
 ####################################################################################################################################################################################
 # CUDA setup
@@ -33,9 +36,6 @@ elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
 endif()
 
 ####################################################################################################################################################################################
-include_directories(${CMAKE_SOURCE_DIR}/secp256k1lib)
-include_directories(${CMAKE_SOURCE_DIR}/util)
-
 set(SRC
     ecc.cu
     ecc.cuh
@@ -43,6 +43,8 @@ set(SRC
     udevice_vector.cuh
     ptx.cuh
     functors.cuh
+    sha256.cuh
+    ripemd160.cuh
 )
 
 add_library(cuda_keys ${SRC})
@@ -51,8 +53,7 @@ set_target_properties(cuda_keys PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     POSITION_INDEPENDENT_CODE ON
 )
-target_link_libraries(cuda_keys PUBLIC secp256k1lib)
-target_link_libraries(cuda_keys PUBLIC Thrust)
+target_link_libraries(cuda_keys PUBLIC util)
 target_link_libraries(cuda_keys PUBLIC CUDA::cudart_static)
 target_link_libraries(cuda_keys PUBLIC Thrust)
 target_compile_options(cuda_keys PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall -Wextra>)

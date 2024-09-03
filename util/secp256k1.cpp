@@ -1,9 +1,9 @@
-#include"crypto_util.h"
+#include "crypto_util.h"
 #include "secp256k1.h"
 
 #include <algorithm>
-#include<cstring>
-#include<cstdio>
+#include <cstring>
+#include <cstdio>
 #include <iomanip>
 
 #include "common.h"

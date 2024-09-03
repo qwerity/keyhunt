@@ -3,6 +3,7 @@
 #include<cstdio>
 #include<string>
 #include<fstream>
+#include <utility>
 #include<vector>
 #include<algorithm>
 
@@ -21,7 +22,7 @@ namespace utils
 #ifdef _WIN32
         return GetTickCount64();
 #else
-        timeval t;
+        timeval t{};
         gettimeofday(&t, nullptr);
         return static_cast<uint64_t>(t.tv_sec) * 1000 + t.tv_usec / 1000;
 #endif
@@ -77,7 +78,7 @@ namespace utils
 
     uint32_t parseUInt32(std::string s)
     {
-        return static_cast<uint32_t>(parseUInt64(s));
+        return static_cast<uint32_t>(parseUInt64(std::move(s)));
     }
 
     uint64_t parseUInt64(std::string s)
@@ -112,31 +113,22 @@ namespace utils
 
     bool isHex(const std::string &s)
     {
-        for (const auto &si: s)
-        {
-            if (const char c = si; !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
-            {
-                return false;
-            }
-        }
-        return true;
+        return std::ranges::all_of(s, [](const char c) { return std::isxdigit(c); });
     }
 
     std::string formatSeconds(unsigned int seconds)
     {
-        char s[128]{};
         unsigned int days = seconds / 86400;
         unsigned int hours = (seconds % 86400) / 3600;
         unsigned int minutes = (seconds % 3600) / 60;
         unsigned int sec = seconds % 60;
+
         if (days > 0)
         {
-            sprintf(s, "%d:%02d:%02d:%02d", days, hours, minutes, sec);
-        } else
-        {
-            sprintf(s, "%02d:%02d:%02d", hours, minutes, sec);
+            return std::format("%d:%02d:%02d:%02d", days, hours, minutes, sec);
         }
-        return std::string(s);
+
+        return std::format("%02d:%02d:%02d", hours, minutes, sec);
     }
 
     long getFileSize(const std::string &fileName)
@@ -167,7 +159,7 @@ namespace utils
         std::string line;
         while (std::getline(in, line))
         {
-            if (line.length() > 0)
+            if (!line.empty())
             {
                 lines.push_back(line);
             }
@@ -197,37 +189,9 @@ namespace utils
         return true;
     }
 
-    std::string format(const char *formatStr, double value)
-    {
-        char buf[100] = {0};
-        sprintf(buf, formatStr, value);
-        return std::string(buf);
-    }
-
-    std::string format(uint32_t value)
-    {
-        char buf[100] = {0};
-        sprintf(buf, "%u", value);
-        return std::string(buf);
-    }
-
-    std::string format(uint64_t value)
-    {
-        char buf[100] = {0};
-        sprintf(buf, "%lud", (uint64_t) value);
-        return std::string(buf);
-    }
-
-    std::string format(int value)
-    {
-        char buf[100] = {0};
-        sprintf(buf, "%d", value);
-        return std::string(buf);
-    }
-
     void removeNewline(std::string &s)
     {
-        size_t len = s.length();
+        const size_t len = s.length();
         int toRemove = 0;
         if (len >= 2)
         {
@@ -249,15 +213,10 @@ namespace utils
         }
     }
 
-    unsigned int endian(unsigned int x)
-    {
-        return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
-    }
-
     std::string toLower(const std::string &s)
     {
         std::string lowerCase = s;
-        std::transform(lowerCase.begin(), lowerCase.end(), lowerCase.begin(), ::tolower);
+        std::ranges::transform(lowerCase, lowerCase.begin(), ::tolower);
         return lowerCase;
     }
 
