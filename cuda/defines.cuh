@@ -1,0 +1,45 @@
+#pragma once
+
+struct alignas(4 * 8) uint256
+{
+    uint32_t v[8];
+
+    // assign as big endian
+    __host__ __device__ __forceinline__ uint256(const uint32_t _v[8])
+    {
+        for (int i = 0; i < 8; ++i)
+        {
+            v[i] = _v[7 - i];
+        }
+    }
+};
+
+struct alignas(2 * 4 * 8) ECPoint
+{
+    uint32_t x[8];
+    uint32_t y[8];
+
+    // assign as big endian
+    __host__ __device__ __forceinline__ ECPoint(const uint32_t _x[8], const uint32_t _y[8])
+    {
+        for (int i = 0; i < 8; ++i)
+        {
+            x[i] = _x[7 - i];
+            y[i] = _y[7 - i];
+        }
+    }
+};
+
+struct hash160
+{
+    uint32_t h[5];
+
+    __host__ __device__ __forceinline__
+    explicit hash160(const uint32_t hash[5])
+    {
+        for (int i = 0; i < 5; ++i)
+        {
+            h[i] = hash[i];
+        }
+    }
+};

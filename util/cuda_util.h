@@ -40,7 +40,7 @@ namespace cu
         std::string msg;
     };
 
-    inline void cudaSafeCall(const cudaError_t err) noexcept(false)
+    inline void safeCall(const cudaError_t err) noexcept(false)
     {
         if (err)
         {

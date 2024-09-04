@@ -5,8 +5,8 @@ namespace cu
     CudaDeviceInfo getDeviceInfo(int device)
     {
         cudaDeviceProp properties{};
-        cudaSafeCall(cudaSetDevice(device));
-        cudaSafeCall(cudaGetDeviceProperties(&properties, device));
+        safeCall(cudaSetDevice(device));
+        safeCall(cudaGetDeviceProperties(&properties, device));
 
         CudaDeviceInfo devInfo;
         devInfo.id = device;
@@ -105,14 +105,14 @@ namespace cu
 
     CudaDeviceInfo cudaInit(const int cudaDeviceId)
     {
-        cudaSafeCall(cudaSetDevice(cudaDeviceId));
-        cudaSafeCall(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
+        safeCall(cudaSetDevice(cudaDeviceId));
+        safeCall(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
 
         const auto info = getDeviceInfo(cudaDeviceId);
         // printDeviceInfo(info);
 
         // Use a larger portion of shared memory for L1 cache
-        cudaSafeCall(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
+        safeCall(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
 
         return info;
     }

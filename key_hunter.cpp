@@ -1,4 +1,4 @@
-#include "key_generator.h"
+#include "key_hunter.h"
 
 #include <format>
 #include <utility>
@@ -9,31 +9,11 @@
 #include "util/cuda_util.h"
 #include "util/utils.h"
 
-namespace
+
+struct KeyHunter::Impl
 {
-    thrust::host_vector<secp256k1::uint256> generateRandomPrivateKeys(const uint32_t keysNumberToGenerate = 5)
-    {
-        thrust::host_vector<secp256k1::uint256> privateKeys;
+    const AppConfig& mAppConfig;
 
-        const std::string k{"f71485d0bff28cf3a9f1b6c2b65b03729f42f9818fb497c6fae7268bb124f263"};
-        constexpr uint32_t testKey[8]{0x55c1df29, 0x32e27f37, 0x4b90fe20, 0x6d3b44ce, 0x1f95782b, 0x0345c17c, 0xff10a32d, 0x3f795bef};
-        privateKeys.push_back({testKey, secp256k1::uint256::BigEndian});
-        privateKeys.push_back(std::string("0100000000000000000000000000000000000000000000000000000000000000"));
-        privateKeys.push_back(std::string("0100000000000000000000000000000000000000000000000000000000000200"));
-        privateKeys.push_back(std::string("d7ae6ac85e67dfe75b3a42c6453abed4bb34a26d2988481fc134b2d845976a56"));
-        privateKeys.push_back(k);
-
-        for (uint32_t i = 0; i < keysNumberToGenerate; i++)
-        {
-            privateKeys.push_back(secp256k1::generatePrivateKey());
-        }
-
-        return privateKeys;
-    }
-}
-
-struct KeyGenerator::Impl
-{
     std::thread mThread;
 
     thrust::host_vector<secp256k1::uint256> mCurrentPrivateKeys;
@@ -48,11 +28,14 @@ struct KeyGenerator::Impl
     std::function<void(StatusInfo)> mStatusCallback;
 
     // Implementation
-    explicit Impl(const Context& context)
-    : mCuECC(std::make_unique<ECC>())
-    , mDataQueue(context.dataQueue)
-    , mStatusCallback(context.statusCallback)
-    {}
+    explicit Impl(const AppConfig& config)
+    : mAppConfig(config)
+    , mCuECC(std::make_unique<ECC>())
+    , mDataQueue(config.dataQueue)
+    , mStatusCallback(config.statusCallback)
+    {
+        cu::cudaInit(config.appParams.cudaDeviceId);
+    }
 
     ~Impl()
     {
@@ -67,10 +50,10 @@ struct KeyGenerator::Impl
         mThread = std::thread(&Impl::run, this);
     }
 
-    void startRandom(const uint32_t keysNumberToGenerate, const uint32_t pointsPerThread)
+    void startWithRandomPrivateKeys()
     {
-        mCurrentPrivateKeys = generateRandomPrivateKeys(keysNumberToGenerate);
-        mCuECC->init(pointsPerThread, mCurrentPrivateKeys);
+        mCurrentPrivateKeys = utils::generateRandomPrivateKeys(mAppConfig.appParams.keysNumberToGenerate);
+        mCuECC->init(mAppConfig.appParams.pointsPerThread, mCurrentPrivateKeys);
 
         mThread = std::thread(&Impl::run, this);
     }
@@ -90,11 +73,11 @@ struct KeyGenerator::Impl
     {
         BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest started";
 
-        const thrust::host_vector<secp256k1::uint256> privateKeys = generateRandomPrivateKeys(keysNumberToGenerate);
+        const thrust::host_vector<secp256k1::uint256> privateKeys = utils::generateRandomPrivateKeys(keysNumberToGenerate);
 
         mCuECC->init(32, privateKeys);
 
-        cu::cudaSafeCall(mCuECC->generatePublicKeys());
+        cu::safeCall(mCuECC->generatePublicKeys());
 
         if (mCuECC->selfTest(privateKeys))
         {
@@ -106,7 +89,7 @@ struct KeyGenerator::Impl
         }
 
         thrust::host_vector<std::pair<uint32_t, secp256k1::ecpoint>> results;
-        cu::cudaSafeCall(mCuECC->getResults(results));
+        cu::safeCall(mCuECC->getResults(results));
 
         // bool compressed{false};
         // for (uint32_t i = 0; i < publicKeys.size(); i++)
@@ -126,7 +109,7 @@ struct KeyGenerator::Impl
         while (!mStopFlag && !mDone)
         {
             mTimer.start();
-            cu::cudaSafeCall(mCuECC->generatePublicKeys());
+            cu::safeCall(mCuECC->generatePublicKeys());
             generatedPointsCounter += mCurrentPrivateKeys.size();
 
             const auto seconds = static_cast<double>(mTimer.getTime()) / 1000.0;
@@ -143,15 +126,15 @@ struct KeyGenerator::Impl
             BOOST_LOG_TRIVIAL(info) << "KeyGenerator: generated done";
 
             thrust::host_vector<std::pair<uint32_t, secp256k1::ecpoint>> results;
-            cu::cudaSafeCall(mCuECC->getResults(results));
+            cu::safeCall(mCuECC->getResults(results));
 
             BOOST_LOG_TRIVIAL(info) << std::format("KeyGenerator: generated {} keys\n", results.size());
 
             // to be deleted in KeyProcessor
             auto* pairs = new Secp256k1KeyPairs;
-            for (uint32_t i = 0; i < results.size(); i++)
+            for (const auto &[privateKeyIndex, publicKey] : results)
             {
-                pairs->push_back({mCurrentPrivateKeys[results[i].first], results[i].second});
+                pairs->push_back({mCurrentPrivateKeys[privateKeyIndex], publicKey});
             }
 
             while (!mDataQueue->push(pairs))
@@ -170,36 +153,35 @@ struct KeyGenerator::Impl
     }
 };
 
-KeyGenerator::KeyGenerator(const Context& context) : mImpl(std::make_unique<Impl>(context))
-{}
+KeyHunter::KeyHunter(const AppConfig& config) : mImpl(std::make_unique<Impl>(config)) {}
 
-KeyGenerator::~KeyGenerator() = default;
+KeyHunter::~KeyHunter() = default;
 
-KeyGenerator::KeyGenerator(KeyGenerator &&rhs) noexcept = default;
+KeyHunter::KeyHunter(KeyHunter &&rhs) noexcept = default;
 
-KeyGenerator& KeyGenerator::operator=(KeyGenerator &&rhs) noexcept = default;
+KeyHunter& KeyHunter::operator=(KeyHunter &&rhs) noexcept = default;
 
-void KeyGenerator::start(const thrust::host_vector<secp256k1::uint256>& privateKeys, const uint32_t pointsPerThread) const
+void KeyHunter::start(const thrust::host_vector<secp256k1::uint256>& privateKeys, const uint32_t pointsPerThread) const
 {
     mImpl->start(privateKeys, pointsPerThread);
 }
 
-void KeyGenerator::startRandom(const uint32_t keysNumberToGenerate, const uint32_t pointsPerThread) const
+void KeyHunter::startWithRandomPrivateKeys() const
 {
-    mImpl->startRandom(keysNumberToGenerate, pointsPerThread);
+    mImpl->startWithRandomPrivateKeys();
 }
 
-void KeyGenerator::stop() const
+void KeyHunter::stop() const
 {
     mImpl->stop();
 }
 
-bool KeyGenerator::isDone() const
+bool KeyHunter::isDone() const
 {
     return mImpl->isDone();
 }
 
-void KeyGenerator::selfTest(const uint32_t keysNumberToGenerate) const
+void KeyHunter::selfTest(const uint32_t keysNumberToGenerate) const
 {
     mImpl->selfTest(keysNumberToGenerate);
 }

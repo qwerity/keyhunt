@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 
 #include "ptx.cuh"
+#include "defines.cuh"
 
 /**
  Prime modulus 2^256 - 2^32 - 977
@@ -30,36 +31,6 @@ __constant__ static constexpr uint32_t d_N[8] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFF
 // TODO(ksh): not used
 // __constant__ static constexpr uint32_t _BETA[8] = {0x7AE96A2B, 0x657C0710, 0x6E64479E, 0xAC3434E9, 0x9CF04975, 0x12F58995, 0xC1396C28, 0x719501EE};
 // __constant__ static constexpr uint32_t _LAMBDA[8] = {0x5363AD4C, 0xC05C30E0, 0xA5261C02, 0x8812645A, 0x122E22EA, 0x20816678, 0xDF02967C, 0x1B23BD72};
-
-struct alignas(4 * 8) uint256
-{
-    uint32_t v[8];
-
-    // assign as big endian
-    __host__ __device__ __forceinline__ uint256(const uint32_t _v[8])
-    {
-        for (int i = 0; i < 8; ++i)
-        {
-            v[i] = _v[7 - i];
-        }
-    }
-};
-
-struct alignas(2 * 4 * 8) ECPoint
-{
-    uint32_t x[8];
-    uint32_t y[8];
-
-    // assign as big endian
-    __host__ __device__ __forceinline__ ECPoint(const uint32_t _x[8], const uint32_t _y[8])
-    {
-        for (int i = 0; i < 8; ++i)
-        {
-            x[i] = _x[7 - i];
-            y[i] = _y[7 - i];
-        }
-    }
-};
 
 __device__ __forceinline__ bool isInfinity(const uint32_t x[8])
 {
@@ -616,7 +587,7 @@ __device__ static void invModP(const uint32_t *value, uint32_t *inverse)
     invModP(inverse);
 }
 
-__device__ static void negModP(const uint32_t *value, const uint32_t *negative)
+__device__ static void negModP(const uint32_t *value, uint32_t *negative)
 {
     sub_cc(negative[0], d_P[0], value[0]);
     subc_cc(negative[1], d_P[1], value[1]);

@@ -62,10 +62,10 @@ TEST_CASE("Test Ripemd-160 calculation from public key generated from private", 
         Hash::hashPublicKeyCompressed(xWords, yWords, digestWithoutFinalRoundCompressed);
         std::ranges::transform(digestWithoutFinalRoundCompressed, digestCompressedLE, utils::endian);
 
-        const auto actualHash160 = convertToHexString(digestLE, 5);
-        const auto actualHash160Compressed =  convertToHexString(digestCompressedLE, 5);
-        const auto actualHash160WithoutFinalRound = convertToHexString(digestWithoutFinalRound, 5);
-        const auto actualHash160WithoutFinalRoundCompressed = convertToHexString(digestWithoutFinalRoundCompressed, 5);
+        const auto actualHash160 = utils::convertToHexString(digestLE, 5);
+        const auto actualHash160Compressed = utils::convertToHexString(digestCompressedLE, 5);
+        const auto actualHash160WithoutFinalRound = utils::convertToHexString(digestWithoutFinalRound, 5);
+        const auto actualHash160WithoutFinalRoundCompressed = utils::convertToHexString(digestWithoutFinalRoundCompressed, 5);
 
         REQUIRE(hash160 == actualHash160);
         REQUIRE(hash160Compressed == actualHash160Compressed);

@@ -56,8 +56,8 @@ set_target_properties(cuda_keys PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     POSITION_INDEPENDENT_CODE ON
 )
-target_link_libraries(cuda_keys PUBLIC util)
-target_link_libraries(cuda_keys PUBLIC CUDA::cudart_static)
-target_link_libraries(cuda_keys PUBLIC Thrust)
+target_link_libraries(cuda_keys PRIVATE util)
+target_link_libraries(cuda_keys PRIVATE CUDA::cudart_static)
+target_link_libraries(cuda_keys PRIVATE Thrust)
 target_compile_options(cuda_keys PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall -Wextra>)
 

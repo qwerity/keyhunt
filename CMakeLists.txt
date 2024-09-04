@@ -11,6 +11,15 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(BUILD_TESTS "Build test_bitcoin executable." OFF)
 
 ####################################################################################################################################################################################
+include(FetchContent)
+FetchContent_Declare(
+    CLI11
+    GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
+    GIT_TAG        v2.4.2  # Specify a version tag or branch
+)
+FetchContent_MakeAvailable(CLI11)
+
+####################################################################################################################################################################################
 find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log program_options)
 
 include_directories(${Boost_INCLUDE_DIRS})
@@ -32,15 +41,16 @@ add_subdirectory(cuda)
 ####################################################################################################################################################################################
 set(MAIN_SRC
     main.cpp
-    key_generator.cpp
-    key_generator.h
-    util/common.h
+    key_hunter.cpp
+    key_hunter.h
     key_processor.cpp
     key_processor.h
 )
-add_executable(cuda-keyhunt-pvk ${MAIN_SRC})
-target_link_libraries(cuda-keyhunt-pvk PUBLIC util)
-target_link_libraries(cuda-keyhunt-pvk PUBLIC cuda_keys)
+add_executable(${PROJECT_NAME} ${MAIN_SRC})
+target_link_libraries(${PROJECT_NAME} PRIVATE util)
+target_link_libraries(${PROJECT_NAME} PRIVATE cuda_keys)
+target_link_libraries(${PROJECT_NAME} PRIVATE CLI11::CLI11)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${Boost_LIBRARIES})
 
 # TESTS ############################################################################################################################################################################
 if(BUILD_TESTS)

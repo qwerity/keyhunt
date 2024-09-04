@@ -6,6 +6,13 @@
 #include <format>
 #include <functional>
 
+#include <boost/log/trivial.hpp>
+
+namespace secp256k1
+{
+    struct uint256;
+}
+
 namespace utils
 {
     class Timer
@@ -68,4 +75,9 @@ namespace utils
     std::string toLower(const std::string &s);
 
     std::string trim(const std::string &s, char c = ' ');
+
+    std::string convertToHexString(const uint32_t* arr, uint32_t size);
+    void initLogging(const std::string& logFile = "app.log");
+
+    std::vector<secp256k1::uint256> generateRandomPrivateKeys(uint32_t keysNumberToGenerate = 5);
 }

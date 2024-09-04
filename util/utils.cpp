@@ -1,11 +1,15 @@
 #include "utils.h"
+#include "secp256k1.h"
 
-#include<cstdio>
-#include<string>
-#include<fstream>
+#include <cstdio>
+#include <string>
+#include <fstream>
 #include <utility>
-#include<vector>
-#include<algorithm>
+#include <vector>
+#include <algorithm>
+#include <iomanip>
+
+#include <boost/log/utility/setup.hpp>
 
 #ifdef _WIN32
     #include<windows.h>
@@ -225,5 +229,53 @@ namespace utils
         size_t left = s.find_first_not_of(c);
         size_t right = s.find_last_not_of(c);
         return s.substr(left, right - left + 1);
+    }
+
+    std::string convertToHexString(const uint32_t* arr, const uint32_t size)
+    {
+        std::stringstream ss;
+        // Iterate through each byte of the array
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            const auto *bytePtr = reinterpret_cast<const uint8_t *>(&arr[i]);
+            for (std::size_t j = 0; j < sizeof(uint32_t); ++j)
+            {
+                ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(bytePtr[j]);
+            }
+        }
+        return ss.str();
+    }
+
+    void initLogging(const std::string& logFile)
+    {
+        // Setting up a simple console logger
+        boost::log::add_console_log(std::cerr);
+        // boost::log::add_console_log(std::cerr, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
+
+        // // Setting up a file logger
+        // boost::log::add_file_log(logFile);
+        // boost::log::add_file_log(logFile, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
+        //
+        // // Enable logging for all levels
+        // boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::trace);
+
+        // Add attributes like timestamp and thread id
+        boost::log::add_common_attributes();
+    }
+
+    std::vector<secp256k1::uint256> generateRandomPrivateKeys(const uint32_t keysNumberToGenerate)
+    {
+        std::vector<secp256k1::uint256> privateKeys;
+
+        const std::string k{"f71485d0bff28cf3a9f1b6c2b65b03729f42f9818fb497c6fae7268bb124f263"};
+        constexpr uint32_t testKey[8]{0x55c1df29, 0x32e27f37, 0x4b90fe20, 0x6d3b44ce, 0x1f95782b, 0x0345c17c, 0xff10a32d, 0x3f795bef};
+        privateKeys.emplace_back(testKey, secp256k1::uint256::BigEndian);
+        privateKeys.emplace_back(std::string("0100000000000000000000000000000000000000000000000000000000000000"));
+        privateKeys.emplace_back(std::string("0100000000000000000000000000000000000000000000000000000000000200"));
+        privateKeys.emplace_back(std::string("d7ae6ac85e67dfe75b3a42c6453abed4bb34a26d2988481fc134b2d845976a56"));
+        privateKeys.emplace_back(k);
+
+        std::generate_n(std::back_inserter(privateKeys), keysNumberToGenerate, secp256k1::generatePrivateKey);
+        return privateKeys;
     }
 }

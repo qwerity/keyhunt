@@ -21,11 +21,8 @@ set(SRC_FILES
 
     secp256k1.cpp
     secp256k1.h
-
-    log.cpp
-    log.h
 )
 
 # Define the static library target
 add_library(util STATIC ${SRC_FILES})
-target_link_libraries(util PUBLIC ${Boost_LIBRARIES})
+target_link_libraries(util PRIVATE ${Boost_LIBRARIES})

@@ -57,7 +57,7 @@ struct ECC::Impl
     void setPointsPerThread(const uint32_t value)
     {
         mPointsPerThread = value;
-        cu::cudaSafeCall(cudaMemcpyToSymbol(d_pointsPerThread, &mPointsPerThread, sizeof(uint32_t)));
+        cu::safeCall(cudaMemcpyToSymbol(d_pointsPerThread, &mPointsPerThread, sizeof(uint32_t)));
     }
 
     uint32_t getIndex(const uint32_t grid, const uint32_t block, const uint32_t idx) const
@@ -118,7 +118,7 @@ struct ECC::Impl
         }
 
         const auto* d_gPointsRawPtr = thrust::raw_pointer_cast(d_gPoints.data());
-        cu::cudaSafeCall(cudaMemcpyToSymbol(d_gPointsPtr, &d_gPointsRawPtr, sizeof(ECPoint*)));
+        cu::safeCall(cudaMemcpyToSymbol(d_gPointsPtr, &d_gPointsRawPtr, sizeof(ECPoint*)));
     }
 
     void allocatePrivateKeysDeviceMemoryAndLoad(const thrust::host_vector<secp256k1::uint256> &privateKeys)
@@ -148,20 +148,20 @@ struct ECC::Impl
         thrust::fill(d_publicKeysX.begin(), d_publicKeysX.end(), 0xFFFFFFFF);
 
         const uint32_t* d_publicKeysXRawPtr = thrust::raw_pointer_cast(d_publicKeysX.data());
-        cu::cudaSafeCall(cudaMemcpyToSymbol(d_publicKeyXPtr, &d_publicKeysXRawPtr, sizeof(uint32_t *)));
+        cu::safeCall(cudaMemcpyToSymbol(d_publicKeyXPtr, &d_publicKeysXRawPtr, sizeof(uint32_t *)));
 
         d_publicKeysY.resize(keysNumber * 8);
         thrust::fill(d_publicKeysY.begin(), d_publicKeysY.end(), 0xFFFFFFFF);
 
         const uint32_t* d_publicKeysYRawPtr = thrust::raw_pointer_cast(d_publicKeysY.data());
-        cu::cudaSafeCall(cudaMemcpyToSymbol(d_publicKeyYPtr, &d_publicKeysYRawPtr, sizeof(uint32_t *)));
+        cu::safeCall(cudaMemcpyToSymbol(d_publicKeyYPtr, &d_publicKeysYRawPtr, sizeof(uint32_t *)));
     }
 
     void allocateMultChainDeviceMemory()
     {
         d_multChain.resize(mBlockSize * mGridSize * mPointsPerThread * 8);
         const uint32_t* d_multChainRawPtr = thrust::raw_pointer_cast(d_multChain.data());
-        cu::cudaSafeCall(cudaMemcpyToSymbol(d_multChainPtr, &d_multChainRawPtr, sizeof(uint32_t*)));
+        cu::safeCall(cudaMemcpyToSymbol(d_multChainPtr, &d_multChainRawPtr, sizeof(uint32_t*)));
     }
 
     void init(const uint32_t pointsPerThread, const thrust::host_vector<secp256k1::uint256> &privateKeys)
@@ -389,15 +389,25 @@ __global__ void multiplyStepKernel(const uint256 *privateKeys)
 
                 writeInt(xPtr, i, newX);
                 writeInt(yPtr, i, newY);
-
-                uint32_t hash160Compressed[5];
-                hashPublicKeyCompressed(newX, newY[7], hash160Compressed);
-
-                uint32_t hash160[5];
-                hashPublicKey(newX, newY, hash160);
             }
         }
     }
+
+    // for(uint32_t i = 0; i < d_pointsPerThread; i++)
+    // {
+    //     uint32_t x[8];
+    //     readInt(xPtr, i, x);
+    //
+    //     uint32_t hash160Compressed[5];
+    //     hashPublicKeyCompressed(x, readIntLSW(yPtr, i), hash160Compressed);
+    //     // if (checkHash(digest))
+    //     {
+    //         // setResultFound(i, true, x, y, digest);
+    //     }
+    //
+    //     // uint32_t hash160[5];
+    //     // hashPublicKey(newX, newY, hash160);
+    // }
 }
 
 ECC::ECC() : mImpl(std::make_unique<Impl>()) {}
