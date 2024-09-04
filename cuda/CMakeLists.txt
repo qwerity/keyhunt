@@ -40,9 +40,12 @@ set(SRC
     ecc.cu
     ecc.cuh
     secp256k1.cuh
+
     udevice_vector.cuh
+
     ptx.cuh
     functors.cuh
+
     sha256.cuh
     ripemd160.cuh
 )

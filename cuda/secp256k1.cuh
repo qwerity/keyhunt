@@ -8,29 +8,49 @@
 /**
  Prime modulus 2^256 - 2^32 - 977
  */
-__constant__ static constexpr uint32_t _P[8] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFE, 0xFFFFFC2F};
+__constant__ static constexpr uint32_t d_P[8] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFE, 0xFFFFFC2F};
 
 /**
  Base point X
  */
-__constant__ static constexpr uint32_t _GX[8] = {0x79BE667E, 0xF9DCBBAC, 0x55A06295, 0xCE870B07, 0x029BFCDB, 0x2DCE28D9, 0x59F2815B, 0x16F81798};
+__constant__ static constexpr uint32_t d_GX[8] = {0x79BE667E, 0xF9DCBBAC, 0x55A06295, 0xCE870B07, 0x029BFCDB, 0x2DCE28D9, 0x59F2815B, 0x16F81798};
 
 
 /**
  Base point Y
  */
-__constant__ static constexpr uint32_t _GY[8] = {0x483ADA77, 0x26A3C465, 0x5DA4FBFC, 0x0E1108A8, 0xFD17B448, 0xA6855419, 0x9C47D08F, 0xFB10D4B8};
+__constant__ static constexpr uint32_t d_GY[8] = {0x483ADA77, 0x26A3C465, 0x5DA4FBFC, 0x0E1108A8, 0xFD17B448, 0xA6855419, 0x9C47D08F, 0xFB10D4B8};
 
 
 /**
  * Group order
  */
-__constant__ static constexpr uint32_t _N[8] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFE, 0xBAAEDCE6, 0xAF48A03B, 0xBFD25E8C, 0xD0364141};
+__constant__ static constexpr uint32_t d_N[8] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFE, 0xBAAEDCE6, 0xAF48A03B, 0xBFD25E8C, 0xD0364141};
 
 // TODO(ksh): not used
 // __constant__ static constexpr uint32_t _BETA[8] = {0x7AE96A2B, 0x657C0710, 0x6E64479E, 0xAC3434E9, 0x9CF04975, 0x12F58995, 0xC1396C28, 0x719501EE};
 // __constant__ static constexpr uint32_t _LAMBDA[8] = {0x5363AD4C, 0xC05C30E0, 0xA5261C02, 0x8812645A, 0x122E22EA, 0x20816678, 0xDF02967C, 0x1B23BD72};
 
+struct alignas(4 * 8) uint256
+{
+    uint32_t v[8];
+};
+
+struct alignas(2 * 4 * 8) ECPoint
+{
+    uint32_t x[8];
+    uint32_t y[8];
+
+    // assign as big endian
+    __host__ __device__ __forceinline__ ECPoint(const uint32_t _x[8], const uint32_t _y[8])
+    {
+        for (int i = 0; i < 8; ++i)
+        {
+            x[i] = _x[7 - i];
+            y[i] = _y[7 - i];
+        }
+    }
+};
 
 __device__ __forceinline__ bool isInfinity(const uint32_t x[8])
 {
@@ -142,14 +162,14 @@ __device__ static void subModP(const uint32_t a[8], const uint32_t b[8], uint32_
     subc(borrow, 0, 0);
     if (borrow)
     {
-        add_cc(c[7], c[7], _P[7]);
-        addc_cc(c[6], c[6], _P[6]);
-        addc_cc(c[5], c[5], _P[5]);
-        addc_cc(c[4], c[4], _P[4]);
-        addc_cc(c[3], c[3], _P[3]);
-        addc_cc(c[2], c[2], _P[2]);
-        addc_cc(c[1], c[1], _P[1]);
-        addc(c[0], c[0], _P[0]);
+        add_cc(c[7], c[7], d_P[7]);
+        addc_cc(c[6], c[6], d_P[6]);
+        addc_cc(c[5], c[5], d_P[5]);
+        addc_cc(c[4], c[4], d_P[4]);
+        addc_cc(c[3], c[3], d_P[3]);
+        addc_cc(c[2], c[2], d_P[2]);
+        addc_cc(c[1], c[1], d_P[1]);
+        addc(c[0], c[0], d_P[0]);
     }
 }
 
@@ -202,12 +222,12 @@ __device__ static void addModP(const uint32_t a[8], const uint32_t b[8], uint32_
     bool gt = false;
     for (int i = 0; i < 8; i++)
     {
-        if (c[i] > _P[i])
+        if (c[i] > d_P[i])
         {
             gt = true;
             break;
         }
-        else if (c[i] < _P[i])
+        else if (c[i] < d_P[i])
         {
             break;
         }
@@ -215,14 +235,14 @@ __device__ static void addModP(const uint32_t a[8], const uint32_t b[8], uint32_
 
     if (carry || gt)
     {
-        sub_cc(c[7], c[7], _P[7]);
-        subc_cc(c[6], c[6], _P[6]);
-        subc_cc(c[5], c[5], _P[5]);
-        subc_cc(c[4], c[4], _P[4]);
-        subc_cc(c[3], c[3], _P[3]);
-        subc_cc(c[2], c[2], _P[2]);
-        subc_cc(c[1], c[1], _P[1]);
-        subc(c[0], c[0], _P[0]);
+        sub_cc(c[7], c[7], d_P[7]);
+        subc_cc(c[6], c[6], d_P[6]);
+        subc_cc(c[5], c[5], d_P[5]);
+        subc_cc(c[4], c[4], d_P[4]);
+        subc_cc(c[3], c[3], d_P[3]);
+        subc_cc(c[2], c[2], d_P[2]);
+        subc_cc(c[1], c[1], d_P[1]);
+        subc(c[0], c[0], d_P[0]);
     }
 }
 
@@ -454,19 +474,19 @@ __device__ static void mulModP(const uint32_t a[8], const uint32_t b[8], uint32_
     addc_cc(c[0], c[0], 0);
     addc(high[7], high[7], 0);
     bool overflow = high[7] != 0;
-    uint32_t borrow = sub(c, _P, c);
+    uint32_t borrow = sub(c, d_P, c);
     if (overflow)
     {
         if (!borrow)
         {
-            sub(c, _P, c);
+            sub(c, d_P, c);
         }
     }
     else
     {
         if (borrow)
         {
-            add(c, _P, c);
+            add(c, d_P, c);
         }
     }
 }
@@ -569,16 +589,16 @@ __device__ static void invModP(const uint32_t *value, uint32_t *inverse)
     invModP(inverse);
 }
 
-__device__ static void negModP(const uint32_t *value, uint32_t *negative)
+__device__ static void negModP(const uint32_t *value, const uint32_t *negative)
 {
-    sub_cc(negative[0], _P[0], value[0]);
-    subc_cc(negative[1], _P[1], value[1]);
-    subc_cc(negative[2], _P[2], value[2]);
-    subc_cc(negative[3], _P[3], value[3]);
-    subc_cc(negative[4], _P[4], value[4]);
-    subc_cc(negative[5], _P[5], value[5]);
-    subc_cc(negative[6], _P[6], value[6]);
-    subc(negative[7], _P[7], value[7]);
+    sub_cc(negative[0], d_P[0], value[0]);
+    subc_cc(negative[1], d_P[1], value[1]);
+    subc_cc(negative[2], d_P[2], value[2]);
+    subc_cc(negative[3], d_P[3], value[3]);
+    subc_cc(negative[4], d_P[4], value[4]);
+    subc_cc(negative[5], d_P[5], value[5]);
+    subc_cc(negative[6], d_P[6], value[6]);
+    subc(negative[7], d_P[7], value[7]);
 }
 
 
@@ -587,27 +607,25 @@ __device__ __forceinline__ static void beginBatchAdd(const uint32_t *px, const u
     // x = Gx - x
     uint32_t t[8];
     subModP(px, x, t);
+
     // Keep a chain of multiples of the diff, i.e. c[0] = diff0, c[1] = diff0 * diff1,
     // c[2] = diff2 * diff1 * diff0, etc
     mulModP(t, inverse);
     writeInt(chain, batchIdx, inverse);
 }
 
-__device__ __forceinline__ static void beginBatchAddWithDouble(const uint32_t *gPoint, uint32_t *xPtr, uint32_t *chain, int batchIdx, uint32_t inverse[8])
+__device__ __forceinline__ static void beginBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint32_t *chain, int batchIdx, uint32_t inverse[8])
 {
-    const uint32_t* gx = gPoint;
-    const uint32_t* gy = gPoint + 8;
-
     uint32_t x[8]{};
     readInt(xPtr, 0, x);
-    if (equal(gx, x))
+    if (equal(gPoint->x, x))
     {
-        addModP(gy, gy, x);
+        addModP(gPoint->y, gPoint->y, x);
     }
     else
     {
         // x = Gx - x
-        subModP(gx, x, x);
+        subModP(gPoint->x, x, x);
     }
 
     // Keep a chain of multiples of the diff, i.e. c[0] = diff0, c[1] = diff0 * diff1,
@@ -616,21 +634,18 @@ __device__ __forceinline__ static void beginBatchAddWithDouble(const uint32_t *g
     writeInt(chain, batchIdx, inverse);
 }
 
-__device__ __forceinline__ static void beginBatchAddWithDouble(const uint32_t *gPoint, uint32_t *xPtr, uint32_t *chain, int i, int batchIdx, uint32_t inverse[8])
+__device__ __forceinline__ static void beginBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint32_t *chain, int i, int batchIdx, uint32_t inverse[8])
 {
-    const uint32_t* gx = gPoint;
-    const uint32_t* gy = gPoint + 8;
-
     uint32_t x[8]{};
     readInt(xPtr, i, x);
-    if (equal(gx, x))
+    if (equal(gPoint->x, x))
     {
-        addModP(gy, gy, x);
+        addModP(gPoint->y, gPoint->y, x);
     }
     else
     {
         // x = Gx - x
-        subModP(gx, x, x);
+        subModP(gPoint->x, x, x);
     }
 
     // Keep a chain of multiples of the diff, i.e. c[0] = diff0, c[1] = diff0 * diff1,
@@ -639,11 +654,8 @@ __device__ __forceinline__ static void beginBatchAddWithDouble(const uint32_t *g
     writeInt(chain, batchIdx, inverse);
 }
 
-__device__ static void completeBatchAddWithDouble(const uint32_t *gPoint, uint32_t *xPtr, uint32_t *yPtr, int batchIdx, uint32_t *chain, uint32_t *inverse, uint32_t newX[8], uint32_t newY[8])
+__device__ static void completeBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint32_t *yPtr, int batchIdx, uint32_t *chain, uint32_t *inverse, uint32_t newX[8], uint32_t newY[8])
 {
-    const uint32_t* gx = gPoint;
-    const uint32_t* gy = gPoint + 8;
-
     uint32_t s[8]{};
     uint32_t x[8]{};
     uint32_t y[8]{};
@@ -655,13 +667,13 @@ __device__ static void completeBatchAddWithDouble(const uint32_t *gPoint, uint32
         readInt(chain, batchIdx - 1, c);
         mulModP(inverse, c, s);
         uint32_t diff[8];
-        if (equal(gx, x))
+        if (equal(gPoint->x, x))
         {
-            addModP(gy, gy, diff);
+            addModP(gPoint->y, gPoint->y, diff);
         }
         else
         {
-            subModP(gx, x, diff);
+            subModP(gPoint->x, x, diff);
         }
         mulModP(diff, inverse);
     }
@@ -669,7 +681,7 @@ __device__ static void completeBatchAddWithDouble(const uint32_t *gPoint, uint32
     {
         copyBigInt(inverse, s);
     }
-    if (equal(gx, x))
+    if (equal(gPoint->x, x))
     {
         // currently s = 1 / 2y
         uint32_t x2[8];
@@ -688,33 +700,30 @@ __device__ static void completeBatchAddWithDouble(const uint32_t *gPoint, uint32
         subModP(newX, x, newX);
         // Ry = s(px - rx) - py
         uint32_t k[8];
-        subModP(gx, newX, k);
+        subModP(gPoint->x, newX, k);
         mulModP(s, k, newY);
-        subModP(newY, gy, newY);
+        subModP(newY, gPoint->y, newY);
     }
     else
     {
         uint32_t rise[8];
-        subModP(gy, y, rise);
+        subModP(gPoint->y, y, rise);
         mulModP(rise, s);
         // Rx = s^2 - Gx - Qx
         uint32_t s2[8];
         mulModP(s, s, s2);
-        subModP(s2, gx, newX);
+        subModP(s2, gPoint->x, newX);
         subModP(newX, x, newX);
         // Ry = s(px - rx) - py
         uint32_t k[8];
-        subModP(gx, newX, k);
+        subModP(gPoint->x, newX, k);
         mulModP(s, k, newY);
-        subModP(newY, gy, newY);
+        subModP(newY, gPoint->y, newY);
     }
 }
 
-__device__ static void completeBatchAddWithDouble(const uint32_t *gPoint, uint32_t *xPtr, uint32_t *yPtr, int i, int batchIdx, uint32_t *chain, uint32_t *inverse, uint32_t newX[8], uint32_t newY[8])
+__device__ static void completeBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint32_t *yPtr, int i, int batchIdx, uint32_t *chain, uint32_t *inverse, uint32_t newX[8], uint32_t newY[8])
 {
-    const uint32_t* gx = gPoint;
-    const uint32_t* gy = gPoint + 8;
-
     uint32_t s[8]{};
     uint32_t x[8]{};
     uint32_t y[8]{};
@@ -726,13 +735,13 @@ __device__ static void completeBatchAddWithDouble(const uint32_t *gPoint, uint32
         readInt(chain, batchIdx - 1, c);
         mulModP(inverse, c, s);
         uint32_t diff[8];
-        if (equal(gx, x))
+        if (equal(gPoint->x, x))
         {
-            addModP(gy, gy, diff);
+            addModP(gPoint->y, gPoint->y, diff);
         }
         else
         {
-            subModP(gx, x, diff);
+            subModP(gPoint->x, x, diff);
         }
         mulModP(diff, inverse);
     }
@@ -740,7 +749,7 @@ __device__ static void completeBatchAddWithDouble(const uint32_t *gPoint, uint32
     {
         copyBigInt(inverse, s);
     }
-    if (equal(gx, x))
+    if (equal(gPoint->x, x))
     {
         // currently s = 1 / 2y
         uint32_t x2[8];
@@ -759,25 +768,25 @@ __device__ static void completeBatchAddWithDouble(const uint32_t *gPoint, uint32
         subModP(newX, x, newX);
         // Ry = s(px - rx) - py
         uint32_t k[8];
-        subModP(gx, newX, k);
+        subModP(gPoint->x, newX, k);
         mulModP(s, k, newY);
-        subModP(newY, gy, newY);
+        subModP(newY, gPoint->y, newY);
     }
     else
     {
         uint32_t rise[8];
-        subModP(gy, y, rise);
+        subModP(gPoint->y, y, rise);
         mulModP(rise, s);
         // Rx = s^2 - Gx - Qx
         uint32_t s2[8];
         mulModP(s, s, s2);
-        subModP(s2, gx, newX);
+        subModP(s2, gPoint->x, newX);
         subModP(newX, x, newX);
         // Ry = s(px - rx) - py
         uint32_t k[8];
-        subModP(gx, newX, k);
+        subModP(gPoint->x, newX, k);
         mulModP(s, k, newY);
-        subModP(newY, gy, newY);
+        subModP(newY, gPoint->y, newY);
     }
 }
 

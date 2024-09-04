@@ -6,7 +6,6 @@
 #include "sha256.cuh"
 
 #include "secp256k1.cuh"
-// #include "defines.cuh"
 // #include "functors.cuh"
 
 #include "common.h"
@@ -19,7 +18,7 @@ __constant__ uint32_t d_pointsPerThread{};
 __constant__ uint32_t *d_publicKeyXPtr{};
 __constant__ uint32_t *d_publicKeyYPtr{};
 __constant__ uint32_t *d_multChainPtr{};
-__constant__ uint32_t *d_gPointsPtr{};
+__constant__ ECPoint  *d_gPointsPtr{};
 
 constexpr uint32_t mSharedMemSize{0};
 
@@ -36,7 +35,7 @@ struct ECC::Impl
 
     thrust::udevice_vector<uint32_t> d_privateKeys;
     thrust::udevice_vector<uint32_t> d_multChain;
-    thrust::udevice_vector<uint32_t> d_gPoints;
+    thrust::udevice_vector<ECPoint> d_gPoints;
 
     Impl()
     {
@@ -125,40 +124,25 @@ struct ECC::Impl
     void initializeGPoints()
     {
         constexpr uint32_t gPointsNumber{256};
-        d_gPoints.resize(gPointsNumber * 16);
+        d_gPoints.resize(gPointsNumber);
 
         secp256k1::ecpoint p{secp256k1::G()};
-        for (uint32_t i = 0; i < gPointsNumber; i++)
+        for (uint32_t i = 0; i < gPointsNumber; ++i)
         {
             if (!pointExists(p))
             {
                 throw std::runtime_error("Point does not exist!");
             }
 
-            d_gPoints[i * 16 + 7] = p.x.v[0];
-            d_gPoints[i * 16 + 6] = p.x.v[1];
-            d_gPoints[i * 16 + 5] = p.x.v[2];
-            d_gPoints[i * 16 + 4] = p.x.v[3];
-            d_gPoints[i * 16 + 3] = p.x.v[4];
-            d_gPoints[i * 16 + 2] = p.x.v[5];
-            d_gPoints[i * 16 + 1] = p.x.v[6];
-            d_gPoints[i * 16 + 0] = p.x.v[7];
-
-            d_gPoints[i * 16 + 8 + 7] = p.y.v[0];
-            d_gPoints[i * 16 + 8 + 6] = p.y.v[1];
-            d_gPoints[i * 16 + 8 + 5] = p.y.v[2];
-            d_gPoints[i * 16 + 8 + 4] = p.y.v[3];
-            d_gPoints[i * 16 + 8 + 3] = p.y.v[4];
-            d_gPoints[i * 16 + 8 + 2] = p.y.v[5];
-            d_gPoints[i * 16 + 8 + 1] = p.y.v[6];
-            d_gPoints[i * 16 + 8 + 0] = p.y.v[7];
+            // set as BigEndian to device memory
+            d_gPoints[i] = {p.x.v, p.y.v};
 
             // ... 2G, 4G, 8G...(2^255)G
-            p = doublePoint(p);
+            p = secp256k1::doublePoint(p);
         }
 
-        const uint32_t* d_gPointsRawPtr = thrust::raw_pointer_cast(d_gPoints.data());
-        cu::cudaSafeCall(cudaMemcpyToSymbol(d_gPointsPtr, &d_gPointsRawPtr, sizeof(uint32_t*)));
+        const auto* d_gPointsRawPtr = thrust::raw_pointer_cast(d_gPoints.data());
+        cu::cudaSafeCall(cudaMemcpyToSymbol(d_gPointsPtr, &d_gPointsRawPtr, sizeof(ECPoint*)));
     }
 
     void allocatePrivateKeysDeviceMemoryAndLoad(const thrust::host_vector<secp256k1::uint256> &privateKeys)
@@ -388,7 +372,7 @@ __global__ void multiplyStepKernel(const uint32_t *privateKeys)
 
     for (int step{0}; step < bitsNumber; step++)
     {
-        const uint32_t *stepGPoint = d_gPointsPtr + step * 16;
+        const ECPoint *stepGPoint = d_gPointsPtr + step;
 
         // Multiply together all (_Gx - x) and then invert
         uint32_t inverse[8]{0, 0, 0, 0, 0, 0, 0, 1};
@@ -427,8 +411,8 @@ __global__ void multiplyStepKernel(const uint32_t *privateKeys)
                 }
                 else
                 {
-                    copyBigInt(stepGPoint, newX);
-                    copyBigInt(stepGPoint + 8, newY);
+                    copyBigInt(stepGPoint->x, newX);
+                    copyBigInt(stepGPoint->y, newY);
                 }
 
                 writeInt(xPtr, i, newX);

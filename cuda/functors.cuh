@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include "defines.cuh"
 #include "secp256k1.cuh"
 
 struct InitializeECPoint
