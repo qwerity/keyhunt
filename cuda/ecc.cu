@@ -17,8 +17,8 @@ __constant__ uint32_t d_pointsPerThread{};
 
 __constant__ uint32_t *d_publicKeyXPtr{};
 __constant__ uint32_t *d_publicKeyYPtr{};
-__constant__ uint32_t *d_multChainPtr{};
-__constant__ ECPoint  *d_gPointsPtr{};
+__constant__ uint256 *d_multChainPtr{};
+__constant__ ECPoint *d_gPointsPtr{};
 
 constexpr uint32_t mSharedMemSize{0};
 
@@ -34,7 +34,7 @@ struct ECC::Impl
     thrust::udevice_vector<uint32_t> d_publicKeysY;
 
     thrust::udevice_vector<uint256> d_privateKeys;
-    thrust::udevice_vector<uint32_t> d_multChain;
+    thrust::udevice_vector<uint256> d_multChain;
     thrust::udevice_vector<ECPoint> d_gPoints;
 
     Impl()
@@ -159,9 +159,9 @@ struct ECC::Impl
 
     void allocateMultChainDeviceMemory()
     {
-        d_multChain.resize(mBlockSize * mGridSize * mPointsPerThread * 8);
-        const uint32_t* d_multChainRawPtr = thrust::raw_pointer_cast(d_multChain.data());
-        cu::safeCall(cudaMemcpyToSymbol(d_multChainPtr, &d_multChainRawPtr, sizeof(uint32_t*)));
+        d_multChain.resize(mBlockSize * mGridSize * mPointsPerThread);
+        const uint256* d_multChainRawPtr = thrust::raw_pointer_cast(d_multChain.data());
+        cu::safeCall(cudaMemcpyToSymbol(d_multChainPtr, &d_multChainRawPtr, sizeof(uint256*)));
     }
 
     void init(const uint32_t pointsPerThread, const thrust::host_vector<secp256k1::uint256> &privateKeys)

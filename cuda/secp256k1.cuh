@@ -142,6 +142,23 @@ __device__ static void writeInt(uint32_t *ara, const uint32_t idx, const uint32_
     araTmp[index] = xTmp;
 }
 
+__device__ static void writeUInt256(uint256 *ara, const uint32_t idx, const uint32_t x[8])
+{
+    uint32_t totalThreads = gridDim.x * blockDim.x;
+    uint32_t base = idx * totalThreads * 2;
+    uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+    uint32_t index = base + threadId;
+
+    ara[index].v[0] = x[0];
+    ara[index].v[1] = x[1];
+    ara[index].v[2] = x[2];
+    ara[index].v[3] = x[3];
+    ara[index].v[4] = x[4];
+    ara[index].v[5] = x[5];
+    ara[index].v[6] = x[6];
+    ara[index].v[7] = x[7];
+}
+
 /**
  * Subtraction mod p
  */
@@ -600,7 +617,7 @@ __device__ static void negModP(const uint32_t *value, uint32_t *negative)
 }
 
 
-__device__ __forceinline__ static void beginBatchAdd(const uint32_t *px, const uint32_t *x, uint32_t *chain, int i, int batchIdx, uint32_t inverse[8])
+__device__ __forceinline__ static void beginBatchAdd(const uint32_t *px, const uint32_t *x, uint256 *chain, int i, int batchIdx, uint32_t inverse[8])
 {
     // x = Gx - x
     uint32_t t[8];
@@ -609,10 +626,10 @@ __device__ __forceinline__ static void beginBatchAdd(const uint32_t *px, const u
     // Keep a chain of multiples of the diff, i.e. c[0] = diff0, c[1] = diff0 * diff1,
     // c[2] = diff2 * diff1 * diff0, etc
     mulModP(t, inverse);
-    writeInt(chain, batchIdx, inverse);
+    writeUInt256(chain, batchIdx, inverse);
 }
 
-__device__ __forceinline__ static void beginBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint32_t *chain, int batchIdx, uint32_t inverse[8])
+__device__ __forceinline__ static void beginBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint256 *chain, int batchIdx, uint32_t inverse[8])
 {
     uint32_t x[8]{};
     readInt(xPtr, 0, x);
@@ -629,10 +646,10 @@ __device__ __forceinline__ static void beginBatchAddWithDouble(const ECPoint *gP
     // Keep a chain of multiples of the diff, i.e. c[0] = diff0, c[1] = diff0 * diff1,
     // c[2] = diff2 * diff1 * diff0, etc
     mulModP(x, inverse);
-    writeInt(chain, batchIdx, inverse);
+    writeUInt256(chain, batchIdx, inverse);
 }
 
-__device__ __forceinline__ static void beginBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint32_t *chain, int i, int batchIdx, uint32_t inverse[8])
+__device__ __forceinline__ static void beginBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint256 *chain, int i, int batchIdx, uint32_t inverse[8])
 {
     uint32_t x[8]{};
     readInt(xPtr, i, x);
@@ -649,10 +666,10 @@ __device__ __forceinline__ static void beginBatchAddWithDouble(const ECPoint *gP
     // Keep a chain of multiples of the diff, i.e. c[0] = diff0, c[1] = diff0 * diff1,
     // c[2] = diff2 * diff1 * diff0, etc
     mulModP(x, inverse);
-    writeInt(chain, batchIdx, inverse);
+    writeUInt256(chain, batchIdx, inverse);
 }
 
-__device__ static void completeBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint32_t *yPtr, int batchIdx, uint32_t *chain, uint32_t *inverse, uint32_t newX[8], uint32_t newY[8])
+__device__ static void completeBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint32_t *yPtr, int batchIdx, uint256 *chain, uint32_t *inverse, uint32_t newX[8], uint32_t newY[8])
 {
     uint32_t s[8]{};
     uint32_t x[8]{};
@@ -662,7 +679,7 @@ __device__ static void completeBatchAddWithDouble(const ECPoint *gPoint, uint32_
     if (batchIdx >= 1)
     {
         uint32_t c[8];
-        readInt(chain, batchIdx - 1, c);
+        readUInt256(chain, batchIdx - 1, c);
         mulModP(inverse, c, s);
         uint32_t diff[8];
         if (equal(gPoint->x, x))
@@ -720,7 +737,7 @@ __device__ static void completeBatchAddWithDouble(const ECPoint *gPoint, uint32_
     }
 }
 
-__device__ static void completeBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint32_t *yPtr, int i, int batchIdx, uint32_t *chain, uint32_t *inverse, uint32_t newX[8], uint32_t newY[8])
+__device__ static void completeBatchAddWithDouble(const ECPoint *gPoint, uint32_t *xPtr, uint32_t *yPtr, int i, int batchIdx, uint256 *chain, uint32_t *inverse, uint32_t newX[8], uint32_t newY[8])
 {
     uint32_t s[8]{};
     uint32_t x[8]{};
@@ -730,7 +747,7 @@ __device__ static void completeBatchAddWithDouble(const ECPoint *gPoint, uint32_
     if (batchIdx >= 1)
     {
         uint32_t c[8];
-        readInt(chain, batchIdx - 1, c);
+        readUInt256(chain, batchIdx - 1, c);
         mulModP(inverse, c, s);
         uint32_t diff[8];
         if (equal(gPoint->x, x))
@@ -788,7 +805,7 @@ __device__ static void completeBatchAddWithDouble(const ECPoint *gPoint, uint32_
     }
 }
 
-__device__ static void completeBatchAdd(const uint32_t *px, const uint32_t *py, uint32_t *xPtr, uint32_t *yPtr, int i, int batchIdx, uint32_t *chain, uint32_t *inverse,
+__device__ static void completeBatchAdd(const uint32_t *px, const uint32_t *py, uint32_t *xPtr, uint32_t *yPtr, int i, int batchIdx, uint256 *chain, uint32_t *inverse,
                                         uint32_t newX[8], uint32_t newY[8])
 {
     uint32_t s[8];
@@ -797,7 +814,7 @@ __device__ static void completeBatchAdd(const uint32_t *px, const uint32_t *py, 
     if (batchIdx >= 1)
     {
         uint32_t c[8];
-        readInt(chain, batchIdx - 1, c);
+        readUInt256(chain, batchIdx - 1, c);
         mulModP(inverse, c, s);
         uint32_t diff[8];
         subModP(px, x, diff);
