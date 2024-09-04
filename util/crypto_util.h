@@ -5,15 +5,15 @@ namespace crypto
 {
     class rng
     {
-        uint32_t _state[16]{};
-        uint32_t _counter{};
-
-        void reseed();
-
     public:
         rng();
-
         void get(unsigned char *buf, int len);
+
+    private:
+        void reseed();
+
+        uint32_t _state[16]{};
+        uint32_t _counter{};
     };
 
     void ripemd160(uint32_t *msg, uint32_t *digest);

@@ -41,7 +41,6 @@ set(MAIN_SRC
 add_executable(cuda-keyhunt-pvk ${MAIN_SRC})
 target_link_libraries(cuda-keyhunt-pvk PUBLIC util)
 target_link_libraries(cuda-keyhunt-pvk PUBLIC cuda_keys)
-target_link_libraries(cuda-keyhunt-pvk PUBLIC ${Boost_LIBRARIES})
 
 # TESTS ############################################################################################################################################################################
 if(BUILD_TESTS)

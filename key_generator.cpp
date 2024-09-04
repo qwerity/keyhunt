@@ -23,10 +23,10 @@ namespace
         privateKeys.push_back(std::string("d7ae6ac85e67dfe75b3a42c6453abed4bb34a26d2988481fc134b2d845976a56"));
         privateKeys.push_back(k);
 
-        // for (uint32_t i = 0; i < keysNumberToGenerate; i++)
-        // {
-        //     privateKeys.push_back(secp256k1::generatePrivateKey());
-        // }
+        for (uint32_t i = 0; i < keysNumberToGenerate; i++)
+        {
+            privateKeys.push_back(secp256k1::generatePrivateKey());
+        }
 
         return privateKeys;
     }

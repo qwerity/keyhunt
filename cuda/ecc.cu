@@ -11,7 +11,7 @@
 #include "common.h"
 #include "cuda_util.h"
 
-__global__ void multiplyStepKernel(const uint32_t *privateKeys);
+__global__ void multiplyStepKernel(const uint256 *privateKeys);
 
 __constant__ uint32_t d_pointsPerThread{};
 
@@ -33,7 +33,7 @@ struct ECC::Impl
     thrust::udevice_vector<uint32_t> d_publicKeysX;
     thrust::udevice_vector<uint32_t> d_publicKeysY;
 
-    thrust::udevice_vector<uint32_t> d_privateKeys;
+    thrust::udevice_vector<uint256> d_privateKeys;
     thrust::udevice_vector<uint32_t> d_multChain;
     thrust::udevice_vector<ECPoint> d_gPoints;
 
@@ -69,30 +69,6 @@ struct ECC::Impl
         // Global ID of the current thread
         const uint32_t threadId = grid * mBlockSize + block;
         return base + threadId;
-    }
-
-    void splatBigInt(uint32_t *dest, const uint32_t grid, const uint32_t block, const uint32_t idx, const secp256k1::uint256 &i) const
-    {
-        uint32_t value[8];
-        i.exportWords(value, 8, secp256k1::uint256::BigEndian);
-
-        const uint32_t totalThreads = mGridSize * mBlockSize;
-        const uint32_t threadId = grid * mBlockSize * 4 + block * 4;
-        const uint32_t base = idx * mGridSize * mBlockSize * 8;
-
-        uint32_t index = base + threadId;
-        for (uint32_t k = 0; k < 4; k++)
-        {
-            dest[index] = value[k];
-            index++;
-        }
-
-        index = base + totalThreads * 4 + threadId;
-        for (uint32_t k = 4; k < 8; k++)
-        {
-            dest[index] = value[k];
-            index++;
-        }
     }
 
     secp256k1::uint256 readBigInt(const uint32_t *src, const uint32_t grid, const uint32_t block, const uint32_t idx) const
@@ -150,10 +126,9 @@ struct ECC::Impl
         const uint32_t keysNumber = privateKeys.size();
 
         // Allocate private keys on device
-        d_privateKeys.resize(keysNumber * 8);
+        d_privateKeys.resize(keysNumber);
 
         // Copy private keys to system memory buffer
-        thrust::host_vector<uint32_t> tmp(keysNumber * 8, 0);
         for (uint32_t grid = 0; grid < mGridSize; ++grid)
         {
             for (uint32_t block = 0; block < mBlockSize; ++block)
@@ -161,13 +136,10 @@ struct ECC::Impl
                 for (uint32_t idx = 0; idx < mPointsPerThread; ++idx)
                 {
                     const int index = getIndex(grid, block, idx);
-                    splatBigInt(tmp.data(), grid, block, idx, privateKeys[index]);
+                    d_privateKeys[index] = privateKeys[index].v;
                 }
             }
         }
-
-        // Copy private keys to device memory
-        d_privateKeys = tmp;
     }
 
     void allocatePublicKeysDeviceMemory(const uint32_t keysNumber)
@@ -360,7 +332,7 @@ __device__ void hashPublicKeyCompressed(const uint32_t *x, uint32_t yParity, uin
     ripemd160sha256NoFinal(hash, digestOut);
 }
 
-__global__ void multiplyStepKernel(const uint32_t *privateKeys)
+__global__ void multiplyStepKernel(const uint256 *privateKeys)
 {
     // 256 is a 256 bit in a private key
     constexpr uint32_t bitsNumber{256};
@@ -383,7 +355,7 @@ __global__ void multiplyStepKernel(const uint32_t *privateKeys)
             uint32_t x[8];
             readInt(xPtr, i, x);
 
-            readInt(privateKeys, i, p);
+            readUInt256(privateKeys, i, p);
             if (const uint32_t bit = p[7 - step / 32] & 1 << (step % 32); bit != 0 && !isInfinity(x))
             {
                 beginBatchAddWithDouble(stepGPoint, xPtr, d_multChainPtr, i, batchIdx, inverse);
@@ -395,7 +367,7 @@ __global__ void multiplyStepKernel(const uint32_t *privateKeys)
 
         for(int i = d_pointsPerThread - 1; i >= 0; i--)
         {
-            readInt(privateKeys, i, p);
+            readUInt256(privateKeys, i, p);
             if (const uint32_t bit = p[7 - step / 32] & 1 << (step % 32); bit != 0)
             {
                 uint32_t newX[8];

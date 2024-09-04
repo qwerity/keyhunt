@@ -34,6 +34,15 @@ __constant__ static constexpr uint32_t d_N[8] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFF
 struct alignas(4 * 8) uint256
 {
     uint32_t v[8];
+
+    // assign as big endian
+    __host__ __device__ __forceinline__ uint256(const uint32_t _v[8])
+    {
+        for (int i = 0; i < 8; ++i)
+        {
+            v[i] = _v[7 - i];
+        }
+    }
 };
 
 struct alignas(2 * 4 * 8) ECPoint
@@ -106,6 +115,24 @@ __device__ static void readInt(const uint32_t *ara, const uint32_t idx, uint32_t
     x[5] = xTmp.y;
     x[6] = xTmp.z;
     x[7] = xTmp.w;
+}
+
+__device__ static void readUInt256(const uint256 *data, const uint32_t idx, uint32_t x[8])
+{
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t base = idx * totalThreads;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+    const uint32_t index = base + threadId;
+
+    const uint256 *xTmp = data + index;
+    x[0] = xTmp->v[0];
+    x[1] = xTmp->v[1];
+    x[2] = xTmp->v[2];
+    x[3] = xTmp->v[3];
+    x[4] = xTmp->v[4];
+    x[5] = xTmp->v[5];
+    x[6] = xTmp->v[6];
+    x[7] = xTmp->v[7];
 }
 
 __device__ static uint32_t readIntLSW(const uint32_t *ara, const uint32_t idx)

@@ -48,12 +48,12 @@ struct KeyProcessor::Impl
 
                 for (const auto& [gpuPrivateKey, gpuPublicKey] : *keyPairs)
                 {
-                    const secp256k1::ecpoint pCPU = secp256k1::multiplyPoint(gpuPrivateKey, secp256k1::G());
-                    if (pCPU != gpuPublicKey)
-                    {
-                       BOOST_LOG_TRIVIAL(info) << "KeyProcessor: gen key is not correct";
-                       BOOST_LOG_TRIVIAL(info) << std::format("{} {}\n", gpuPrivateKey.toString(compressed), gpuPublicKey.toString(compressed));
-                    }
+                    // const secp256k1::ecpoint pCPU = secp256k1::multiplyPoint(gpuPrivateKey, secp256k1::G());
+                    // if (pCPU != gpuPublicKey)
+                    // {
+                    //    BOOST_LOG_TRIVIAL(info) << "KeyProcessor: gen key is not correct";
+                    //    BOOST_LOG_TRIVIAL(info) << std::format("{} {}\n", gpuPrivateKey.toString(compressed), gpuPublicKey.toString(compressed));
+                    // }
                 }
 
                 delete keyPairs;
