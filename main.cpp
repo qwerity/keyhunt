@@ -19,7 +19,7 @@ void parseArguments(const int argc, const char **argv, CLI::App &app, Applicatio
 
     app.add_option("-d,--cudaDeviceId", params.cudaDeviceId, "Cuda device ID")->default_val(0);
     app.add_option("-p,--pointsPerThread", params.pointsPerThread, "How many keys will be generated per each cuda thread")->default_val(128);
-    app.add_option("-k,--keysNumberToGenerate", params.keysNumberToGenerate, "Number of keys to generate")->default_val(100);
+    app.add_option("-k,--keysNumberToGenerate", params.keysNumberToGenerate, "Number of keys to generate")->default_val(900);
 
     try
     {

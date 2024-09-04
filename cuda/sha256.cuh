@@ -367,7 +367,7 @@ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint3
     digest[7] = tmp[7] + h;
 }
 
-__device__ __forceinline__ void sha256PublicKeyCompressed(const uint32_t x[8], uint32_t yParity, uint32_t digest[8])
+__device__ __forceinline__ void sha256PublicKeyCompressed(const uint32_t x[8], const uint32_t yParity, uint32_t digest[8])
 {
     uint32_t a, b, c, d, e, f, g, h;
     uint32_t w[16];

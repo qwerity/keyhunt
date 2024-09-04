@@ -11,14 +11,14 @@
 #include "common.h"
 #include "cuda_util.h"
 
-__global__ void multiplyStepKernel(const uint256 *privateKeys);
+__global__ void multiplyStepKernel(const uint256_t *privateKeys);
 
 __constant__ uint32_t d_pointsPerThread{};
 
 __constant__ uint32_t *d_publicKeyXPtr{};
 __constant__ uint32_t *d_publicKeyYPtr{};
-__constant__ uint256 *d_multChainPtr{};
-__constant__ ECPoint *d_gPointsPtr{};
+__constant__ uint256_t *d_multChainPtr{};
+__constant__ ecpoint_t *d_gPointsPtr{};
 
 constexpr uint32_t mSharedMemSize{0};
 
@@ -33,9 +33,9 @@ struct ECC::Impl
     thrust::udevice_vector<uint32_t> d_publicKeysX;
     thrust::udevice_vector<uint32_t> d_publicKeysY;
 
-    thrust::udevice_vector<uint256> d_privateKeys;
-    thrust::udevice_vector<uint256> d_multChain;
-    thrust::udevice_vector<ECPoint> d_gPoints;
+    thrust::udevice_vector<uint256_t> d_privateKeys;
+    thrust::udevice_vector<uint256_t> d_multChain;
+    thrust::udevice_vector<ecpoint_t> d_gPoints;
 
     Impl()
     {
@@ -118,15 +118,26 @@ struct ECC::Impl
         }
 
         const auto* d_gPointsRawPtr = thrust::raw_pointer_cast(d_gPoints.data());
-        cu::safeCall(cudaMemcpyToSymbol(d_gPointsPtr, &d_gPointsRawPtr, sizeof(ECPoint*)));
+        cu::safeCall(cudaMemcpyToSymbol(d_gPointsPtr, &d_gPointsRawPtr, sizeof(ecpoint_t*)));
     }
 
-    void allocatePrivateKeysDeviceMemoryAndLoad(const thrust::host_vector<secp256k1::uint256> &privateKeys)
+    void allocatePrivateKeysDeviceMemoryAndLoad(const thrust::host_vector<secp256k1::uint256>& privateKeys)
     {
-        const uint32_t keysNumber = privateKeys.size();
+        thrust::host_vector<uint256_t> h_privateKeys;
+        h_privateKeys.resize(privateKeys.size());
 
-        // Allocate private keys on device
-        d_privateKeys.resize(keysNumber);
+        // thrust::transform(privateKeys.begin(), privateKeys.end(), h_privateKeys.begin(), [](const secp256k1::uint256& privateKey)
+        // {
+        //     uint256_t k;
+        //
+        //     const auto tmp = reinterpret_cast<const uint4 *>(privateKey.v);
+        //     k.a = tmp[0];
+        //     k.b = tmp[1];
+        //
+        //     return k;
+        // });
+        //
+        // d_privateKeys = h_privateKeys;
 
         // Copy private keys to system memory buffer
         for (uint32_t grid = 0; grid < mGridSize; ++grid)
@@ -136,10 +147,11 @@ struct ECC::Impl
                 for (uint32_t idx = 0; idx < mPointsPerThread; ++idx)
                 {
                     const int index = getIndex(grid, block, idx);
-                    d_privateKeys[index] = privateKeys[index].v;
+                    h_privateKeys[index] = privateKeys[index].v;
                 }
             }
         }
+        d_privateKeys = h_privateKeys;
     }
 
     void allocatePublicKeysDeviceMemory(const uint32_t keysNumber)
@@ -160,8 +172,8 @@ struct ECC::Impl
     void allocateMultChainDeviceMemory()
     {
         d_multChain.resize(mBlockSize * mGridSize * mPointsPerThread);
-        const uint256* d_multChainRawPtr = thrust::raw_pointer_cast(d_multChain.data());
-        cu::safeCall(cudaMemcpyToSymbol(d_multChainPtr, &d_multChainRawPtr, sizeof(uint256*)));
+        const uint256_t* d_multChainRawPtr = thrust::raw_pointer_cast(d_multChain.data());
+        cu::safeCall(cudaMemcpyToSymbol(d_multChainPtr, &d_multChainRawPtr, sizeof(uint256_t*)));
     }
 
     void init(const uint32_t pointsPerThread, const thrust::host_vector<secp256k1::uint256> &privateKeys)
@@ -320,7 +332,7 @@ __device__ void hashPublicKey(const uint32_t *x, const uint32_t *y, uint32_t *di
     ripemd160sha256NoFinal(hash, digestOut);
 }
 
-__device__ void hashPublicKeyCompressed(const uint32_t *x, uint32_t yParity, uint32_t *digestOut)
+__device__ void hashPublicKeyCompressed(const uint32_t *x, const uint32_t yParity, uint32_t *digestOut)
 {
     uint32_t hash[8];
     sha256PublicKeyCompressed(x, yParity, hash);
@@ -332,7 +344,7 @@ __device__ void hashPublicKeyCompressed(const uint32_t *x, uint32_t yParity, uin
     ripemd160sha256NoFinal(hash, digestOut);
 }
 
-__global__ void multiplyStepKernel(const uint256 *privateKeys)
+__global__ void multiplyStepKernel(const uint256_t *privateKeys)
 {
     // 256 is a 256 bit in a private key
     constexpr uint32_t bitsNumber{256};
@@ -344,7 +356,7 @@ __global__ void multiplyStepKernel(const uint256 *privateKeys)
 
     for (int step{0}; step < bitsNumber; step++)
     {
-        const ECPoint *stepGPoint = d_gPointsPtr + step;
+        const ecpoint_t& stepGPoint = d_gPointsPtr[step];
 
         // Multiply together all (_Gx - x) and then invert
         uint32_t inverse[8]{0, 0, 0, 0, 0, 0, 0, 1};
@@ -358,7 +370,7 @@ __global__ void multiplyStepKernel(const uint256 *privateKeys)
             readUInt256(privateKeys, i, p);
             if (const uint32_t bit = p[7 - step / 32] & 1 << (step % 32); bit != 0 && !isInfinity(x))
             {
-                beginBatchAddWithDouble(stepGPoint, xPtr, d_multChainPtr, i, batchIdx, inverse);
+                beginBatchAddWithDouble(&stepGPoint, x, d_multChainPtr, i, batchIdx, inverse);
                 batchIdx++;
             }
         }
@@ -378,17 +390,20 @@ __global__ void multiplyStepKernel(const uint256 *privateKeys)
 
                 if (!isInfinity(x))
                 {
+                    uint32_t y[8];
+                    readInt(yPtr, i, y);
+
                     batchIdx--;
-                    completeBatchAddWithDouble(stepGPoint, xPtr, yPtr, i, batchIdx, d_multChainPtr, inverse, newX, newY);
+                    completeBatchAddWithDouble(&stepGPoint, x, y, batchIdx, d_multChainPtr, inverse, newX, newY);
                 }
                 else
                 {
-                    copyBigInt(stepGPoint->x, newX);
-                    copyBigInt(stepGPoint->y, newY);
+                    copyBigInt(stepGPoint.x, newX);
+                    copyBigInt(stepGPoint.y, newY);
                 }
 
-                writeInt(xPtr, i, newX);
-                writeInt(yPtr, i, newY);
+                writeInt(newX, i, xPtr);
+                writeInt(newY, i, yPtr);
             }
         }
     }

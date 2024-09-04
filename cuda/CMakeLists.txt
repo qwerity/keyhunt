@@ -39,12 +39,14 @@ endif()
 set(SRC
     ecc.cu
     ecc.cuh
+
     secp256k1.cuh
 
     udevice_vector.cuh
 
     ptx.cuh
     functors.cuh
+    defines.cuh
 
     sha256.cuh
     ripemd160.cuh
