@@ -1,18 +1,23 @@
 #include "key_hunter.h"
 
 #include <format>
+#include <fstream>
 #include <utility>
 #include <functional>
+#include <set>
+
 #include <boost/log/trivial.hpp>
 
+#include "cuda/defines.cuh"
 #include "cuda/ecc.cuh"
+#include "cuda/hash160_lookup.cuh"
 #include "util/cuda_util.h"
 #include "util/utils.h"
 
 
 struct KeyHunter::Impl
 {
-    const AppConfig& mAppConfig;
+    const AppConfig mAppConfig;
 
     std::thread mThread;
 
@@ -22,9 +27,15 @@ struct KeyHunter::Impl
     mutable utils::Timer mTimer;
 
     std::shared_ptr<DataQueue> mDataQueue;
+
     std::atomic<bool> mStopFlag{false};
     mutable std::atomic<bool> mDone{false};
 
+
+    Hash160Lookup mhash160Lookup;
+    std::vector<hash160> mHash160Targets;
+
+    // callbacks
     std::function<void(StatusInfo)> mStatusCallback;
 
     // Implementation
@@ -42,20 +53,22 @@ struct KeyHunter::Impl
         stop();
     }
 
-    void start(const thrust::host_vector<secp256k1::uint256>& privateKeys, const uint32_t pointsPerThread)
+    void start(const thrust::host_vector<secp256k1::uint256>& privateKeys)
     {
+        if (!mAppConfig.appParams.ripemd160TargetsFilePath.empty())
+        {
+            setHash160Targets(mAppConfig.appParams.ripemd160TargetsFilePath);
+        }
+
         mCurrentPrivateKeys = privateKeys;
-        mCuECC->init(pointsPerThread, privateKeys);
+        mCuECC->init(mAppConfig.appParams.pointsPerThread, mCurrentPrivateKeys);
 
         mThread = std::thread(&Impl::run, this);
     }
 
     void startWithRandomPrivateKeys()
     {
-        mCurrentPrivateKeys = utils::generateRandomPrivateKeys(mAppConfig.appParams.keysNumberToGenerate);
-        mCuECC->init(mAppConfig.appParams.pointsPerThread, mCurrentPrivateKeys);
-
-        mThread = std::thread(&Impl::run, this);
+        start(utils::generateRandomPrivateKeys(mAppConfig.appParams.keysNumberToGenerate));
     }
 
     void stop()
@@ -99,6 +112,37 @@ struct KeyHunter::Impl
         //                             << publicKeys[i].toString(compressed) << " "
         //                             << address;
         // }
+    }
+
+    void setHash160Targets(const std::string &hash160TargetsFile)
+    {
+        std::ifstream inFile(hash160TargetsFile);
+        if (!inFile.is_open())
+        {
+            BOOST_LOG_TRIVIAL(error) << "Unable to open " << hash160TargetsFile;
+            throw std::runtime_error(std::string("Unable to open ") + hash160TargetsFile);
+        }
+        mHash160Targets.clear();
+
+        BOOST_LOG_TRIVIAL(info) << "Loading RipeMD-160 hashes from: " << hash160TargetsFile;
+
+        std::set<hash160> hash160Targets;
+        std::string line;
+        while (std::getline(inFile, line))
+        {
+            utils::removeNewline(line);
+            line = utils::trim(line);
+            if (!line.empty())
+            {
+                hash160Targets.insert(utils::toHash160(line));
+            }
+        }
+
+        // mHash160Targets.reserve(hash160Targets.size());
+        mHash160Targets.assign(std::make_move_iterator(hash160Targets.begin()), std::make_move_iterator(hash160Targets.end()));
+
+        BOOST_LOG_TRIVIAL(info) << utils::formatThousands(mHash160Targets.size()) << " hashes loaded " << static_cast<double>(sizeof(hash160) * mHash160Targets.size()) / (1024.0 * 1024.0) << "MB";
+        mhash160Lookup.setTargets(mHash160Targets);
     }
 
     void run() const
@@ -161,9 +205,9 @@ KeyHunter::KeyHunter(KeyHunter &&rhs) noexcept = default;
 
 KeyHunter& KeyHunter::operator=(KeyHunter &&rhs) noexcept = default;
 
-void KeyHunter::start(const thrust::host_vector<secp256k1::uint256>& privateKeys, const uint32_t pointsPerThread) const
+void KeyHunter::start(const thrust::host_vector<secp256k1::uint256>& privateKeys) const
 {
-    mImpl->start(privateKeys, pointsPerThread);
+    mImpl->start(privateKeys);
 }
 
 void KeyHunter::startWithRandomPrivateKeys() const

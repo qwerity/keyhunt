@@ -1,6 +1,8 @@
 #include "utils.h"
 #include "secp256k1.h"
 
+#include "../cuda/defines.cuh"
+
 #include <cstdio>
 #include <string>
 #include <fstream>
@@ -277,5 +279,24 @@ namespace utils
 
         std::generate_n(std::back_inserter(privateKeys), keysNumberToGenerate, secp256k1::generatePrivateKey);
         return privateKeys;
+    }
+
+    hash160 toHash160(const std::string& hexString)
+    {
+        hash160 hash;
+        if (hexString.length() != sizeof(hash160) * 2)
+        {
+            fprintf(stderr,  "RIPEMD-160 hex string must be exactly 40 characters long!\n");
+            return hash;
+        }
+
+        for (int i = 0; i < 5; ++i)
+        {
+            std::stringstream ss;
+            ss << std::hex << hexString.substr(i * 8, 8);
+            ss >> hash.h[i];
+        }
+
+        return hash;
     }
 }

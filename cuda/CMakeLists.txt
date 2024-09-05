@@ -50,6 +50,9 @@ set(SRC
 
     sha256.cuh
     ripemd160.cuh
+
+    hash160_lookup.cu
+    hash160_lookup.cuh
 )
 
 add_library(cuda_keys ${SRC})

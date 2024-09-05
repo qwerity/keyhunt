@@ -32,12 +32,22 @@ namespace cu
     public:
         explicit CudaException(const cudaError_t err) : error(err)
         {
-            this->msg = std::string(cudaGetErrorString(err));
+            msg_ = std::string(cudaGetErrorString(err));
+        }
+
+        [[nodiscard]] cudaError_t getCudaError() const
+        {
+            return error;
+        }
+
+        [[nodiscard]] const char* what() const noexcept override
+        {
+            return msg_.c_str();
         }
 
     private:
         cudaError_t error{cudaSuccess};
-        std::string msg;
+        std::string msg_;
     };
 
     inline void safeCall(const cudaError_t err) noexcept(false)

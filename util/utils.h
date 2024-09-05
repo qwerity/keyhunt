@@ -13,6 +13,8 @@ namespace secp256k1
     struct uint256;
 }
 
+struct hash160;
+
 namespace utils
 {
     class Timer
@@ -80,4 +82,6 @@ namespace utils
     void initLogging(const std::string& logFile = "app.log");
 
     std::vector<secp256k1::uint256> generateRandomPrivateKeys(uint32_t keysNumberToGenerate = 5);
+
+    hash160 toHash160(const std::string& hexString);
 }

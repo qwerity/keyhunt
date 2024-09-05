@@ -6,7 +6,7 @@
 #include "sha256.cuh"
 
 #include "secp256k1.cuh"
-// #include "functors.cuh"
+#include "hash160_lookup.cuh"
 
 #include "common.h"
 #include "cuda_util.h"
@@ -19,8 +19,6 @@ __constant__ uint32_t *d_publicKeyXPtr{};
 __constant__ uint32_t *d_publicKeyYPtr{};
 __constant__ uint256_t *d_multChainPtr{};
 __constant__ ecpoint_t *d_gPointsPtr{};
-
-constexpr uint32_t mSharedMemSize{0};
 
 struct ECC::Impl
 {
@@ -248,6 +246,7 @@ struct ECC::Impl
 
     cudaError_t generatePublicKeys()
     {
+        constexpr uint32_t mSharedMemSize{0};
         multiplyStepKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(thrust::raw_pointer_cast(d_privateKeys.data()));
 
         // Wait for kernel to complete
@@ -408,21 +407,27 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
         }
     }
 
-    // for(uint32_t i = 0; i < d_pointsPerThread; i++)
-    // {
-    //     uint32_t x[8];
-    //     readInt(xPtr, i, x);
-    //
-    //     uint32_t hash160Compressed[5];
-    //     hashPublicKeyCompressed(x, readIntLSW(yPtr, i), hash160Compressed);
-    //     // if (checkHash(digest))
-    //     {
-    //         // setResultFound(i, true, x, y, digest);
-    //     }
-    //
-    //     // uint32_t hash160[5];
-    //     // hashPublicKey(newX, newY, hash160);
-    // }
+    for(uint32_t i = 0; i < d_pointsPerThread; i++)
+    {
+        readUInt256(privateKeys, i, p);
+        uint32_t x[8];
+        readInt(xPtr, i, x);
+
+        hash160 hash160Compressed;
+        hashPublicKeyCompressed(x, readIntLSW(yPtr, i), hash160Compressed.h);
+        if (checkHash(hash160Compressed))
+        {
+            const uint32_t totalThreads = gridDim.x * blockDim.x;
+            const uint32_t base = i * totalThreads;
+            const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+            const uint32_t index = base + threadId;
+            printf("found match %u\n", index);
+            // setResultFound(i, true, x, y, digest);
+        }
+
+        // uint32_t hash160[5];
+        // hashPublicKey(newX, newY, hash160);
+    }
 }
 
 ECC::ECC() : mImpl(std::make_unique<Impl>()) {}
