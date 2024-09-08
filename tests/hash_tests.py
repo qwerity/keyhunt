@@ -1,3 +1,4 @@
+import struct
 import hashlib
 from ecdsa import VerifyingKey, SECP256k1
 
@@ -30,3 +31,33 @@ print(f"SHA-256 Hash: {sha256_hash.hex()}")
 # Step 4: Compute RIPEMD-160 over the SHA-256 hash
 ripemd160_hash = hashlib.new('ripemd160', sha256_hash).digest()
 print(f"RIPEMD-160 Hash: {ripemd160_hash.hex()}")
+
+####################################################################################
+uint32_values = (1, 0)
+
+# Pack the uint32 values into a byte array (using little-endian format '<II')
+packed_data = struct.pack('<II', *uint32_values)
+
+# Calculate the SHA-256 hash
+hash_object = hashlib.sha256(packed_data)
+sha256_hash = hash_object.hexdigest()
+
+# Print the result
+print(f"SHA-256: {sha256_hash}")
+
+####################################################################################
+# Represent the two uint32 values (1 and 0) as a hex string
+# 1 in uint32 is '00000001' and 0 is '00000000' (little-endian representation)
+hex_string = '01000000' + '00000000'
+
+# Convert the hex string to bytes
+byte_data = bytes.fromhex(hex_string)
+
+# Calculate the SHA-256 hash
+hash_object = hashlib.sha256(byte_data)
+sha256_hash = hash_object.hexdigest()
+
+# Print the result
+print(f"SHA-256: {sha256_hash}")
+
+####################################################################################

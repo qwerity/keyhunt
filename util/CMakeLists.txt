@@ -1,5 +1,3 @@
-cmake_minimum_required(VERSION 3.10)
-
 set(SRC_FILES
     crypto_util.h
     checksum.cpp

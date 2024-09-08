@@ -1,11 +1,11 @@
 #pragma once
 
-#include<cuda.h>
-#include<cuda_runtime.h>
 #include<cstdio>
 
+#include<cuda_runtime.h>
 
-__constant__ constexpr uint32_t _K[64] = {
+
+__constant__ constexpr uint32_t d_K[64] = {
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
     0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
@@ -16,7 +16,7 @@ __constant__ constexpr uint32_t _K[64] = {
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 };
 
-__constant__ constexpr uint32_t _IV[8] = {
+__constant__ constexpr uint32_t d_IV[8] = {
     0x6a09e667,
     0xbb67ae85,
     0x3c6ef372,
@@ -28,33 +28,33 @@ __constant__ constexpr uint32_t _IV[8] = {
 };
 
 
-__device__ __forceinline__ uint32_t rotr(uint32_t x, int n)
+__host__ __device__ __forceinline__ uint32_t rotr(uint32_t x, int n)
 {
     return (x >> n) ^ (x << (32 - n));
 }
 
-__device__ __forceinline__ uint32_t MAJ(uint32_t a, uint32_t b, uint32_t c)
+__host__ __device__ __forceinline__ uint32_t MAJ(uint32_t a, uint32_t b, uint32_t c)
 {
     return (a & b) ^ (a & c) ^ (b & c);
 }
 
-__device__ __forceinline__ uint32_t CH(uint32_t e, uint32_t f, uint32_t g)
+__host__ __device__ __forceinline__ uint32_t CH(uint32_t e, uint32_t f, uint32_t g)
 {
     return (e & f) ^ (~e & g);
 }
 
-__device__ __forceinline__ uint32_t s0(uint32_t x)
+__host__ __device__ __forceinline__ uint32_t s0(uint32_t x)
 {
     return rotr(x, 7) ^ rotr(x, 18) ^ (x >> 3);
 }
 
-__device__ __forceinline__ uint32_t s1(uint32_t x)
+__host__ __device__ __forceinline__ uint32_t s1(uint32_t x)
 {
     return rotr(x, 17) ^ rotr(x, 19) ^ (x >> 10);
 }
 
 
-__device__ __forceinline__ void roundSha256(uint32_t a, uint32_t b, uint32_t c, uint32_t &d, uint32_t e, uint32_t f, uint32_t g, uint32_t &h, uint32_t m, uint32_t k)
+__host__ __device__ __forceinline__ void roundSha256(uint32_t a, uint32_t b, uint32_t c, uint32_t &d, uint32_t e, uint32_t f, uint32_t g, uint32_t &h, uint32_t m, uint32_t k)
 {
     const uint32_t s = CH(e, f, g) + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + k + m;
 
@@ -63,7 +63,7 @@ __device__ __forceinline__ void roundSha256(uint32_t a, uint32_t b, uint32_t c, 
     h += s + MAJ(a, b, c) + (rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22));
 }
 
-__device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint32_t y[8], uint32_t digest[8])
+__host__ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint32_t y[8], uint32_t digest[8])
 {
     uint32_t a, b, c, d, e, f, g, h;
     uint32_t w[16];
@@ -86,66 +86,31 @@ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint3
     w[14] = (y[6] >> 8) | (y[5] << 24);
     w[15] = (y[7] >> 8) | (y[6] << 24);
 
-    a = _IV[0];
-    b = _IV[1];
-    c = _IV[2];
-    d = _IV[3];
-    e = _IV[4];
-    f = _IV[5];
-    g = _IV[6];
-    h = _IV[7];
+    a = d_IV[0];
+    b = d_IV[1];
+    c = d_IV[2];
+    d = d_IV[3];
+    e = d_IV[4];
+    f = d_IV[5];
+    g = d_IV[6];
+    h = d_IV[7];
 
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[0]);
-    roundSha256(h, a, b, c, d, e, f, g, w[1], _K[1]);
-    roundSha256(g, h, a, b, c, d, e, f, w[2], _K[2]);
-    roundSha256(f, g, h, a, b, c, d, e, w[3], _K[3]);
-    roundSha256(e, f, g, h, a, b, c, d, w[4], _K[4]);
-    roundSha256(d, e, f, g, h, a, b, c, w[5], _K[5]);
-    roundSha256(c, d, e, f, g, h, a, b, w[6], _K[6]);
-    roundSha256(b, c, d, e, f, g, h, a, w[7], _K[7]);
-    roundSha256(a, b, c, d, e, f, g, h, w[8], _K[8]);
-    roundSha256(h, a, b, c, d, e, f, g, w[9], _K[9]);
-    roundSha256(g, h, a, b, c, d, e, f, w[10], _K[10]);
-    roundSha256(f, g, h, a, b, c, d, e, w[11], _K[11]);
-    roundSha256(e, f, g, h, a, b, c, d, w[12], _K[12]);
-    roundSha256(d, e, f, g, h, a, b, c, w[13], _K[13]);
-    roundSha256(c, d, e, f, g, h, a, b, w[14], _K[14]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[15]);
-
-    w[0] = w[0] + s0(w[1]) + w[9] + s1(w[14]);
-    w[1] = w[1] + s0(w[2]) + w[10] + s1(w[15]);
-    w[2] = w[2] + s0(w[3]) + w[11] + s1(w[0]);
-    w[3] = w[3] + s0(w[4]) + w[12] + s1(w[1]);
-    w[4] = w[4] + s0(w[5]) + w[13] + s1(w[2]);
-    w[5] = w[5] + s0(w[6]) + w[14] + s1(w[3]);
-    w[6] = w[6] + s0(w[7]) + w[15] + s1(w[4]);
-    w[7] = w[7] + s0(w[8]) + w[0] + s1(w[5]);
-    w[8] = w[8] + s0(w[9]) + w[1] + s1(w[6]);
-    w[9] = w[9] + s0(w[10]) + w[2] + s1(w[7]);
-    w[10] = w[10] + s0(w[11]) + w[3] + s1(w[8]);
-    w[11] = w[11] + s0(w[12]) + w[4] + s1(w[9]);
-    w[12] = w[12] + s0(w[13]) + w[5] + s1(w[10]);
-    w[13] = w[13] + s0(w[14]) + w[6] + s1(w[11]);
-    w[14] = w[14] + s0(w[15]) + w[7] + s1(w[12]);
-    w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
-
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[16]);
-    roundSha256(h, a, b, c, d, e, f, g, w[1], _K[17]);
-    roundSha256(g, h, a, b, c, d, e, f, w[2], _K[18]);
-    roundSha256(f, g, h, a, b, c, d, e, w[3], _K[19]);
-    roundSha256(e, f, g, h, a, b, c, d, w[4], _K[20]);
-    roundSha256(d, e, f, g, h, a, b, c, w[5], _K[21]);
-    roundSha256(c, d, e, f, g, h, a, b, w[6], _K[22]);
-    roundSha256(b, c, d, e, f, g, h, a, w[7], _K[23]);
-    roundSha256(a, b, c, d, e, f, g, h, w[8], _K[24]);
-    roundSha256(h, a, b, c, d, e, f, g, w[9], _K[25]);
-    roundSha256(g, h, a, b, c, d, e, f, w[10], _K[26]);
-    roundSha256(f, g, h, a, b, c, d, e, w[11], _K[27]);
-    roundSha256(e, f, g, h, a, b, c, d, w[12], _K[28]);
-    roundSha256(d, e, f, g, h, a, b, c, w[13], _K[29]);
-    roundSha256(c, d, e, f, g, h, a, b, w[14], _K[30]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[31]);
-
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[0]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[1]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[2]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[3]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[4]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[5]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[6]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[7]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[8]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[9]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[10]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[11]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[12]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[13]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[14]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[15]);
 
     w[0] = w[0] + s0(w[1]) + w[9] + s1(w[14]);
     w[1] = w[1] + s0(w[2]) + w[10] + s1(w[15]);
@@ -164,22 +129,23 @@ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint3
     w[14] = w[14] + s0(w[15]) + w[7] + s1(w[12]);
     w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
 
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[32]);
-    roundSha256(h, a, b, c, d, e, f, g, w[1], _K[33]);
-    roundSha256(g, h, a, b, c, d, e, f, w[2], _K[34]);
-    roundSha256(f, g, h, a, b, c, d, e, w[3], _K[35]);
-    roundSha256(e, f, g, h, a, b, c, d, w[4], _K[36]);
-    roundSha256(d, e, f, g, h, a, b, c, w[5], _K[37]);
-    roundSha256(c, d, e, f, g, h, a, b, w[6], _K[38]);
-    roundSha256(b, c, d, e, f, g, h, a, w[7], _K[39]);
-    roundSha256(a, b, c, d, e, f, g, h, w[8], _K[40]);
-    roundSha256(h, a, b, c, d, e, f, g, w[9], _K[41]);
-    roundSha256(g, h, a, b, c, d, e, f, w[10], _K[42]);
-    roundSha256(f, g, h, a, b, c, d, e, w[11], _K[43]);
-    roundSha256(e, f, g, h, a, b, c, d, w[12], _K[44]);
-    roundSha256(d, e, f, g, h, a, b, c, w[13], _K[45]);
-    roundSha256(c, d, e, f, g, h, a, b, w[14], _K[46]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[47]);
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[16]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[17]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[18]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[19]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[20]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[21]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[22]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[23]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[24]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[25]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[26]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[27]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[28]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[29]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[30]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[31]);
+
 
     w[0] = w[0] + s0(w[1]) + w[9] + s1(w[14]);
     w[1] = w[1] + s0(w[2]) + w[10] + s1(w[15]);
@@ -198,31 +164,65 @@ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint3
     w[14] = w[14] + s0(w[15]) + w[7] + s1(w[12]);
     w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
 
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[48]);
-    roundSha256(h, a, b, c, d, e, f, g, w[1], _K[49]);
-    roundSha256(g, h, a, b, c, d, e, f, w[2], _K[50]);
-    roundSha256(f, g, h, a, b, c, d, e, w[3], _K[51]);
-    roundSha256(e, f, g, h, a, b, c, d, w[4], _K[52]);
-    roundSha256(d, e, f, g, h, a, b, c, w[5], _K[53]);
-    roundSha256(c, d, e, f, g, h, a, b, w[6], _K[54]);
-    roundSha256(b, c, d, e, f, g, h, a, w[7], _K[55]);
-    roundSha256(a, b, c, d, e, f, g, h, w[8], _K[56]);
-    roundSha256(h, a, b, c, d, e, f, g, w[9], _K[57]);
-    roundSha256(g, h, a, b, c, d, e, f, w[10], _K[58]);
-    roundSha256(f, g, h, a, b, c, d, e, w[11], _K[59]);
-    roundSha256(e, f, g, h, a, b, c, d, w[12], _K[60]);
-    roundSha256(d, e, f, g, h, a, b, c, w[13], _K[61]);
-    roundSha256(c, d, e, f, g, h, a, b, w[14], _K[62]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[63]);
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[32]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[33]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[34]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[35]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[36]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[37]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[38]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[39]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[40]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[41]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[42]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[43]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[44]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[45]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[46]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[47]);
 
-    a += _IV[0];
-    b += _IV[1];
-    c += _IV[2];
-    d += _IV[3];
-    e += _IV[4];
-    f += _IV[5];
-    g += _IV[6];
-    h += _IV[7];
+    w[0] = w[0] + s0(w[1]) + w[9] + s1(w[14]);
+    w[1] = w[1] + s0(w[2]) + w[10] + s1(w[15]);
+    w[2] = w[2] + s0(w[3]) + w[11] + s1(w[0]);
+    w[3] = w[3] + s0(w[4]) + w[12] + s1(w[1]);
+    w[4] = w[4] + s0(w[5]) + w[13] + s1(w[2]);
+    w[5] = w[5] + s0(w[6]) + w[14] + s1(w[3]);
+    w[6] = w[6] + s0(w[7]) + w[15] + s1(w[4]);
+    w[7] = w[7] + s0(w[8]) + w[0] + s1(w[5]);
+    w[8] = w[8] + s0(w[9]) + w[1] + s1(w[6]);
+    w[9] = w[9] + s0(w[10]) + w[2] + s1(w[7]);
+    w[10] = w[10] + s0(w[11]) + w[3] + s1(w[8]);
+    w[11] = w[11] + s0(w[12]) + w[4] + s1(w[9]);
+    w[12] = w[12] + s0(w[13]) + w[5] + s1(w[10]);
+    w[13] = w[13] + s0(w[14]) + w[6] + s1(w[11]);
+    w[14] = w[14] + s0(w[15]) + w[7] + s1(w[12]);
+    w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
+
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[48]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[49]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[50]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[51]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[52]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[53]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[54]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[55]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[56]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[57]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[58]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[59]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[60]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[61]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[62]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[63]);
+
+    a += d_IV[0];
+    b += d_IV[1];
+    c += d_IV[2];
+    d += d_IV[3];
+    e += d_IV[4];
+    f += d_IV[5];
+    g += d_IV[6];
+    h += d_IV[7];
 
     // store the intermediate hash value
     uint32_t tmp[8];
@@ -238,22 +238,22 @@ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint3
     w[0] = (y[7] << 24) | 0x00800000;
     w[15] = 65 * 8;
 
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[0]);
-    roundSha256(h, a, b, c, d, e, f, g, 0, _K[1]);
-    roundSha256(g, h, a, b, c, d, e, f, 0, _K[2]);
-    roundSha256(f, g, h, a, b, c, d, e, 0, _K[3]);
-    roundSha256(e, f, g, h, a, b, c, d, 0, _K[4]);
-    roundSha256(d, e, f, g, h, a, b, c, 0, _K[5]);
-    roundSha256(c, d, e, f, g, h, a, b, 0, _K[6]);
-    roundSha256(b, c, d, e, f, g, h, a, 0, _K[7]);
-    roundSha256(a, b, c, d, e, f, g, h, 0, _K[8]);
-    roundSha256(h, a, b, c, d, e, f, g, 0, _K[9]);
-    roundSha256(g, h, a, b, c, d, e, f, 0, _K[10]);
-    roundSha256(f, g, h, a, b, c, d, e, 0, _K[11]);
-    roundSha256(e, f, g, h, a, b, c, d, 0, _K[12]);
-    roundSha256(d, e, f, g, h, a, b, c, 0, _K[13]);
-    roundSha256(c, d, e, f, g, h, a, b, 0, _K[14]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[15]);
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[0]);
+    roundSha256(h, a, b, c, d, e, f, g, 0, d_K[1]);
+    roundSha256(g, h, a, b, c, d, e, f, 0, d_K[2]);
+    roundSha256(f, g, h, a, b, c, d, e, 0, d_K[3]);
+    roundSha256(e, f, g, h, a, b, c, d, 0, d_K[4]);
+    roundSha256(d, e, f, g, h, a, b, c, 0, d_K[5]);
+    roundSha256(c, d, e, f, g, h, a, b, 0, d_K[6]);
+    roundSha256(b, c, d, e, f, g, h, a, 0, d_K[7]);
+    roundSha256(a, b, c, d, e, f, g, h, 0, d_K[8]);
+    roundSha256(h, a, b, c, d, e, f, g, 0, d_K[9]);
+    roundSha256(g, h, a, b, c, d, e, f, 0, d_K[10]);
+    roundSha256(f, g, h, a, b, c, d, e, 0, d_K[11]);
+    roundSha256(e, f, g, h, a, b, c, d, 0, d_K[12]);
+    roundSha256(d, e, f, g, h, a, b, c, 0, d_K[13]);
+    roundSha256(c, d, e, f, g, h, a, b, 0, d_K[14]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[15]);
 
     w[0] = w[0] + s0(0) + 0 + s1(0);
     w[1] = 0 + s0(0) + 0 + s1(w[15]);
@@ -272,22 +272,22 @@ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint3
     w[14] = 0 + s0(w[15]) + w[7] + s1(w[12]);
     w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
 
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[16]);
-    roundSha256(h, a, b, c, d, e, f, g, w[1], _K[17]);
-    roundSha256(g, h, a, b, c, d, e, f, w[2], _K[18]);
-    roundSha256(f, g, h, a, b, c, d, e, w[3], _K[19]);
-    roundSha256(e, f, g, h, a, b, c, d, w[4], _K[20]);
-    roundSha256(d, e, f, g, h, a, b, c, w[5], _K[21]);
-    roundSha256(c, d, e, f, g, h, a, b, w[6], _K[22]);
-    roundSha256(b, c, d, e, f, g, h, a, w[7], _K[23]);
-    roundSha256(a, b, c, d, e, f, g, h, w[8], _K[24]);
-    roundSha256(h, a, b, c, d, e, f, g, w[9], _K[25]);
-    roundSha256(g, h, a, b, c, d, e, f, w[10], _K[26]);
-    roundSha256(f, g, h, a, b, c, d, e, w[11], _K[27]);
-    roundSha256(e, f, g, h, a, b, c, d, w[12], _K[28]);
-    roundSha256(d, e, f, g, h, a, b, c, w[13], _K[29]);
-    roundSha256(c, d, e, f, g, h, a, b, w[14], _K[30]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[31]);
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[16]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[17]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[18]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[19]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[20]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[21]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[22]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[23]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[24]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[25]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[26]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[27]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[28]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[29]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[30]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[31]);
 
     w[0] = w[0] + s0(w[1]) + w[9] + s1(w[14]);
     w[1] = w[1] + s0(w[2]) + w[10] + s1(w[15]);
@@ -306,22 +306,22 @@ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint3
     w[14] = w[14] + s0(w[15]) + w[7] + s1(w[12]);
     w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
 
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[32]);
-    roundSha256(h, a, b, c, d, e, f, g, w[1], _K[33]);
-    roundSha256(g, h, a, b, c, d, e, f, w[2], _K[34]);
-    roundSha256(f, g, h, a, b, c, d, e, w[3], _K[35]);
-    roundSha256(e, f, g, h, a, b, c, d, w[4], _K[36]);
-    roundSha256(d, e, f, g, h, a, b, c, w[5], _K[37]);
-    roundSha256(c, d, e, f, g, h, a, b, w[6], _K[38]);
-    roundSha256(b, c, d, e, f, g, h, a, w[7], _K[39]);
-    roundSha256(a, b, c, d, e, f, g, h, w[8], _K[40]);
-    roundSha256(h, a, b, c, d, e, f, g, w[9], _K[41]);
-    roundSha256(g, h, a, b, c, d, e, f, w[10], _K[42]);
-    roundSha256(f, g, h, a, b, c, d, e, w[11], _K[43]);
-    roundSha256(e, f, g, h, a, b, c, d, w[12], _K[44]);
-    roundSha256(d, e, f, g, h, a, b, c, w[13], _K[45]);
-    roundSha256(c, d, e, f, g, h, a, b, w[14], _K[46]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[47]);
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[32]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[33]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[34]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[35]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[36]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[37]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[38]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[39]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[40]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[41]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[42]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[43]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[44]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[45]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[46]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[47]);
 
     w[0] = w[0] + s0(w[1]) + w[9] + s1(w[14]);
     w[1] = w[1] + s0(w[2]) + w[10] + s1(w[15]);
@@ -340,22 +340,22 @@ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint3
     w[14] = w[14] + s0(w[15]) + w[7] + s1(w[12]);
     w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
 
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[48]);
-    roundSha256(h, a, b, c, d, e, f, g, w[1], _K[49]);
-    roundSha256(g, h, a, b, c, d, e, f, w[2], _K[50]);
-    roundSha256(f, g, h, a, b, c, d, e, w[3], _K[51]);
-    roundSha256(e, f, g, h, a, b, c, d, w[4], _K[52]);
-    roundSha256(d, e, f, g, h, a, b, c, w[5], _K[53]);
-    roundSha256(c, d, e, f, g, h, a, b, w[6], _K[54]);
-    roundSha256(b, c, d, e, f, g, h, a, w[7], _K[55]);
-    roundSha256(a, b, c, d, e, f, g, h, w[8], _K[56]);
-    roundSha256(h, a, b, c, d, e, f, g, w[9], _K[57]);
-    roundSha256(g, h, a, b, c, d, e, f, w[10], _K[58]);
-    roundSha256(f, g, h, a, b, c, d, e, w[11], _K[59]);
-    roundSha256(e, f, g, h, a, b, c, d, w[12], _K[60]);
-    roundSha256(d, e, f, g, h, a, b, c, w[13], _K[61]);
-    roundSha256(c, d, e, f, g, h, a, b, w[14], _K[62]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[63]);
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[48]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[49]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[50]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[51]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[52]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[53]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[54]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[55]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[56]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[57]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[58]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[59]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[60]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[61]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[62]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[63]);
 
     digest[0] = tmp[0] + a;
     digest[1] = tmp[1] + b;
@@ -367,7 +367,7 @@ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint3
     digest[7] = tmp[7] + h;
 }
 
-__device__ __forceinline__ void sha256PublicKeyCompressed(const uint32_t x[8], const uint32_t yParity, uint32_t digest[8])
+__host__ __device__ __forceinline__ void sha256PublicKeyCompressed(const uint32_t x[8], const uint32_t yParity, uint32_t digest[8])
 {
     uint32_t a, b, c, d, e, f, g, h;
     uint32_t w[16];
@@ -385,31 +385,31 @@ __device__ __forceinline__ void sha256PublicKeyCompressed(const uint32_t x[8], c
     w[8] = (x[7] << 24) | 0x00800000;
     w[15] = 33 * 8;
 
-    a = _IV[0];
-    b = _IV[1];
-    c = _IV[2];
-    d = _IV[3];
-    e = _IV[4];
-    f = _IV[5];
-    g = _IV[6];
-    h = _IV[7];
+    a = d_IV[0];
+    b = d_IV[1];
+    c = d_IV[2];
+    d = d_IV[3];
+    e = d_IV[4];
+    f = d_IV[5];
+    g = d_IV[6];
+    h = d_IV[7];
 
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[0]);
-    roundSha256(h, a, b, c, d, e, f, g, w[1], _K[1]);
-    roundSha256(g, h, a, b, c, d, e, f, w[2], _K[2]);
-    roundSha256(f, g, h, a, b, c, d, e, w[3], _K[3]);
-    roundSha256(e, f, g, h, a, b, c, d, w[4], _K[4]);
-    roundSha256(d, e, f, g, h, a, b, c, w[5], _K[5]);
-    roundSha256(c, d, e, f, g, h, a, b, w[6], _K[6]);
-    roundSha256(b, c, d, e, f, g, h, a, w[7], _K[7]);
-    roundSha256(a, b, c, d, e, f, g, h, w[8], _K[8]);
-    roundSha256(h, a, b, c, d, e, f, g, 0, _K[9]);
-    roundSha256(g, h, a, b, c, d, e, f, 0, _K[10]);
-    roundSha256(f, g, h, a, b, c, d, e, 0, _K[11]);
-    roundSha256(e, f, g, h, a, b, c, d, 0, _K[12]);
-    roundSha256(d, e, f, g, h, a, b, c, 0, _K[13]);
-    roundSha256(c, d, e, f, g, h, a, b, 0, _K[14]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[15]);
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[0]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[1]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[2]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[3]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[4]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[5]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[6]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[7]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[8]);
+    roundSha256(h, a, b, c, d, e, f, g, 0, d_K[9]);
+    roundSha256(g, h, a, b, c, d, e, f, 0, d_K[10]);
+    roundSha256(f, g, h, a, b, c, d, e, 0, d_K[11]);
+    roundSha256(e, f, g, h, a, b, c, d, 0, d_K[12]);
+    roundSha256(d, e, f, g, h, a, b, c, 0, d_K[13]);
+    roundSha256(c, d, e, f, g, h, a, b, 0, d_K[14]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[15]);
 
     w[0] = w[0] + s0(w[1]) + 0 + s1(0);
     w[1] = w[1] + s0(w[2]) + 0 + s1(w[15]);
@@ -428,22 +428,22 @@ __device__ __forceinline__ void sha256PublicKeyCompressed(const uint32_t x[8], c
     w[14] = 0 + s0(w[15]) + w[7] + s1(w[12]);
     w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
 
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[16]);
-    roundSha256(h, a, b, c, d, e, f, g, w[1], _K[17]);
-    roundSha256(g, h, a, b, c, d, e, f, w[2], _K[18]);
-    roundSha256(f, g, h, a, b, c, d, e, w[3], _K[19]);
-    roundSha256(e, f, g, h, a, b, c, d, w[4], _K[20]);
-    roundSha256(d, e, f, g, h, a, b, c, w[5], _K[21]);
-    roundSha256(c, d, e, f, g, h, a, b, w[6], _K[22]);
-    roundSha256(b, c, d, e, f, g, h, a, w[7], _K[23]);
-    roundSha256(a, b, c, d, e, f, g, h, w[8], _K[24]);
-    roundSha256(h, a, b, c, d, e, f, g, w[9], _K[25]);
-    roundSha256(g, h, a, b, c, d, e, f, w[10], _K[26]);
-    roundSha256(f, g, h, a, b, c, d, e, w[11], _K[27]);
-    roundSha256(e, f, g, h, a, b, c, d, w[12], _K[28]);
-    roundSha256(d, e, f, g, h, a, b, c, w[13], _K[29]);
-    roundSha256(c, d, e, f, g, h, a, b, w[14], _K[30]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[31]);
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[16]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[17]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[18]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[19]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[20]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[21]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[22]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[23]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[24]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[25]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[26]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[27]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[28]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[29]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[30]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[31]);
 
     w[0] = w[0] + s0(w[1]) + w[9] + s1(w[14]);
     w[1] = w[1] + s0(w[2]) + w[10] + s1(w[15]);
@@ -462,23 +462,22 @@ __device__ __forceinline__ void sha256PublicKeyCompressed(const uint32_t x[8], c
     w[14] = w[14] + s0(w[15]) + w[7] + s1(w[12]);
     w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
 
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[32]);
-    roundSha256(h, a, b, c, d, e, f, g, w[1], _K[33]);
-    roundSha256(g, h, a, b, c, d, e, f, w[2], _K[34]);
-    roundSha256(f, g, h, a, b, c, d, e, w[3], _K[35]);
-    roundSha256(e, f, g, h, a, b, c, d, w[4], _K[36]);
-    roundSha256(d, e, f, g, h, a, b, c, w[5], _K[37]);
-    roundSha256(c, d, e, f, g, h, a, b, w[6], _K[38]);
-    roundSha256(b, c, d, e, f, g, h, a, w[7], _K[39]);
-    roundSha256(a, b, c, d, e, f, g, h, w[8], _K[40]);
-    roundSha256(h, a, b, c, d, e, f, g, w[9], _K[41]);
-    roundSha256(g, h, a, b, c, d, e, f, w[10], _K[42]);
-    roundSha256(f, g, h, a, b, c, d, e, w[11], _K[43]);
-    roundSha256(e, f, g, h, a, b, c, d, w[12], _K[44]);
-    roundSha256(d, e, f, g, h, a, b, c, w[13], _K[45]);
-    roundSha256(c, d, e, f, g, h, a, b, w[14], _K[46]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[47]);
-
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[32]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[33]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[34]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[35]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[36]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[37]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[38]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[39]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[40]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[41]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[42]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[43]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[44]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[45]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[46]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[47]);
 
     w[0] = w[0] + s0(w[1]) + w[9] + s1(w[14]);
     w[1] = w[1] + s0(w[2]) + w[10] + s1(w[15]);
@@ -497,31 +496,31 @@ __device__ __forceinline__ void sha256PublicKeyCompressed(const uint32_t x[8], c
     w[14] = w[14] + s0(w[15]) + w[7] + s1(w[12]);
     w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
 
-    roundSha256(a, b, c, d, e, f, g, h, w[0], _K[48]);
-    roundSha256(h, a, b, c, d, e, f, g, w[1], _K[49]);
-    roundSha256(g, h, a, b, c, d, e, f, w[2], _K[50]);
-    roundSha256(f, g, h, a, b, c, d, e, w[3], _K[51]);
-    roundSha256(e, f, g, h, a, b, c, d, w[4], _K[52]);
-    roundSha256(d, e, f, g, h, a, b, c, w[5], _K[53]);
-    roundSha256(c, d, e, f, g, h, a, b, w[6], _K[54]);
-    roundSha256(b, c, d, e, f, g, h, a, w[7], _K[55]);
-    roundSha256(a, b, c, d, e, f, g, h, w[8], _K[56]);
-    roundSha256(h, a, b, c, d, e, f, g, w[9], _K[57]);
-    roundSha256(g, h, a, b, c, d, e, f, w[10], _K[58]);
-    roundSha256(f, g, h, a, b, c, d, e, w[11], _K[59]);
-    roundSha256(e, f, g, h, a, b, c, d, w[12], _K[60]);
-    roundSha256(d, e, f, g, h, a, b, c, w[13], _K[61]);
-    roundSha256(c, d, e, f, g, h, a, b, w[14], _K[62]);
-    roundSha256(b, c, d, e, f, g, h, a, w[15], _K[63]);
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[48]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[49]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[50]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[51]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[52]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[53]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[54]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[55]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[56]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[57]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[58]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[59]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[60]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[61]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[62]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[63]);
 
-    a += _IV[0];
-    b += _IV[1];
-    c += _IV[2];
-    d += _IV[3];
-    e += _IV[4];
-    f += _IV[5];
-    g += _IV[6];
-    h += _IV[7];
+    a += d_IV[0];
+    b += d_IV[1];
+    c += d_IV[2];
+    d += d_IV[3];
+    e += d_IV[4];
+    f += d_IV[5];
+    g += d_IV[6];
+    h += d_IV[7];
 
     digest[0] = a;
     digest[1] = b;
@@ -531,4 +530,160 @@ __device__ __forceinline__ void sha256PublicKeyCompressed(const uint32_t x[8], c
     digest[5] = f;
     digest[6] = g;
     digest[7] = h;
+}
+
+__host__ __device__ __forceinline__ void sha256PrivateKeyBase(const uint2& p, uint256_t& digest)
+{
+    uint32_t w[16]{};
+
+    w[0] = p.x;
+    w[1] = p.y;
+    w[2] = 0x80000000; // Padding bit
+    w[15] = sizeof(uint2) * 8; // Message length in bits
+
+    uint a = d_IV[0];
+    uint b = d_IV[1];
+    uint c = d_IV[2];
+    uint d = d_IV[3];
+    uint e = d_IV[4];
+    uint f = d_IV[5];
+    uint g = d_IV[6];
+    uint h = d_IV[7];
+
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[0]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[1]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[2]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[3]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[4]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[5]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[6]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[7]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[8]);
+    roundSha256(h, a, b, c, d, e, f, g, 0, d_K[9]);
+    roundSha256(g, h, a, b, c, d, e, f, 0, d_K[10]);
+    roundSha256(f, g, h, a, b, c, d, e, 0, d_K[11]);
+    roundSha256(e, f, g, h, a, b, c, d, 0, d_K[12]);
+    roundSha256(d, e, f, g, h, a, b, c, 0, d_K[13]);
+    roundSha256(c, d, e, f, g, h, a, b, 0, d_K[14]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[15]);
+
+    w[0] = w[0] + s0(w[1]) + 0 + s1(0);
+    w[1] = w[1] + s0(w[2]) + 0 + s1(w[15]);
+    w[2] = w[2] + s0(w[3]) + 0 + s1(w[0]);
+    w[3] = w[3] + s0(w[4]) + 0 + s1(w[1]);
+    w[4] = w[4] + s0(w[5]) + 0 + s1(w[2]);
+    w[5] = w[5] + s0(w[6]) + 0 + s1(w[3]);
+    w[6] = w[6] + s0(w[7]) + w[15] + s1(w[4]);
+    w[7] = w[7] + s0(w[8]) + w[0] + s1(w[5]);
+    w[8] = w[8] + s0(0) + w[1] + s1(w[6]);
+    w[9] = 0 + s0(0) + w[2] + s1(w[7]);
+    w[10] = 0 + s0(0) + w[3] + s1(w[8]);
+    w[11] = 0 + s0(0) + w[4] + s1(w[9]);
+    w[12] = 0 + s0(0) + w[5] + s1(w[10]);
+    w[13] = 0 + s0(0) + w[6] + s1(w[11]);
+    w[14] = 0 + s0(w[15]) + w[7] + s1(w[12]);
+    w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
+
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[16]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[17]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[18]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[19]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[20]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[21]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[22]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[23]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[24]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[25]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[26]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[27]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[28]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[29]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[30]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[31]);
+
+    w[0] = w[0] + s0(w[1]) + w[9] + s1(w[14]);
+    w[1] = w[1] + s0(w[2]) + w[10] + s1(w[15]);
+    w[2] = w[2] + s0(w[3]) + w[11] + s1(w[0]);
+    w[3] = w[3] + s0(w[4]) + w[12] + s1(w[1]);
+    w[4] = w[4] + s0(w[5]) + w[13] + s1(w[2]);
+    w[5] = w[5] + s0(w[6]) + w[14] + s1(w[3]);
+    w[6] = w[6] + s0(w[7]) + w[15] + s1(w[4]);
+    w[7] = w[7] + s0(w[8]) + w[0] + s1(w[5]);
+    w[8] = w[8] + s0(w[9]) + w[1] + s1(w[6]);
+    w[9] = w[9] + s0(w[10]) + w[2] + s1(w[7]);
+    w[10] = w[10] + s0(w[11]) + w[3] + s1(w[8]);
+    w[11] = w[11] + s0(w[12]) + w[4] + s1(w[9]);
+    w[12] = w[12] + s0(w[13]) + w[5] + s1(w[10]);
+    w[13] = w[13] + s0(w[14]) + w[6] + s1(w[11]);
+    w[14] = w[14] + s0(w[15]) + w[7] + s1(w[12]);
+    w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
+
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[32]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[33]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[34]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[35]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[36]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[37]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[38]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[39]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[40]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[41]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[42]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[43]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[44]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[45]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[46]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[47]);
+
+    w[0] = w[0] + s0(w[1]) + w[9] + s1(w[14]);
+    w[1] = w[1] + s0(w[2]) + w[10] + s1(w[15]);
+    w[2] = w[2] + s0(w[3]) + w[11] + s1(w[0]);
+    w[3] = w[3] + s0(w[4]) + w[12] + s1(w[1]);
+    w[4] = w[4] + s0(w[5]) + w[13] + s1(w[2]);
+    w[5] = w[5] + s0(w[6]) + w[14] + s1(w[3]);
+    w[6] = w[6] + s0(w[7]) + w[15] + s1(w[4]);
+    w[7] = w[7] + s0(w[8]) + w[0] + s1(w[5]);
+    w[8] = w[8] + s0(w[9]) + w[1] + s1(w[6]);
+    w[9] = w[9] + s0(w[10]) + w[2] + s1(w[7]);
+    w[10] = w[10] + s0(w[11]) + w[3] + s1(w[8]);
+    w[11] = w[11] + s0(w[12]) + w[4] + s1(w[9]);
+    w[12] = w[12] + s0(w[13]) + w[5] + s1(w[10]);
+    w[13] = w[13] + s0(w[14]) + w[6] + s1(w[11]);
+    w[14] = w[14] + s0(w[15]) + w[7] + s1(w[12]);
+    w[15] = w[15] + s0(w[0]) + w[8] + s1(w[13]);
+
+    roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[48]);
+    roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[49]);
+    roundSha256(g, h, a, b, c, d, e, f, w[2], d_K[50]);
+    roundSha256(f, g, h, a, b, c, d, e, w[3], d_K[51]);
+    roundSha256(e, f, g, h, a, b, c, d, w[4], d_K[52]);
+    roundSha256(d, e, f, g, h, a, b, c, w[5], d_K[53]);
+    roundSha256(c, d, e, f, g, h, a, b, w[6], d_K[54]);
+    roundSha256(b, c, d, e, f, g, h, a, w[7], d_K[55]);
+    roundSha256(a, b, c, d, e, f, g, h, w[8], d_K[56]);
+    roundSha256(h, a, b, c, d, e, f, g, w[9], d_K[57]);
+    roundSha256(g, h, a, b, c, d, e, f, w[10], d_K[58]);
+    roundSha256(f, g, h, a, b, c, d, e, w[11], d_K[59]);
+    roundSha256(e, f, g, h, a, b, c, d, w[12], d_K[60]);
+    roundSha256(d, e, f, g, h, a, b, c, w[13], d_K[61]);
+    roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[62]);
+    roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[63]);
+
+    a += d_IV[0];
+    b += d_IV[1];
+    c += d_IV[2];
+    d += d_IV[3];
+    e += d_IV[4];
+    f += d_IV[5];
+    g += d_IV[6];
+    h += d_IV[7];
+
+    digest.v[0] = a;
+    digest.v[1] = b;
+    digest.v[2] = c;
+    digest.v[3] = d;
+    digest.v[4] = e;
+    digest.v[5] = f;
+    digest.v[6] = g;
+    digest.v[7] = h;
 }

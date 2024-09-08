@@ -14,8 +14,7 @@ void statusCallback(StatusInfo info)
 
 void parseArguments(const int argc, const char **argv, CLI::App &app, ApplicationParameters &params)
 {
-    app.add_option("-t,--targets", params.ripemd160TargetsFilePath, "File path with target RipeMD-160 hash list")
-        /*->required()*/->check(CLI::ExistingFile);
+    app.add_option("-t,--targets", params.ripemd160TargetsFilePath, "File path with target RipeMD-160 hash list")->check(CLI::ExistingFile);
 
     app.add_option("-d,--cudaDeviceId", params.cudaDeviceId, "Cuda device ID")->default_val(0);
     app.add_option("-p,--pointsPerThread", params.pointsPerThread, "How many keys will be generated per each cuda thread")->default_val(128);
@@ -49,7 +48,8 @@ int main(const int argc, const char **argv)
     const KeyHunter keyHunter({params, sharedDataQueue, statusCallback});
     const KeyProcessor keyProcessor(sharedDataQueue);
 
-    keyHunter.startWithRandomPrivateKeys();
+    keyHunter.findPublicHashWithPrivateDefinedXRandomY(1);
+    // keyHunter.startWithRandomPrivateKeys();
     keyProcessor.start();
 
     // Giving some time to process, otherwise main thread will force stop the processing

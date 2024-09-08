@@ -1,6 +1,8 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch_all.hpp>
 
+#include <openssl/sha.h>
+
 #include "secp256k1.h"
 #include "address_util.h"
 
@@ -11,9 +13,10 @@
 #include <vector>
 
 #include "common.h"
+#include "crypto_util.h"
 #include "utils.h"
 
-struct HashTest
+struct Hash160Test
 {
     secp256k1::uint256 privateKey{};
     std::string hash160;                              // public key RIPEMD-160 hash
@@ -21,7 +24,7 @@ struct HashTest
     std::string hash160WithoutFinalRound;             // public key RIPEMD-160 hash before converting to little endian
     std::string hash160WithoutFinalRoundCompressed;   // compressed public key RIPEMD-160 hash before converting to little endian
 
-    HashTest(const std::string& key,
+    Hash160Test(const std::string& key,
              std::string  hash160,
              std::string  hash160Compressed,
              std::string  hash160WithoutFinalRound,
@@ -36,7 +39,7 @@ struct HashTest
 
 TEST_CASE("Test Ripemd-160 calculation from public key generated from private", "")
 {
-    std::vector<HashTest> hashTestVector {
+    std::vector<Hash160Test> hashTestVector {
         {"0100000000000000000000000000000000000000000000000000000000000000", "8e7682b1c4af85f1ecd61ab2288be0d54d0444df", "60afcdec519698a263417ddfe7cea936737a0ee7", "b182768ef185afc4b21ad6ecd5e08b28df44044d", "eccdaf60a2989651df7d416336a9cee7e70e7a73"},
         {"0100000000000000000000000000000000000000000000000000000000000200", "9f26a1af08f366906410ccdfca03d79f7e414eab", "0ea31dba6f1a8ae6499943d5581bf88e274881be", "afa1269f9066f308dfcc10649fd703caab4e417e", "ba1da30ee68a1a6fd54399498ef81b58be814827"},
         {"d7ae6ac85e67dfe75b3a42c6453abed4bb34a26d2988481fc134b2d845976a56", "6ca6bc1dd3b47a92302ea3ac743f191931be1bd4", "4b2c6447bac1b8da73aa010d1fa449472ba502c8", "1dbca66c927ab4d3aca32e3019193f74d41bbe31", "47642c4bdab8c1ba0d01aa734749a41fc802a52b"},
@@ -73,5 +76,36 @@ TEST_CASE("Test Ripemd-160 calculation from public key generated from private", 
         REQUIRE(hash160WithoutFinalRoundCompressed == actualHash160WithoutFinalRoundCompressed);
 
         // std::cout << std::format("\"{}\", \"{}\", \"{}\", \"{}\"\n", actualHash160, actualHash160Compressed, actualHash160WithoutFinalRound, actualHash160WithoutFinalRoundCompressed);
+    }
+}
+
+TEST_CASE("Test sha256", "")
+{
+    std::vector<uint2> hashTestVector
+    {
+        {1, 0},
+        {1, 1024},
+        {1, std::numeric_limits<uint32_t>::max()}
+    };
+
+    for (const auto& value : hashTestVector)
+    {
+        uint32_t msg[16]{};
+        uint32_t digest[8]{};
+
+        msg[0] = utils::endian(value.x);
+        msg[1] = utils::endian(value.y);
+        msg[2] = 0x80000000;
+        msg[15] = 8 * sizeof(uint2);
+
+        crypto::sha256Init(digest);
+        crypto::sha256(msg, digest);
+
+        std::array<uint32_t, SHA256_DIGEST_LENGTH / sizeof(uint32_t)> actualSha256{};
+        std::ranges::transform(digest, actualSha256.data(), utils::endian);
+
+        std::array<uint32_t, SHA256_DIGEST_LENGTH / sizeof(uint32_t)> expectedSha256{};
+        SHA256(reinterpret_cast<const unsigned char *>(&value), 2 * sizeof(uint32_t), reinterpret_cast<unsigned char *>(expectedSha256.data()));
+        REQUIRE(expectedSha256 == actualSha256);
     }
 }

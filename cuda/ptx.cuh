@@ -23,7 +23,7 @@
 #define lsbpos(x) (__ffs((x)))
 
 
-__device__ __forceinline__ uint32_t endian(uint32_t x)
+__host__ __device__ __forceinline__ uint32_t endian(uint32_t x)
 {
     return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
 }

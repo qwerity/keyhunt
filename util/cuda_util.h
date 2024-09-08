@@ -54,6 +54,7 @@ namespace cu
     {
         if (err)
         {
+            printf("%s\n", cudaGetErrorString(err));
             throw CudaException(err);
         }
     }

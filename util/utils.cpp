@@ -269,13 +269,12 @@ namespace utils
     {
         std::vector<secp256k1::uint256> privateKeys;
 
-        const std::string k{"f71485d0bff28cf3a9f1b6c2b65b03729f42f9818fb497c6fae7268bb124f263"};
-        constexpr uint32_t testKey[8]{0x55c1df29, 0x32e27f37, 0x4b90fe20, 0x6d3b44ce, 0x1f95782b, 0x0345c17c, 0xff10a32d, 0x3f795bef};
+        constexpr uint32_t testKey[8]{0x3d52d30a, 0x720debe8, 0x4fc939bb, 0xf806a1de, 0x3cee918e, 0x99fafd29, 0xe9a2e3fa, 0x2c478ee7};
         privateKeys.emplace_back(testKey, secp256k1::uint256::BigEndian);
         privateKeys.emplace_back(std::string("0100000000000000000000000000000000000000000000000000000000000000"));
         privateKeys.emplace_back(std::string("0100000000000000000000000000000000000000000000000000000000000200"));
         privateKeys.emplace_back(std::string("d7ae6ac85e67dfe75b3a42c6453abed4bb34a26d2988481fc134b2d845976a56"));
-        privateKeys.emplace_back(k);
+        privateKeys.emplace_back(std::string{"f71485d0bff28cf3a9f1b6c2b65b03729f42f9818fb497c6fae7268bb124f263"});
 
         std::generate_n(std::back_inserter(privateKeys), keysNumberToGenerate, secp256k1::generatePrivateKey);
         return privateKeys;

@@ -21,7 +21,7 @@ struct KeyProcessor::Impl
     {
         mThread = std::thread([this]()
         {
-            std::cout << "KeyProcessor Thread ID: " << std::this_thread::get_id() << std::endl;
+            BOOST_LOG_TRIVIAL(info) << "KeyProcessor Thread running: " << std::this_thread::get_id();
 
             while (!mStopFlag || !mDataQueue->empty())
             {
@@ -41,18 +41,16 @@ struct KeyProcessor::Impl
                     continue;
                 }
 
-                constexpr bool compressed{false};
-                // std::string address = Address::fromPublicKey(publicKeys[i], compressed);
-
-                for (const auto& [gpuPrivateKey, gpuPublicKey] : *keyPairs)
+                std::ranges::for_each(*keyPairs, [&](const Secp256k1KeyPair& keyPair)
                 {
-                    const secp256k1::ecpoint pCPU = secp256k1::multiplyPoint(gpuPrivateKey, secp256k1::G());
-                    if (pCPU != gpuPublicKey)
+                    constexpr bool compressed{false};
+                    const secp256k1::ecpoint pCPU = secp256k1::multiplyPoint(keyPair.privateKey, secp256k1::G());
+                    if (pCPU != keyPair.publicKey)
                     {
-                       BOOST_LOG_TRIVIAL(info) << "KeyProcessor: gen key is not correct";
-                       BOOST_LOG_TRIVIAL(info) << std::format("{} {}\n", gpuPrivateKey.toString(compressed), gpuPublicKey.toString(compressed));
+                        BOOST_LOG_TRIVIAL(info) << "KeyProcessor: gen key is not correct";
+                        BOOST_LOG_TRIVIAL(info) << std::format("{} {}\n", keyPair.privateKey.toString(compressed), keyPair.publicKey.toString(compressed));
                     }
-                }
+                });
 
                 delete keyPairs;
             }

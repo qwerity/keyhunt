@@ -1,4 +1,3 @@
-cmake_minimum_required(VERSION 3.10)
 project(cuda_keys CUDA)
 
 set(CMAKE_CUDA_STANDARD 20)
@@ -7,7 +6,7 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(THRUST_CPP_DIALECT 20)
 
 # Set the CUDA compiler flags for Debug and Release configurations
-set(CMAKE_CUDA_FLAGS "--extended-lambda -rdc=true --default-stream per-thread --expt-relaxed-constexpr")
+set(CMAKE_CUDA_FLAGS "--extended-lambda -rdc=true --default-stream per-thread --expt-relaxed-constexpr --ptxas-options=-v")
 set(CMAKE_CUDA_FLAGS_DEBUG "-g -G -O0")
 set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -DNDEBUG")
 set(CMAKE_CUDA_FLAGS_RELWITHDEBINFO "-O2 -g -G")
@@ -39,6 +38,8 @@ endif()
 set(SRC
     ecc.cu
     ecc.cuh
+    ecc_helper.cu
+    ecc_helper.cuh
 
     secp256k1.cuh
 
