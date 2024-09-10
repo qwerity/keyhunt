@@ -19,6 +19,7 @@ void parseArguments(const int argc, const char **argv, CLI::App &app, Applicatio
     app.add_option("-d,--cudaDeviceId", params.cudaDeviceId, "Cuda device ID")->default_val(0);
     app.add_option("-p,--pointsPerThread", params.pointsPerThread, "How many keys will be generated per each cuda thread")->default_val(128);
     app.add_option("-k,--keysNumberToGenerate", params.keysNumberToGenerate, "Number of keys to generate")->default_val(900);
+    app.add_option("-x,--privateX", params.privateXPart, "Private x part for random generation")->default_val(1);
 
     try
     {
@@ -31,6 +32,7 @@ void parseArguments(const int argc, const char **argv, CLI::App &app, Applicatio
     }
     catch (const CLI::ParseError &e)
     {
+        std::cerr << app.help() << std::endl;
         std::exit(app.exit(e));
     }
 }
@@ -48,7 +50,7 @@ int main(const int argc, const char **argv)
     const KeyHunter keyHunter({params, sharedDataQueue, statusCallback});
     const KeyProcessor keyProcessor(sharedDataQueue);
 
-    keyHunter.findPublicHashWithPrivateDefinedXRandomY(1);
+    keyHunter.findPublicHashWithPrivateDefinedXRandomY(params.privateXPart);
     // keyHunter.startWithRandomPrivateKeys();
     keyProcessor.start();
 
