@@ -66,7 +66,31 @@ struct KeyHunter::Impl
         }
     }
 
-    bool isDone() const { return mDone; }
+    /// TODO: to be optimized
+    void pushResultsToQueue() const
+    {
+        thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
+        cu::safeCall(mCuECC->getResults(results));
+
+        BOOST_LOG_TRIVIAL(info) << std::format("KeyGenerator: generated {} keys\n", results.size());
+
+        // to be deleted in KeyProcessor
+        auto* pairs = new Secp256k1KeyPairs;
+        for (const auto &[privateKey, publicKey] : results)
+        {
+            const auto p = secp256k1::uint256(privateKey.v, secp256k1::uint256::BigEndian);
+            pairs->emplace_back(p, publicKey);
+        }
+
+        while (!mDataQueue->push(pairs))
+        {
+            if (mStopFlag)
+                return;
+
+            // If the queue is full, yield to avoid busy-wait
+            std::this_thread::yield();
+        }
+    }
 
     void start(const thrust::host_vector<secp256k1::uint256>& privateKeys)
     {
@@ -99,28 +123,8 @@ struct KeyHunter::Impl
 
             BOOST_LOG_TRIVIAL(info) << "KeyGenerator: generated done";
 
-            thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
-            cu::safeCall(mCuECC->getResults(results));
-
-            BOOST_LOG_TRIVIAL(info) << std::format("KeyGenerator: generated {} keys\n", results.size());
-
-            // to be deleted in KeyProcessor
-            auto* pairs = new Secp256k1KeyPairs;
-            for (const auto &[privateKey, publicKey] : results)
-            {
-                const auto p = secp256k1::uint256(privateKey.v, secp256k1::uint256::BigEndian);
-                pairs->emplace_back(p, publicKey);
-            }
-
-            while (!mDataQueue->push(pairs))
-            {
-                if (mStopFlag)
-                    return;
-
-                // If the queue is full, yield to avoid busy-wait
-                std::this_thread::yield();
-            }
             mDone = true;
+            pushResultsToQueue();
         });
     }
 
@@ -172,27 +176,7 @@ struct KeyHunter::Impl
                     mStatusCallback(info);
                 }
 
-                thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
-                cu::safeCall(mCuECC->getResults(results));
-
-                BOOST_LOG_TRIVIAL(info) << std::format("KeyGenerator: done {} keys\n", results.size());
-
-                // to be deleted in KeyProcessor
-                auto* pairs = new Secp256k1KeyPairs;
-                for (const auto &[privateKey, publicKey] : results)
-                {
-                    const auto p = secp256k1::uint256(privateKey.v, secp256k1::uint256::BigEndian);
-                    pairs->emplace_back(p, publicKey);
-                }
-
-                while (!mDataQueue->push(pairs))
-                {
-                    if (mStopFlag)
-                        return;
-
-                    // If the queue is full, yield to avoid busy-wait
-                    std::this_thread::yield();
-                }
+                // pushResultsToQueue();
 
                 ++mIteration;
             }
@@ -287,7 +271,7 @@ void KeyHunter::stop() const
 
 bool KeyHunter::isDone() const
 {
-    return mImpl->isDone();
+    return mImpl->mDone;
 }
 
 void KeyHunter::selfTest(const uint32_t keysNumberToGenerate) const
