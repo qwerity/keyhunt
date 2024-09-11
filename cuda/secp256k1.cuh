@@ -87,10 +87,7 @@ __device__ __forceinline__ void readUInt256(const uint256_t *data, const uint de
     const uint base = depth * totalThreads;
     const uint index = base + threadId;
 
-    const auto data_uint4 = reinterpret_cast<const uint4 *>(data[index].v);
-    const auto x_uint4 = reinterpret_cast<uint4 *>(x.v);
-    x_uint4[0] = data_uint4[0];
-    x_uint4[1] = data_uint4[1];
+    x = data[index];
 }
 
 __device__ __forceinline__ void writeUInt256(const uint256_t& x, const uint depth, uint256_t *data)
@@ -101,29 +98,7 @@ __device__ __forceinline__ void writeUInt256(const uint256_t& x, const uint dept
     const uint base = depth * totalThreads;
     const uint index = base + threadId;
 
-    const auto x_uint4 = reinterpret_cast<const uint4 *>(x.v);
-    const auto data_uint4 = reinterpret_cast<uint4 *>(data[index].v);
-    data_uint4[0] = x_uint4[0];
-    data_uint4[1] = x_uint4[1];
-}
-
-__device__ __forceinline__ void copyBigInt(const uint256_t& src, uint256_t& dest)
-{
-    const auto srcTmp = reinterpret_cast<const uint4 *>(src.v);
-    const auto destTmp = reinterpret_cast<uint4 *>(dest.v);
-
-    destTmp[0] = srcTmp[0];
-    destTmp[1] = srcTmp[1];
-}
-
-__device__ __forceinline__ bool equal(const uint256_t& a, const uint256_t& b)
-{
-    bool eq = true;
-    for (int i = 0; i < 8; i++)
-    {
-        eq &= (a[i] == b[i]);
-    }
-    return eq;
+    data[index] = x;
 }
 
 __device__ __forceinline__ bool isInfinity(const uint256_t& x)
@@ -508,7 +483,7 @@ __device__ __forceinline__ void squareModP(uint256_t& x)
 {
     uint256_t tmp;
     squareModP(x, tmp);
-    copyBigInt(tmp, x);
+    x = tmp;
 }
 
 /**
@@ -519,7 +494,7 @@ __device__ __forceinline__ void mulModP(const uint256_t& a, uint256_t& c)
 {
     uint256_t tmp;
     mulModP(a, c, tmp);
-    copyBigInt(tmp, c);
+    c = tmp;
 }
 
 /**
@@ -527,10 +502,9 @@ __device__ __forceinline__ void mulModP(const uint256_t& a, uint256_t& c)
  */
 __device__ __forceinline__ void invModP(uint256_t& value)
 {
-    uint256_t x;
-    copyBigInt(value, x);
-
+    uint256_t x{value};
     uint256_t y{0, 0, 0, 0, 0, 0, 0, 1};
+
     // 0xd - 1101
     mulModP(x, y);
     squareModP(x);
@@ -580,12 +554,13 @@ __device__ __forceinline__ void invModP(uint256_t& value)
         squareModP(x);
     }
     mulModP(x, y);
-    copyBigInt(y, value);
+
+    value = y;
 }
 
 __device__ __forceinline__ void invModP(const uint256_t& value, uint256_t& inverse)
 {
-    copyBigInt(value, inverse);
+    inverse = value;
     invModP(inverse);
 }
 
@@ -627,7 +602,7 @@ __device__ __forceinline__ void completeBatchAdd(const ecpoint_t *gPoint, const 
     }
     else
     {
-        copyBigInt(inverse, s);
+        s = inverse;
     }
     uint256_t rise;
     subModP(gPoint->y, publicY, rise);
@@ -648,7 +623,7 @@ __device__ __forceinline__ void completeBatchAdd(const ecpoint_t *gPoint, const 
 
 __device__ __forceinline__ void beginBatchAddWithDouble(const ecpoint_t *gPoint, uint256_t& publicX, uint256_t *chain, const int batchIdx, uint256_t& inverse)
 {
-    if (equal(gPoint->x, publicX))
+    if (gPoint->x == publicX)
     {
         addModP(gPoint->y, gPoint->y, publicX);
     }
@@ -673,7 +648,7 @@ __device__ __forceinline__ void completeBatchAddWithDouble(const ecpoint_t *gPoi
         readUInt256(chain, batchIdx - 1, c);
         mulModP(inverse, c, s);
         uint256_t diff;
-        if (equal(gPoint->x, publicX))
+        if (gPoint->x == publicX)
         {
             addModP(gPoint->y, gPoint->y, diff);
         }
@@ -685,9 +660,10 @@ __device__ __forceinline__ void completeBatchAddWithDouble(const ecpoint_t *gPoi
     }
     else
     {
-        copyBigInt(inverse, s);
+        s = inverse;
     }
-    if (equal(gPoint->x, publicX))
+
+    if (gPoint->x == publicX)
     {
         // currently s = 1 / 2y
         uint256_t x2;

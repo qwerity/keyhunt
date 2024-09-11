@@ -18,6 +18,18 @@ struct alignas(4 * 8) uint256_t
     uint256_t() = default;
 
     __host__ __device__ __forceinline__
+    uint4* uint4Ptr()
+    {
+        return reinterpret_cast<uint4*>(v);
+    }
+
+    __host__ __device__ __forceinline__
+    const uint4* uint4CPtr() const
+    {
+        return reinterpret_cast<const uint4*>(v);
+    }
+
+    __host__ __device__ __forceinline__
     static void to_uint256(const uint src[8], uint256_t& dst, const Endianness endian = Endianness::LittleEndian)
     {
         if (endian == Endianness::LittleEndian)
@@ -37,7 +49,7 @@ struct alignas(4 * 8) uint256_t
     }
 
     __host__ __device__ __forceinline__
-    uint256_t(const uint src[8], const Endianness endian = Endianness::LittleEndian)
+    explicit uint256_t(const uint src[8], const Endianness endian = Endianness::LittleEndian)
     {
         if (endian == Endianness::LittleEndian)
         {
@@ -65,6 +77,31 @@ struct alignas(4 * 8) uint256_t
         {
             v[i++] = value;
         }
+    }
+
+    __host__ __device__ __forceinline__
+    uint256_t& operator=(const uint256_t& other) noexcept
+    {
+        if (this != &other)
+        {
+            const auto other_uint4 = reinterpret_cast<const uint4 *>(other.v);
+            const auto v_uint4 = reinterpret_cast<uint4 *>(v);
+            v_uint4[0] = other_uint4[0];
+            v_uint4[1] = other_uint4[1];
+        }
+        return *this;
+    }
+
+
+    __host__ __device__ __forceinline__
+    bool operator==(const uint256_t& other) const noexcept
+    {
+        bool eq = true;
+        for (int i = 0; i < 8; i++)
+        {
+            eq &= (v[i] == other.v[i]);
+        }
+        return eq;
     }
 
     __host__ __device__ __forceinline__

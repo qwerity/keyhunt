@@ -58,7 +58,6 @@ __host__ __device__ __forceinline__ void roundSha256(const uint a, const uint b,
 
 __host__ __device__ __forceinline__ void sha256PublicKey(const uint256_t& x, const uint256_t& y, uint256_t& digest)
 {
-    uint a, b, c, d, e, f, g, h;
     uint w[16];
 
     // 0x04 || x || y
@@ -79,14 +78,14 @@ __host__ __device__ __forceinline__ void sha256PublicKey(const uint256_t& x, con
     w[14] = (y[6] >> 8) | (y[5] << 24);
     w[15] = (y[7] >> 8) | (y[6] << 24);
 
-    a = d_IV[0];
-    b = d_IV[1];
-    c = d_IV[2];
-    d = d_IV[3];
-    e = d_IV[4];
-    f = d_IV[5];
-    g = d_IV[6];
-    h = d_IV[7];
+    uint a{d_IV[0]};
+    uint b{d_IV[1]};
+    uint c{d_IV[2]};
+    uint d{d_IV[3]};
+    uint e{d_IV[4]};
+    uint f{d_IV[5]};
+    uint g{d_IV[6]};
+    uint h{d_IV[7]};
 
     roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[0]);
     roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[1]);
@@ -362,7 +361,6 @@ __host__ __device__ __forceinline__ void sha256PublicKey(const uint256_t& x, con
 __host__ __device__ __forceinline__
 void sha256PublicKeyCompressed(const uint256_t& x, const uint yParity, uint256_t& digest)
 {
-    uint a, b, c, d, e, f, g, h;
     uint w[16];
 
     // 0x03 || x  or  0x02 || x
@@ -378,14 +376,14 @@ void sha256PublicKeyCompressed(const uint256_t& x, const uint yParity, uint256_t
     w[8] = (x[7] << 24) | 0x00800000;
     w[15] = 33 * 8;
 
-    a = d_IV[0];
-    b = d_IV[1];
-    c = d_IV[2];
-    d = d_IV[3];
-    e = d_IV[4];
-    f = d_IV[5];
-    g = d_IV[6];
-    h = d_IV[7];
+    uint a{d_IV[0]};
+    uint b{d_IV[1]};
+    uint c{d_IV[2]};
+    uint d{d_IV[3]};
+    uint e{d_IV[4]};
+    uint f{d_IV[5]};
+    uint g{d_IV[6]};
+    uint h{d_IV[7]};
 
     roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[0]);
     roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[1]);
@@ -506,23 +504,14 @@ void sha256PublicKeyCompressed(const uint256_t& x, const uint yParity, uint256_t
     roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[62]);
     roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[63]);
 
-    a += d_IV[0];
-    b += d_IV[1];
-    c += d_IV[2];
-    d += d_IV[3];
-    e += d_IV[4];
-    f += d_IV[5];
-    g += d_IV[6];
-    h += d_IV[7];
-
-    digest[0] = a;
-    digest[1] = b;
-    digest[2] = c;
-    digest[3] = d;
-    digest[4] = e;
-    digest[5] = f;
-    digest[6] = g;
-    digest[7] = h;
+    digest[0] = a + d_IV[0];
+    digest[1] = b + d_IV[1];
+    digest[2] = c + d_IV[2];
+    digest[3] = d + d_IV[3];
+    digest[4] = e + d_IV[4];
+    digest[5] = f + d_IV[5];
+    digest[6] = g + d_IV[6];
+    digest[7] = h + d_IV[7];
 }
 
 __host__ __device__ __forceinline__ void sha256PrivateKeyBase(const uint2& p, uint256_t& digest)
@@ -534,14 +523,14 @@ __host__ __device__ __forceinline__ void sha256PrivateKeyBase(const uint2& p, ui
     w[2] = 0x80000000; // Padding bit
     w[15] = sizeof(uint2) * 8; // Message length in bits
 
-    uint a = d_IV[0];
-    uint b = d_IV[1];
-    uint c = d_IV[2];
-    uint d = d_IV[3];
-    uint e = d_IV[4];
-    uint f = d_IV[5];
-    uint g = d_IV[6];
-    uint h = d_IV[7];
+    uint a{d_IV[0]};
+    uint b{d_IV[1]};
+    uint c{d_IV[2]};
+    uint d{d_IV[3]};
+    uint e{d_IV[4]};
+    uint f{d_IV[5]};
+    uint g{d_IV[6]};
+    uint h{d_IV[7]};
 
     roundSha256(a, b, c, d, e, f, g, h, w[0], d_K[0]);
     roundSha256(h, a, b, c, d, e, f, g, w[1], d_K[1]);
@@ -662,21 +651,12 @@ __host__ __device__ __forceinline__ void sha256PrivateKeyBase(const uint2& p, ui
     roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[62]);
     roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[63]);
 
-    a += d_IV[0];
-    b += d_IV[1];
-    c += d_IV[2];
-    d += d_IV[3];
-    e += d_IV[4];
-    f += d_IV[5];
-    g += d_IV[6];
-    h += d_IV[7];
-
-    digest.v[0] = a;
-    digest.v[1] = b;
-    digest.v[2] = c;
-    digest.v[3] = d;
-    digest.v[4] = e;
-    digest.v[5] = f;
-    digest.v[6] = g;
-    digest.v[7] = h;
+    digest[0] = a + d_IV[0];
+    digest[1] = b + d_IV[1];
+    digest[2] = c + d_IV[2];
+    digest[3] = d + d_IV[3];
+    digest[4] = e + d_IV[4];
+    digest[5] = f + d_IV[5];
+    digest[6] = g + d_IV[6];
+    digest[7] = h + d_IV[7];
 }

@@ -43,14 +43,14 @@ struct random_uint256_generator
 
         uint256_t result;
 
-        result.v[0] = curand(&state);
-        result.v[1] = curand(&state);
-        result.v[2] = curand(&state);
-        result.v[3] = curand(&state);
-        result.v[4] = curand(&state);
-        result.v[5] = curand(&state);
-        result.v[6] = curand(&state);
-        result.v[7] = curand(&state);
+        result[0] = curand(&state);
+        result[1] = curand(&state);
+        result[2] = curand(&state);
+        result[3] = curand(&state);
+        result[4] = curand(&state);
+        result[5] = curand(&state);
+        result[6] = curand(&state);
+        result[7] = curand(&state);
 
         return result;
     }

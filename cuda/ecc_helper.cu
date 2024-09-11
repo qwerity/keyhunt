@@ -86,8 +86,8 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
                 }
                 else
                 {
-                    copyBigInt(stepGPoint.x, newX);
-                    copyBigInt(stepGPoint.y, newY);
+                    newX = stepGPoint.x;
+                    newY = stepGPoint.y;
                 }
 
                 writeInt(newX, i, xPtr);
