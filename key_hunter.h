@@ -6,7 +6,7 @@
 class KeyHunter
 {
 public:
-    explicit KeyHunter(const AppConfig& config);
+    explicit KeyHunter(const GlobalContext& context);
     ~KeyHunter();
 
     KeyHunter(KeyHunter& rhs) = delete;
@@ -18,7 +18,7 @@ public:
     void stop() const;
     void start(const thrust::host_vector<secp256k1::uint256>& privateKeys) const;
     void startWithRandomPrivateKeys() const;
-    void findPublicHashWithPrivateDefinedXRandomY(uint32_t x) const;
+    void findPublicHashWithPrivateDefinedXRandomY() const;
 
     [[nodiscard]] bool isDone() const;
 

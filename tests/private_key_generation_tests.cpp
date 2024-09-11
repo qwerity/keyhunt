@@ -1,6 +1,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch_all.hpp>
 
+#include "common.h"
 #include "crypto_util.h"
 #include "ecc.cuh"
 #include "utils.h"
@@ -8,7 +9,7 @@
 TEST_CASE("check private key generation", "")
 {
     std::unique_ptr<ECC> mCuECC(std::make_unique<ECC>());
-    mCuECC->initWithPrivateDefinedXRandomY(32, 2);
+    mCuECC->initWithPrivateDefinedXRandomY(32, PointCompressionType::COMPRESSED, 2);
 
     const uint32_t keysNumberPerIteration = mCuECC->getKeysNumberPerIteration();
     const uint32_t privateXPart{1};

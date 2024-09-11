@@ -1,6 +1,5 @@
 #include "key_hunter.h"
 
-#include <format>
 #include <fstream>
 #include <utility>
 #include <functional>
@@ -11,14 +10,13 @@
 #include "cuda/defines.cuh"
 #include "cuda/ecc.cuh"
 #include "cuda/hash160_lookup.cuh"
-#include "util/crypto_util.h"
 #include "util/cuda_util.h"
 #include "util/utils.h"
 
 
 struct KeyHunter::Impl
 {
-    const AppConfig mAppConfig;
+    GlobalContext mgContext;
 
     std::thread mThread;
 
@@ -40,13 +38,13 @@ struct KeyHunter::Impl
     mutable uint32_t mIteration{0};
 
     // Implementation
-    explicit Impl(const AppConfig& config)
-    : mAppConfig(config)
+    explicit Impl(const GlobalContext& context)
+    : mgContext(context)
     , mCuECC(std::make_unique<ECC>())
-    , mDataQueue(config.dataQueue)
-    , mStatusCallback(config.statusCallback)
+    , mDataQueue(context.dataQueue)
+    , mStatusCallback(context.statusCallback)
     {
-        cu::cudaInit(config.appParams.cudaDeviceId);
+        cu::cudaInit(context.settings.cudaDeviceId);
     }
 
     ~Impl()
@@ -66,13 +64,37 @@ struct KeyHunter::Impl
         }
     }
 
+    void signalStatusInfo(const uint64_t elapsedTimeMs, const uint64_t totalGeneratedPointsCounter, const uint64_t generatedPointsCounter, const uint32_t iteration, const uint32_t remainsIterations) const
+    {
+        static uint64_t totalTime{0};
+        totalTime += elapsedTimeMs;
+
+        if (elapsedTimeMs >= mgContext.settings.statusCallbackPeriodMs)
+        {
+            const auto seconds = static_cast<double>(elapsedTimeMs) / 1000.0;
+
+            StatusInfo info;
+            info.pointsPerSecond = (static_cast<double>(generatedPointsCounter) / seconds) / 1e6; // Mpoints per second
+            info.seconds = seconds;
+            info.total = totalGeneratedPointsCounter;
+            info.totalTime = totalTime;
+            info.device = mgContext.cudaInfo.id;
+            info.deviceName = mgContext.cudaInfo.name;
+            info.iteration = iteration;
+            info.remainsIterations = remainsIterations;
+            cu::safeCall(cudaMemGetInfo(&info.freeDeviceMemory, &info.totalDeviceMemory));
+
+            mStatusCallback(info);
+        }
+    }
+
     /// TODO: to be optimized
     void pushResultsToQueue() const
     {
         thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
         cu::safeCall(mCuECC->getResults(results));
 
-        BOOST_LOG_TRIVIAL(info) << std::format("KeyGenerator: generated {} keys\n", results.size());
+        BOOST_LOG_TRIVIAL(info) << utils::format("KeyGenerator: generated %s keys\n", results.size());
 
         // to be deleted in KeyProcessor
         auto* pairs = new Secp256k1KeyPairs;
@@ -94,34 +116,24 @@ struct KeyHunter::Impl
 
     void start(const thrust::host_vector<secp256k1::uint256>& privateKeys)
     {
-        if (!mAppConfig.appParams.ripemd160TargetsFilePath.empty())
+        if (!mgContext.settings.ripemd160TargetsFilePath.empty())
         {
-            setHash160Targets(mAppConfig.appParams.ripemd160TargetsFilePath);
+            setHash160Targets(mgContext.settings.ripemd160TargetsFilePath);
         }
 
-        mCuECC->init(mAppConfig.appParams.pointsPerThread, privateKeys);
+        mCuECC->init(mgContext.settings.pointsPerThread, privateKeys);
 
         mThread = std::thread([&privateKeys, this]()
         {
             std::cout << "KeyGenerator Thread ID: " << std::this_thread::get_id() << std::endl;
 
-            uint64_t generatedPointsCounter{0};
             mTimer.start();
             cu::safeCall(mCuECC->calculatePublicKeys());
-            generatedPointsCounter += privateKeys.size();
 
-            const auto seconds = static_cast<double>(mTimer.getTime()) / 1000.0;
-            // if (seconds >= 1000.0)
-            {
-                StatusInfo info;
-                info.total = generatedPointsCounter;
-                info.seconds = seconds;
-                info.speed = static_cast<double>(generatedPointsCounter) / seconds;
-                generatedPointsCounter = 0;
-                mStatusCallback(info);
-            }
+            const uint64_t generatedPointsCounter = privateKeys.size();
+            signalStatusInfo(mTimer.getTime(), generatedPointsCounter, generatedPointsCounter, 0, 0);
 
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: generated done";
+            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: done, generated " << utils::formatThousands(generatedPointsCounter) << "keys";
 
             mDone = true;
             pushResultsToQueue();
@@ -130,22 +142,22 @@ struct KeyHunter::Impl
 
     void startWithRandomPrivateKeys()
     {
-        start(utils::generateRandomPrivateKeys(mAppConfig.appParams.keysNumberToGenerate));
+        start(utils::generateRandomPrivateKeys(mgContext.settings.keysNumberToGenerate));
     }
 
-    void findPublicHashWithPrivateDefinedXRandomY(const uint32_t privateXPart)
+    void findPublicHashWithPrivateDefinedXRandomY()
     {
-        if (!mAppConfig.appParams.ripemd160TargetsFilePath.empty())
+        if (!mgContext.settings.ripemd160TargetsFilePath.empty())
         {
-            setHash160Targets(mAppConfig.appParams.ripemd160TargetsFilePath);
+            setHash160Targets(mgContext.settings.ripemd160TargetsFilePath);
         }
 
-        mCuECC->initWithPrivateDefinedXRandomY(mAppConfig.appParams.pointsPerThread);
+        mCuECC->initWithPrivateDefinedXRandomY(mgContext.settings.pointsPerThread, mgContext.settings.publicKeyCompressionTypeToCheck);
 
-        uint64_t totalGeneratedPublicKeys{0};
-        mThread = std::thread([privateXPart, &totalGeneratedPublicKeys, this]()
+        mThread = std::thread([&]()
         {
-            const uint32_t totalKeysToGenerate = (mAppConfig.appParams.keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : mAppConfig.appParams.keysNumberToGenerate;
+            uint64_t totalGeneratedPublicKeys{0};
+            const uint32_t totalKeysToGenerate = (mgContext.settings.keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : mgContext.settings.keysNumberToGenerate;
 
             const uint32_t keysNumberPerIteration = mCuECC->getKeysNumberPerIteration();
             const uint32_t iterationsCount = totalKeysToGenerate / keysNumberPerIteration;
@@ -158,29 +170,24 @@ struct KeyHunter::Impl
 
             while (!mStopFlag && mIteration < finalIterationsCount)
             {
-                BOOST_LOG_TRIVIAL(info) << "KeyGenerator: iteration: " << mIteration << ", remains " << (finalIterationsCount - mIteration - 1) << " iterations";
+                const uint32_t remainsIterations{finalIterationsCount - mIteration - 1};
 
                 mTimer.start();
 
-                mCuECC->generatePrivateKeysForXPerIteration(privateXPart, mIteration);
+                mCuECC->generatePrivateKeysForXPerIteration(mgContext.settings.privateXPart, mIteration);
 
                 cu::safeCall(mCuECC->calculatePublicKeys());
 
                 totalGeneratedPublicKeys += keysNumberPerIteration;
-                if (const auto seconds = static_cast<double>(mTimer.getTime()) / 1000.0; seconds >= 1.0)
-                {
-                    StatusInfo info;
-                    info.total = totalGeneratedPublicKeys;
-                    info.seconds = seconds;
-                    info.speed = static_cast<double>(keysNumberPerIteration) / seconds;
-                    mStatusCallback(info);
-                }
+
+                signalStatusInfo(mTimer.getTime(), totalGeneratedPublicKeys, keysNumberPerIteration, mIteration, remainsIterations);
 
                 // pushResultsToQueue();
 
                 ++mIteration;
             }
-            BOOST_LOG_TRIVIAL(info) << std::format("KeyGenerator: done, generated {} keys\n", totalGeneratedPublicKeys);
+
+            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: done, generated " << utils::formatThousands(totalGeneratedPublicKeys) << " keys";
             mIteration = 0;
             mDone = true;
         });
@@ -225,6 +232,9 @@ struct KeyHunter::Impl
         std::string line;
         while (std::getline(inFile, line))
         {
+            if (line.empty())
+                continue;
+
             utils::removeNewline(line);
             line = utils::trim(line);
             if (!line.empty())
@@ -241,7 +251,7 @@ struct KeyHunter::Impl
     }
 };
 
-KeyHunter::KeyHunter(const AppConfig& config) : mImpl(std::make_unique<Impl>(config)) {}
+KeyHunter::KeyHunter(const GlobalContext& context) : mImpl(std::make_unique<Impl>(context)) {}
 
 KeyHunter::~KeyHunter() = default;
 
@@ -259,9 +269,9 @@ void KeyHunter::startWithRandomPrivateKeys() const
     mImpl->startWithRandomPrivateKeys();
 }
 
-void KeyHunter::findPublicHashWithPrivateDefinedXRandomY(const uint32_t privateXPart) const
+void KeyHunter::findPublicHashWithPrivateDefinedXRandomY() const
 {
-    mImpl->findPublicHashWithPrivateDefinedXRandomY(privateXPart);
+    mImpl->findPublicHashWithPrivateDefinedXRandomY();
 }
 
 void KeyHunter::stop() const

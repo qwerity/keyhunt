@@ -6,10 +6,13 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(THRUST_CPP_DIALECT 20)
 
 # Set the CUDA compiler flags for Debug and Release configurations
-set(CMAKE_CUDA_FLAGS "--extended-lambda -rdc=true --default-stream per-thread --expt-relaxed-constexpr --ptxas-options=-v")
-set(CMAKE_CUDA_FLAGS_DEBUG "-g -G -O0")
+set(CUDA_PROFILING_OUTPUT "--ptxas-options=-v")
+set(CUDA_SUPPRESS_WARNINGS "-diag-suppress 20091")
+set(CMAKE_CUDA_FLAGS "-rdc=true --default-stream per-thread ${CUDA_PROFILING_OUTPUT} ${CUDA_SUPPRESS_WARNINGS}")
+# -G enables device-side debugging but significantly slows down the compilation. Use it only when necessary.
+set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -g -G")
 set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -DNDEBUG")
-set(CMAKE_CUDA_FLAGS_RELWITHDEBINFO "-O2 -g -G")
+set(CMAKE_CUDA_FLAGS_RELWITHDEBINFO "-O2 -g -lineinfo")
 
 ####################################################################################################################################################################################
 include_directories(${CMAKE_SOURCE_DIR}/util)

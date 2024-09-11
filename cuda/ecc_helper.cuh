@@ -1,7 +1,11 @@
 #pragma once
 #include "defines.cuh"
+#include "common.h"
 
 __global__ void multiplyStepKernel(const uint256_t *privateKeys);
+
+// Check publickey hash160 compressed/uncompressed/both
+__constant__ inline int d_publicKeyCompressionTypeToCheck{PointCompressionType::BOTH};
 
 __constant__ inline uint d_pointsPerThread{};
 

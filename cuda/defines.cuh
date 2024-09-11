@@ -1,64 +1,112 @@
 #pragma once
 #include <cstdint>
+#include <cassert>
 
 #include <cuda_runtime.h>
 
+enum class Endianness
+{
+    BigEndian = 0,
+    LittleEndian = 1
+};
+
 struct alignas(4 * 8) uint256_t
 {
-    uint32_t v[8]{};
+    alignas(4 * 8) uint v[8]{};
 
     __host__ __device__ __forceinline__
     uint256_t() = default;
 
-    // assign as big endian
     __host__ __device__ __forceinline__
-    uint256_t(const uint32_t _v[8])
+    static void to_uint256(const uint src[8], uint256_t& dst, const Endianness endian = Endianness::LittleEndian)
     {
-        for (int i = 0; i < 8; ++i)
+        if (endian == Endianness::LittleEndian)
         {
-            v[i] = _v[7 - i];
+            for (int i = 0; i < 8; ++i)
+            {
+                dst.v[i] = src[i];
+            }
+        }
+        else
+        {
+            for (int i = 0; i < 8; ++i)
+            {
+                dst.v[i] = src[7 - i];
+            }
         }
     }
 
-    const uint32_t& operator[](const std::size_t index) const
+    __host__ __device__ __forceinline__
+    uint256_t(const uint src[8], const Endianness endian = Endianness::LittleEndian)
     {
-        const auto dataPtr = reinterpret_cast<const uint32_t*>(this);
+        if (endian == Endianness::LittleEndian)
+        {
+            for (int i = 0; i < 8; ++i)
+            {
+                v[i] = src[i];
+            }
+        }
+        else
+        {
+            for (int i = 0; i < 8; ++i)
+            {
+                v[i] = src[7 - i];
+            }
+        }
+    }
+
+    __host__ __device__ __forceinline__
+    constexpr explicit uint256_t(const std::initializer_list<uint>& list) noexcept
+    {
+        assert(list.size() <= 8 && "Too many initializers");
+
+        size_t i = 0;
+        for (const uint value : list)
+        {
+            v[i++] = value;
+        }
+    }
+
+    __host__ __device__ __forceinline__
+    const uint& operator[](const std::size_t index) const
+    {
+        assert(index <= 8 && "index should be less than 8");
+
+        const auto dataPtr = reinterpret_cast<const uint*>(this);
         return *(dataPtr + index);
     }
 
-    uint32_t& operator[](const std::size_t index)
+    __host__ __device__ __forceinline__
+    uint& operator[](const std::size_t index)
     {
-        const auto dataPtr = reinterpret_cast<uint32_t*>(this);
+        assert(index <= 8 && "index should be less than 8");
+
+        const auto dataPtr = reinterpret_cast<uint*>(this);
         return *(dataPtr + index);
     }
 };
 
 struct alignas(2 * 4 * 8) ecpoint_t
 {
-    uint32_t x[8];
-    uint32_t y[8];
+    uint256_t x;
+    uint256_t y;
 
-    __host__ __device__ __forceinline__ ecpoint_t() = default;
+    __host__ __device__ __forceinline__
+    constexpr ecpoint_t() = default;
 
     // assign as big endian
-    __host__ __device__ __forceinline__ ecpoint_t(const uint32_t _x[8], const uint32_t _y[8])
-    {
-        for (int i = 0; i < 8; ++i)
-        {
-            x[i] = _x[7 - i];
-            y[i] = _y[7 - i];
-        }
-    }
+    __host__ __device__ __forceinline__
+    ecpoint_t(const uint _x[8], const uint _y[8], const Endianness endian = Endianness::LittleEndian) noexcept : x(_x, endian), y(_y, endian) {}
 };
 
 struct hash160
 {
-    uint32_t h[5];
+    uint h[5]{};
 
     __host__ __device__  hash160() = default;
 
     __host__ __device__
-    explicit hash160(const uint32_t hash[5])
+    explicit hash160(const uint hash[5])
     {
         for (int i = 0; i < 5; ++i)
         {

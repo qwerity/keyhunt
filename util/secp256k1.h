@@ -1,11 +1,11 @@
 #pragma once
 
-#include<cstdio>
-#include<cstdint>
-#include<cstring>
+#include <cstdio>
+#include <cstdint>
+#include <cstring>
 #include <stdexcept>
-#include<string>
-#include<vector>
+#include <string>
+#include <vector>
 
 namespace secp256k1
 {
@@ -386,7 +386,4 @@ namespace secp256k1
     void generateKeyPairsBulk(const ecpoint &basePoint, std::vector<uint256> &privKeys, std::vector<ecpoint> &pubKeysOut);
 
     ecpoint parsePublicKey(const std::string &pubKeyString);
-
-    // TODO: to be moved to separate test folder
-    bool checkECKeyWithLibSecp256k1(uint256 &privKey, ecpoint &pubKey);
 }

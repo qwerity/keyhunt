@@ -3,16 +3,28 @@
 
 #include "util/utils.h"
 
+#include <boost/log/trivial.hpp>
 #include <CLI/CLI.hpp>
 
-#include <format>
-
-void statusCallback(StatusInfo info)
+void statusCallback(const StatusInfo &info)
 {
-    BOOST_LOG_TRIVIAL(info) << std::format("total: {}, seconds: {}, speed: {} points/sec\n", info.total, info.seconds, info.speed);
+    constexpr uint32_t MB{1024 * 1024};
+
+    const std::string speedStr = (info.pointsPerSecond < 0.01) ? "< 0.01 MKey/s" : utils::format("%.2f", info.pointsPerSecond) + " MKey/s";
+
+    const std::string totalStr = utils::format("(%s total)", utils::formatThousands(info.total).c_str());
+    const std::string timeStr = utils::format("[%0.2fs | %s]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)).c_str());
+    const uint32_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
+    const uint32_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
+
+    BOOST_LOG_TRIVIAL(info) << utils::format("[%d] %s | %d/%dMB | [%d/%d] %s %s %s"
+        , info.device, info.deviceName.c_str(), usedDeviceMemoryMb, totalDeviceMemoryMb
+        , info.iteration
+        , info.remainsIterations
+        , speedStr.c_str(), totalStr.c_str(), timeStr.c_str());
 }
 
-void parseArguments(const int argc, const char **argv, CLI::App &app, ApplicationParameters &params)
+void parseArguments(const int argc, const char **argv, CLI::App &app, Settings &params)
 {
     app.add_option("-t,--targets", params.ripemd160TargetsFilePath, "File path with target RipeMD-160 hash list")->check(CLI::ExistingFile);
 
@@ -20,6 +32,8 @@ void parseArguments(const int argc, const char **argv, CLI::App &app, Applicatio
     app.add_option("-p,--pointsPerThread", params.pointsPerThread, "How many keys will be generated per each cuda thread")->default_val(128);
     app.add_option("-k,--keysNumberToGenerate", params.keysNumberToGenerate, "Number of keys to generate")->default_val(900);
     app.add_option("-x,--privateX", params.privateXPart, "Private x part for random generation")->default_val(1);
+    app.add_option("-c,--publicKeyCompressionTypeToCheck", params.publicKeyCompressionTypeToCheck, "Public key compression type to check")->default_val(2);
+    app.add_option("-s,--status-period-ms", params.statusCallbackPeriodMs, "Status callback period in milliseconds")->default_val(1000);
 
     try
     {
@@ -40,17 +54,19 @@ void parseArguments(const int argc, const char **argv, CLI::App &app, Applicatio
 int main(const int argc, const char **argv)
 {
     CLI::App app{"cuda-keyhunt-pvk"};
-    ApplicationParameters params;
-    parseArguments(argc, argv, app, params);
+    Settings settings;
+    parseArguments(argc, argv, app, settings);
 
     utils::initLogging();
 
     const auto sharedDataQueue = std::make_shared<DataQueue>();
+    const auto cudaInfo = cu::getDeviceInfo(settings.cudaDeviceId);
+    // printDeviceInfo(cudaInfo);
 
-    const KeyHunter keyHunter({params, sharedDataQueue, statusCallback});
+    const KeyHunter keyHunter({settings, cudaInfo, sharedDataQueue, statusCallback});
     const KeyProcessor keyProcessor(sharedDataQueue);
 
-    keyHunter.findPublicHashWithPrivateDefinedXRandomY(params.privateXPart);
+    keyHunter.findPublicHashWithPrivateDefinedXRandomY();
     // keyHunter.startWithRandomPrivateKeys();
     keyProcessor.start();
 

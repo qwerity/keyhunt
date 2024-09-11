@@ -307,7 +307,7 @@ __device__ __forceinline__ void ripemd160sha256(const uint32_t x[8], uint32_t di
 }
 
 
-__device__ __forceinline__ void ripemd160sha256NoFinal(const uint32_t x[8], uint32_t digest[5])
+__device__ __forceinline__ void ripemd160sha256NoFinal(const uint256_t& x, uint32_t digest[5])
 {
     uint32_t a1 = _RIPEMD160_IV[0];
     uint32_t b1 = _RIPEMD160_IV[1];
@@ -401,11 +401,13 @@ __device__ __forceinline__ void ripemd160sha256NoFinal(const uint32_t x[8], uint
     JJ(d1, e1, a1, b1, c1, x[6], 8);
     JJ(c1, d1, e1, a1, b1, 0, 5);
     JJ(b1, c1, d1, e1, a1, 0, 6);
+
     uint32_t a2 = _RIPEMD160_IV[0];
     uint32_t b2 = _RIPEMD160_IV[1];
     uint32_t c2 = _RIPEMD160_IV[2];
     uint32_t d2 = _RIPEMD160_IV[3];
     uint32_t e2 = _RIPEMD160_IV[4];
+
     /* parallel round 1 */
     JJJ(a2, b2, c2, d2, e2, x[5], 8);
     JJJ(e2, a2, b2, c2, d2, x14, 9);
@@ -491,6 +493,7 @@ __device__ __forceinline__ void ripemd160sha256NoFinal(const uint32_t x[8], uint
     FFF(d2, e2, a2, b2, c2, x[3], 13);
     FFF(c2, d2, e2, a2, b2, 0, 11);
     FFF(b2, c2, d2, e2, a2, 0, 11);
+
     digest[0] = c1 + d2;
     digest[1] = d1 + e2;
     digest[2] = e1 + a2;

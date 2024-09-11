@@ -1,3 +1,5 @@
+include_directories(${CMAKE_SOURCE_DIR}/)
+
 set(SRC_FILES
     crypto_util.h
     checksum.cpp

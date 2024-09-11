@@ -1,8 +1,9 @@
 #include "hash160_lookup.cuh"
 
 #include "cuda_util.h"
+#include "ptx.cuh"
 
-#define MAX_TARGETS_CONSTANT_MEM 16
+constexpr uint32_t MAX_TARGETS_CONSTANT_MEM{16};
 
 __constant__ uint32_t d_UseBloomFilter{};
 
@@ -38,15 +39,15 @@ cudaError_t Hash160Lookup::setTargetConstantMemory(const std::vector<hash160> &t
     cudaError_t err{cudaSuccess};
     try
     {
+        uint32_t h[5];
         for (size_t i = 0; i < count; i++)
         {
-            uint32_t h[5];
             undoRMD160FinalRound(targets[i].h, h);
             cu::safeCall(cudaMemcpyToSymbol(_TARGET_HASH, h, sizeof(uint32_t) * 5, i * sizeof(uint32_t) * 5));
         }
         cu::safeCall(cudaMemcpyToSymbol(d_NumTargetHashes, &count, sizeof(uint32_t)));
 
-        uint32_t useBloomFilter = 0;
+        constexpr uint32_t useBloomFilter{0};
         cu::safeCall(cudaMemcpyToSymbol(d_UseBloomFilter, &useBloomFilter, sizeof(bool)));
     }
     catch (const cu::CudaException& e)
@@ -167,6 +168,15 @@ cudaError_t Hash160Lookup::setTargets(const std::vector<hash160>& hash160Targets
     }
 
     return setTargetBloomFilter(hash160Targets);
+}
+
+__device__ void doRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5])
+{
+    constexpr uint32_t iv[5] = {0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0};
+    for (int i = 0; i < 5; i++)
+    {
+        hOut[i] = endian(hIn[i] + iv[(i + 1) % 5]);
+    }
 }
 
 __device__ bool checkBloomFilter(const hash160& hash)

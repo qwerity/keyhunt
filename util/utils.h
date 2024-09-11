@@ -3,10 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-#include <format>
 #include <functional>
-
-#include <boost/log/trivial.hpp>
 
 namespace secp256k1
 {
@@ -65,10 +62,29 @@ namespace utils
     bool readLinesFromStream(const std::string &fileName, std::vector<std::string> &lines);
 
     template <typename T>
-    std::string format(const std::string& formatStr, T value) { return std::format(formatStr, value); }
+    std::string format(T value, std::enable_if_t<std::is_integral_v<T>>* = nullptr)
+    {
+        return std::to_string(value);
+    }
 
-    template <typename T>
-    std::string format(T value) { return std::format("{}", value); }
+    template <typename... Args>
+    std::string format(const std::string& formatStr, Args&&... args)
+    {
+        if (formatStr.empty())
+            return {};
+
+        // First, calculate the size of the required buffer
+        const int size = std::snprintf(nullptr, 0, formatStr.c_str(), args...);
+
+        // Create a buffer large enough to hold the formatted string
+        std::vector<char> buf(size + 1);  // +1 for null terminator
+
+        // Format the string into the buffer
+        std::snprintf(buf.data(), buf.size(), formatStr.c_str(), args...);
+
+        // Return the result as a std::string
+        return buf.data();
+    }
 
     void removeNewline(std::string &s);
 

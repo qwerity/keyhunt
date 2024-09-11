@@ -1,6 +1,6 @@
 #include "key_processor.h"
+#include "util/utils.h"
 
-#include <format>
 #include <thread>
 #include <boost/log/trivial.hpp>
 
@@ -48,7 +48,7 @@ struct KeyProcessor::Impl
                     if (pCPU != keyPair.publicKey)
                     {
                         BOOST_LOG_TRIVIAL(info) << "KeyProcessor: gen key is not correct";
-                        BOOST_LOG_TRIVIAL(info) << std::format("{} {}\n", keyPair.privateKey.toString(compressed), keyPair.publicKey.toString(compressed));
+                        BOOST_LOG_TRIVIAL(info) << utils::format("{} {}\n", keyPair.privateKey.toString(compressed), keyPair.publicKey.toString(compressed));
                     }
                 });
 

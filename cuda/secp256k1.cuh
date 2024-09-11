@@ -1,48 +1,122 @@
 #pragma once
 
-#include <cuda.h>
 #include <cuda_runtime.h>
 
 #include "ptx.cuh"
 #include "defines.cuh"
-#include "functors.cuh"
 
 /**
  Prime modulus 2^256 - 2^32 - 977
  */
-__constant__ static constexpr uint32_t d_P[8] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFE, 0xFFFFFC2F};
+__constant__ static constexpr uint256_t d_P{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFE, 0xFFFFFC2F};
 
 /**
  Base point X
  */
-__constant__ static constexpr uint32_t d_GX[8] = {0x79BE667E, 0xF9DCBBAC, 0x55A06295, 0xCE870B07, 0x029BFCDB, 0x2DCE28D9, 0x59F2815B, 0x16F81798};
+__constant__ static constexpr uint256_t d_GX{0x79BE667E, 0xF9DCBBAC, 0x55A06295, 0xCE870B07, 0x029BFCDB, 0x2DCE28D9, 0x59F2815B, 0x16F81798};
 
 
 /**
  Base point Y
  */
-__constant__ static constexpr uint32_t d_GY[8] = {0x483ADA77, 0x26A3C465, 0x5DA4FBFC, 0x0E1108A8, 0xFD17B448, 0xA6855419, 0x9C47D08F, 0xFB10D4B8};
+__constant__ static constexpr uint256_t d_GY{0x483ADA77, 0x26A3C465, 0x5DA4FBFC, 0x0E1108A8, 0xFD17B448, 0xA6855419, 0x9C47D08F, 0xFB10D4B8};
 
 
 /**
  * Group order
  */
-__constant__ static constexpr uint32_t d_N[8] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFE, 0xBAAEDCE6, 0xAF48A03B, 0xBFD25E8C, 0xD0364141};
+__constant__ static constexpr uint256_t d_N{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFE, 0xBAAEDCE6, 0xAF48A03B, 0xBFD25E8C, 0xD0364141};
 
 // TODO(ksh): not used
-// __constant__ static constexpr uint32_t _BETA[8] = {0x7AE96A2B, 0x657C0710, 0x6E64479E, 0xAC3434E9, 0x9CF04975, 0x12F58995, 0xC1396C28, 0x719501EE};
-// __constant__ static constexpr uint32_t _LAMBDA[8] = {0x5363AD4C, 0xC05C30E0, 0xA5261C02, 0x8812645A, 0x122E22EA, 0x20816678, 0xDF02967C, 0x1B23BD72};
+// __constant__ static constexpr uint _BETA[8] = {0x7AE96A2B, 0x657C0710, 0x6E64479E, 0xAC3434E9, 0x9CF04975, 0x12F58995, 0xC1396C28, 0x719501EE};
+// __constant__ static constexpr uint _LAMBDA[8] = {0x5363AD4C, 0xC05C30E0, 0xA5261C02, 0x8812645A, 0x122E22EA, 0x20816678, 0xDF02967C, 0x1B23BD72};
 
 
-__device__ __forceinline__ static void copyBigInt(const uint32_t src[8], uint32_t dest[8])
+/**
+ * Reads an 8-word big integer from device memory
+ */
+__device__ __forceinline__ void readInt(const uint *data, const uint depth, uint256_t& x)
 {
-    for (int i = 0; i < 8; ++i)
-    {
-        dest[i] = src[i];
-    }
+    const uint totalThreads = gridDim.x * blockDim.x;
+    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint base = depth * totalThreads * 2;
+    const uint index = base + threadId;
+
+    const auto x_uint4 = reinterpret_cast<uint4 *>(x.v);
+    const auto data_uint4 = reinterpret_cast<const uint4 *>(data);
+    x_uint4[0] = data_uint4[index];
+    x_uint4[1] = data_uint4[index + totalThreads];
 }
 
-__device__ static bool equal(const uint32_t *a, const uint32_t *b)
+__device__ __forceinline__ uint readIntLSW(const uint *data, const uint depth)
+{
+    const uint totalThreads = gridDim.x * blockDim.x;
+    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint base = depth * totalThreads * 2;
+    const uint index = base + threadId + totalThreads;
+
+    const auto data_uint4 = reinterpret_cast<const uint4 *>(data);
+    return data_uint4[index].w;
+}
+
+/**
+ * Writes an 8-word big integer to device memory
+ */
+__device__ __forceinline__ void writeInt(const uint256_t& x, const uint depth, uint *data)
+{
+    const uint totalThreads = gridDim.x * blockDim.x;
+    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint base = depth * totalThreads * 2;
+    const uint index = base + threadId;
+
+    const auto x_uint4 = reinterpret_cast<const uint4 *>(x.v);
+    const auto data_uint4 = reinterpret_cast<uint4 *>(data);
+
+    data_uint4[index] = x_uint4[0];
+    data_uint4[index + totalThreads] = x_uint4[1];
+}
+
+__device__ __forceinline__ void readUInt256(const uint256_t *data, const uint depth, uint256_t& x)
+{
+    const uint totalThreads = gridDim.x * blockDim.x;
+    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint base = depth * totalThreads;
+    const uint index = base + threadId;
+
+    const auto data_uint4 = reinterpret_cast<const uint4 *>(data[index].v);
+    const auto x_uint4 = reinterpret_cast<uint4 *>(x.v);
+    x_uint4[0] = data_uint4[0];
+    x_uint4[1] = data_uint4[1];
+}
+
+__device__ __forceinline__ void writeUInt256(const uint256_t& x, const uint depth, uint256_t *data)
+{
+    const uint totalThreads = gridDim.x * blockDim.x;
+    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint base = depth * totalThreads;
+    const uint index = base + threadId;
+
+    const auto x_uint4 = reinterpret_cast<const uint4 *>(x.v);
+    const auto data_uint4 = reinterpret_cast<uint4 *>(data[index].v);
+    data_uint4[0] = x_uint4[0];
+    data_uint4[1] = x_uint4[1];
+}
+
+__device__ __forceinline__ void copyBigInt(const uint256_t& src, uint256_t& dest)
+{
+    const auto srcTmp = reinterpret_cast<const uint4 *>(src.v);
+    const auto destTmp = reinterpret_cast<uint4 *>(dest.v);
+
+    destTmp[0] = srcTmp[0];
+    destTmp[1] = srcTmp[1];
+}
+
+__device__ __forceinline__ bool equal(const uint256_t& a, const uint256_t& b)
 {
     bool eq = true;
     for (int i = 0; i < 8; i++)
@@ -52,103 +126,7 @@ __device__ static bool equal(const uint32_t *a, const uint32_t *b)
     return eq;
 }
 
-/**
- * Reads an 8-word big integer from device memory
- */
-__device__ static void readInt(const uint32_t *ara, const uint32_t idx, uint32_t* x)
-{
-    auto araTmp = reinterpret_cast<const uint4 *>(ara);
-    const uint32_t totalThreads = gridDim.x * blockDim.x;
-    const uint32_t base = idx * totalThreads * 2;
-    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
-    uint32_t index = base + threadId;
-
-    uint4 xTmp = araTmp[index];
-    x[0] = xTmp.x;
-    x[1] = xTmp.y;
-    x[2] = xTmp.z;
-    x[3] = xTmp.w;
-    index += totalThreads;
-
-    xTmp = araTmp[index];
-    x[4] = xTmp.x;
-    x[5] = xTmp.y;
-    x[6] = xTmp.z;
-    x[7] = xTmp.w;
-}
-
-__device__ static void readUInt256(const uint256_t *data, const uint32_t idx, uint32_t* x)
-{
-    const uint32_t totalThreads = gridDim.x * blockDim.x;
-    const uint32_t base = idx * totalThreads;
-    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
-    const uint32_t index = base + threadId;
-
-    x[0] = data[index].v[0];
-    x[1] = data[index].v[1];
-    x[2] = data[index].v[2];
-    x[3] = data[index].v[3];
-    x[4] = data[index].v[4];
-    x[5] = data[index].v[5];
-    x[6] = data[index].v[6];
-    x[7] = data[index].v[7];
-}
-
-__device__ static uint32_t readIntLSW(const uint32_t *ara, const uint32_t idx)
-{
-    const auto araTmp = reinterpret_cast<const uint4 *>(ara);
-    const uint32_t totalThreads = gridDim.x * blockDim.x;
-    const uint32_t base = idx * totalThreads * 2;
-    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
-    const uint32_t index = base + threadId + totalThreads;
-
-    return araTmp[index].w;
-}
-
-/**
- * Writes an 8-word big integer to device memory
- */
-__device__ static void writeInt(const uint32_t x[8], const uint32_t idx, uint32_t *ara)
-{
-    const auto araTmp = reinterpret_cast<uint4 *>(ara);
-    const uint32_t totalThreads = gridDim.x * blockDim.x;
-    const uint32_t base = idx * totalThreads * 2;
-    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
-
-    uint32_t index = base + threadId;
-    uint4 xTmp;
-    xTmp.x = x[0];
-    xTmp.y = x[1];
-    xTmp.z = x[2];
-    xTmp.w = x[3];
-    araTmp[index] = xTmp;
-
-    index += totalThreads;
-    xTmp.x = x[4];
-    xTmp.y = x[5];
-    xTmp.z = x[6];
-    xTmp.w = x[7];
-    araTmp[index] = xTmp;
-}
-
-__device__ static void writeUInt256(const uint32_t x[8], const uint32_t idx, uint256_t *data)
-{
-    const uint32_t totalThreads = gridDim.x * blockDim.x;
-    const uint32_t base = idx * totalThreads;
-    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
-    const uint32_t index = base + threadId;
-
-    data[index].v[0] = x[0];
-    data[index].v[1] = x[1];
-    data[index].v[2] = x[2];
-    data[index].v[3] = x[3];
-    data[index].v[4] = x[4];
-    data[index].v[5] = x[5];
-    data[index].v[6] = x[6];
-    data[index].v[7] = x[7];
-}
-
-__device__ __forceinline__ bool isInfinity(const uint32_t x[8])
+__device__ __forceinline__ bool isInfinity(const uint256_t& x)
 {
     bool isf = true;
     for (int i = 0; i < 8; i++)
@@ -164,7 +142,7 @@ __device__ __forceinline__ bool isInfinity(const uint32_t x[8])
 /**
  * Subtraction mod p
  */
-__device__ static void subModP(const uint32_t a[8], const uint32_t b[8], uint32_t c[8])
+__device__ __forceinline__ void subModP(const uint256_t& a, const uint256_t& b, uint256_t& c)
 {
     sub_cc(c[7], a[7], b[7]);
     subc_cc(c[6], a[6], b[6]);
@@ -175,8 +153,9 @@ __device__ static void subModP(const uint32_t a[8], const uint32_t b[8], uint32_
     subc_cc(c[1], a[1], b[1]);
     subc_cc(c[0], a[0], b[0]);
 
-    uint32_t borrow = 0;
+    uint borrow{0};
     subc(borrow, 0, 0);
+
     if (borrow)
     {
         add_cc(c[7], c[7], d_P[7]);
@@ -190,7 +169,7 @@ __device__ static void subModP(const uint32_t a[8], const uint32_t b[8], uint32_
     }
 }
 
-__device__ static uint32_t add(const uint32_t a[8], const uint32_t b[8], uint32_t c[8])
+__device__ __forceinline__ uint add(const uint256_t& a, const uint256_t& b, uint256_t& c)
 {
     add_cc(c[7], a[7], b[7]);
     addc_cc(c[6], a[6], b[6]);
@@ -200,12 +179,13 @@ __device__ static uint32_t add(const uint32_t a[8], const uint32_t b[8], uint32_
     addc_cc(c[2], a[2], b[2]);
     addc_cc(c[1], a[1], b[1]);
     addc_cc(c[0], a[0], b[0]);
-    uint32_t carry = 0;
+
+    uint carry{0};
     addc(carry, 0, 0);
     return carry;
 }
 
-__device__ static uint32_t sub(const uint32_t a[8], const uint32_t b[8], uint32_t c[8])
+__device__ __forceinline__ uint sub(const uint256_t& a, const uint256_t& b, uint256_t& c)
 {
     sub_cc(c[7], a[7], b[7]);
     subc_cc(c[6], a[6], b[6]);
@@ -216,13 +196,13 @@ __device__ static uint32_t sub(const uint32_t a[8], const uint32_t b[8], uint32_
     subc_cc(c[1], a[1], b[1]);
     subc_cc(c[0], a[0], b[0]);
 
-    uint32_t borrow{0};
+    uint borrow{0};
     subc(borrow, 0, 0);
     return (borrow & 0x01);
 }
 
 
-__device__ static void addModP(const uint32_t a[8], const uint32_t b[8], uint32_t c[8])
+__device__ __forceinline__ void addModP(const uint256_t& a, const uint256_t& b, uint256_t& c)
 {
     add_cc(c[7], a[7], b[7]);
     addc_cc(c[6], a[6], b[6]);
@@ -233,7 +213,7 @@ __device__ static void addModP(const uint32_t a[8], const uint32_t b[8], uint32_
     addc_cc(c[1], a[1], b[1]);
     addc_cc(c[0], a[0], b[0]);
 
-    uint32_t carry{0};
+    uint carry{0};
     addc(carry, 0, 0);
 
     bool gt = false;
@@ -264,10 +244,11 @@ __device__ static void addModP(const uint32_t a[8], const uint32_t b[8], uint32_
 }
 
 
-__device__ static void mulModP(const uint32_t a[8], const uint32_t b[8], uint32_t c[8])
+__device__ __forceinline__ void mulModP(const uint256_t& a, const uint256_t& b, uint256_t& c)
 {
-    uint32_t high[8] = {0};
-    uint32_t t = a[7];
+    uint high[8]{};
+    uint t{a[7]};
+
     // a[7] * b (low)
     for (int i = 7; i >= 0; i--)
     {
@@ -422,12 +403,13 @@ __device__ static void mulModP(const uint32_t a[8], const uint32_t b[8], uint32_
     madc_hi_cc(high[2], t, b[2], high[2]);
     madc_hi_cc(high[1], t, b[1], high[1]);
     madc_hi(high[0], t, b[0], high[0]);
+
     // At this point we have 16 32-bit words representing a 512-bit value
     // high[0 ... 7] and c[0 ... 7]
-    const uint32_t s = 977;
+    const uint s{977};
     // Store high[6] and high[7] since they will be overwritten
-    uint32_t high7 = high[7];
-    uint32_t high6 = high[6];
+    uint high7 = high[7];
+    uint high6 = high[6];
     // Take high 256 bits, multiply by 2^32, add to low 256 bits
     // That is, take high[0 ... 7], shift it left 1 word and add it to c[0 ... 7]
     add_cc(c[6], high[7], c[6]);
@@ -490,8 +472,9 @@ __device__ static void mulModP(const uint32_t a[8], const uint32_t b[8], uint32_
     addc_cc(c[1], c[1], 0);
     addc_cc(c[0], c[0], 0);
     addc(high[7], high[7], 0);
-    bool overflow = high[7] != 0;
-    uint32_t borrow = sub(c, d_P, c);
+
+    bool overflow{high[7] != 0};
+    uint borrow = sub(c, d_P, c);
     if (overflow)
     {
         if (!borrow)
@@ -508,12 +491,11 @@ __device__ static void mulModP(const uint32_t a[8], const uint32_t b[8], uint32_
     }
 }
 
-
 /**
  * Square mod P
  * b = a * a
  */
-__device__ static void squareModP(const uint32_t a[8], uint32_t b[8])
+__device__ __forceinline__ void squareModP(const uint256_t& a, uint256_t& b)
 {
     mulModP(a, a, b);
 }
@@ -522,9 +504,9 @@ __device__ static void squareModP(const uint32_t a[8], uint32_t b[8])
  * Square mod P
  * x = x * x
  */
-__device__ static void squareModP(uint32_t x[8])
+__device__ __forceinline__ void squareModP(uint256_t& x)
 {
-    uint32_t tmp[8];
+    uint256_t tmp;
     squareModP(x, tmp);
     copyBigInt(tmp, x);
 }
@@ -533,9 +515,9 @@ __device__ static void squareModP(uint32_t x[8])
  * Multiply mod P
  * c = a * c
  */
-__device__ static void mulModP(const uint32_t a[8], uint32_t c[8])
+__device__ __forceinline__ void mulModP(const uint256_t& a, uint256_t& c)
 {
-    uint32_t tmp[8];
+    uint256_t tmp;
     mulModP(a, c, tmp);
     copyBigInt(tmp, c);
 }
@@ -543,11 +525,12 @@ __device__ static void mulModP(const uint32_t a[8], uint32_t c[8])
 /**
  * Multiplicative inverse mod P using Fermat's method of x^(p-2) mod p and addition chains
  */
-__device__ static void invModP(uint32_t value[8])
+__device__ __forceinline__ void invModP(uint256_t& value)
 {
-    uint32_t x[8];
+    uint256_t x;
     copyBigInt(value, x);
-    uint32_t y[8] = {0, 0, 0, 0, 0, 0, 0, 1};
+
+    uint256_t y{0, 0, 0, 0, 0, 0, 0, 1};
     // 0xd - 1101
     mulModP(x, y);
     squareModP(x);
@@ -600,13 +583,13 @@ __device__ static void invModP(uint32_t value[8])
     copyBigInt(y, value);
 }
 
-__device__ static void invModP(const uint32_t *value, uint32_t *inverse)
+__device__ __forceinline__ void invModP(const uint256_t& value, uint256_t& inverse)
 {
     copyBigInt(value, inverse);
     invModP(inverse);
 }
 
-__device__ static void negModP(const uint32_t *value, uint32_t *negative)
+__device__ __forceinline__ void negModP(const uint256_t& value, uint256_t& negative)
 {
     sub_cc(negative[0], d_P[0], value[0]);
     subc_cc(negative[1], d_P[1], value[1]);
@@ -618,10 +601,10 @@ __device__ static void negModP(const uint32_t *value, uint32_t *negative)
     subc(negative[7], d_P[7], value[7]);
 }
 
-__device__ __forceinline__ static void beginBatchAdd(const ecpoint_t *gPoint, const uint32_t *publicX, uint256_t *chain, const int batchIdx, uint32_t inverse[8])
+__device__ __forceinline__ void beginBatchAdd(const ecpoint_t *gPoint, const uint256_t& publicX, uint256_t *chain, const int batchIdx, uint256_t& inverse)
 {
     // x = Gx - x
-    uint32_t t[8];
+    uint256_t t;
     subModP(gPoint->x, publicX, t);
 
     // Keep a chain of multiples of the diff, i.e. c[0] = diff0, c[1] = diff0 * diff1,
@@ -630,15 +613,15 @@ __device__ __forceinline__ static void beginBatchAdd(const ecpoint_t *gPoint, co
     writeUInt256(inverse, batchIdx, chain);
 }
 
-__device__ static void completeBatchAdd(const ecpoint_t *gPoint, const uint32_t *publicX, const uint32_t *publicY, int batchIdx, uint256_t *chain, uint32_t *inverse, uint32_t newX[8], uint32_t newY[8])
+__device__ __forceinline__ void completeBatchAdd(const ecpoint_t *gPoint, const uint256_t& publicX, const uint256_t& publicY, const int batchIdx, uint256_t *chain, uint256_t& inverse, uint256_t& newX, uint256_t& newY)
 {
-    uint32_t s[8];
+    uint256_t s;
     if (batchIdx >= 1)
     {
-        uint32_t c[8];
+        uint256_t c;
         readUInt256(chain, batchIdx - 1, c);
         mulModP(inverse, c, s);
-        uint32_t diff[8];
+        uint256_t diff;
         subModP(gPoint->x, publicX, diff);
         mulModP(diff, inverse);
     }
@@ -646,22 +629,24 @@ __device__ static void completeBatchAdd(const ecpoint_t *gPoint, const uint32_t 
     {
         copyBigInt(inverse, s);
     }
-    uint32_t rise[8];
+    uint256_t rise;
     subModP(gPoint->y, publicY, rise);
     mulModP(rise, s);
+
     // Rx = s^2 - Gx - Qx
-    uint32_t s2[8];
+    uint256_t s2;
     mulModP(s, s, s2);
     subModP(s2, gPoint->x, newX);
     subModP(newX, publicX, newX);
+
     // Ry = s(px - rx) - py
-    uint32_t k[8];
+    uint256_t k;
     subModP(gPoint->x, newX, k);
     mulModP(s, k, newY);
     subModP(newY, gPoint->y, newY);
 }
 
-__device__ __forceinline__ static void beginBatchAddWithDouble(const ecpoint_t *gPoint, uint32_t *publicX, uint256_t *chain, int batchIdx, uint32_t inverse[8])
+__device__ __forceinline__ void beginBatchAddWithDouble(const ecpoint_t *gPoint, uint256_t& publicX, uint256_t *chain, const int batchIdx, uint256_t& inverse)
 {
     if (equal(gPoint->x, publicX))
     {
@@ -679,15 +664,15 @@ __device__ __forceinline__ static void beginBatchAddWithDouble(const ecpoint_t *
     writeUInt256(inverse, batchIdx, chain);
 }
 
-__device__ static void completeBatchAddWithDouble(const ecpoint_t *gPoint, const uint32_t *publicX, const uint32_t *publicY, const int batchIdx, const uint256_t *chain, uint32_t *inverse, uint32_t* newX, uint32_t* newY)
+__device__ __forceinline__ void completeBatchAddWithDouble(const ecpoint_t *gPoint, const uint256_t& publicX, const uint256_t& publicY, const int batchIdx, const uint256_t *chain, uint256_t& inverse, uint256_t& newX, uint256_t& newY)
 {
-    uint32_t s[8]{};
+    uint256_t s;
     if (batchIdx >= 1)
     {
-        uint32_t c[8];
+        uint256_t c;
         readUInt256(chain, batchIdx - 1, c);
         mulModP(inverse, c, s);
-        uint32_t diff[8];
+        uint256_t diff;
         if (equal(gPoint->x, publicX))
         {
             addModP(gPoint->y, gPoint->y, diff);
@@ -705,45 +690,52 @@ __device__ static void completeBatchAddWithDouble(const ecpoint_t *gPoint, const
     if (equal(gPoint->x, publicX))
     {
         // currently s = 1 / 2y
-        uint32_t x2[8];
-        uint32_t tx2[8];
+        uint256_t x2;
+        uint256_t tx2;
+
         // 3x^2
         mulModP(publicX, publicX, x2);
         addModP(x2, x2, tx2);
         addModP(x2, tx2, tx2);
+
         // s = 3x^2 * 1/2y
         mulModP(tx2, s);
+
         // s^2
-        uint32_t s2[8];
+        uint256_t s2;
         mulModP(s, s, s2);
+
         // Rx = s^2 - 2px
         subModP(s2, publicX, newX);
         subModP(newX, publicX, newX);
+
         // Ry = s(px - rx) - py
-        uint32_t k[8];
+        uint256_t k;
         subModP(gPoint->x, newX, k);
         mulModP(s, k, newY);
         subModP(newY, gPoint->y, newY);
     }
     else
     {
-        uint32_t rise[8];
+        uint256_t rise;
         subModP(gPoint->y, publicY, rise);
         mulModP(rise, s);
+
         // Rx = s^2 - Gx - Qx
-        uint32_t s2[8];
+        uint256_t s2;
         mulModP(s, s, s2);
         subModP(s2, gPoint->x, newX);
         subModP(newX, publicX, newX);
+
         // Ry = s(px - rx) - py
-        uint32_t k[8];
+        uint256_t k;
         subModP(gPoint->x, newX, k);
         mulModP(s, k, newY);
         subModP(newY, gPoint->y, newY);
     }
 }
 
-__device__ __forceinline__ static void doBatchInverse(uint32_t inverse[8])
+__device__ __forceinline__ void doBatchInverse(uint256_t& inverse)
 {
     invModP(inverse);
 }

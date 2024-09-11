@@ -5,7 +5,7 @@
 #include<cuda_runtime.h>
 
 
-__constant__ constexpr uint32_t d_K[64] = {
+__constant__ constexpr uint d_K[64] = {
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
     0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
@@ -16,57 +16,50 @@ __constant__ constexpr uint32_t d_K[64] = {
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 };
 
-__constant__ constexpr uint32_t d_IV[8] = {
-    0x6a09e667,
-    0xbb67ae85,
-    0x3c6ef372,
-    0xa54ff53a,
-    0x510e527f,
-    0x9b05688c,
-    0x1f83d9ab,
-    0x5be0cd19
+__constant__ constexpr uint d_IV[8] = {
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 };
 
 
-__host__ __device__ __forceinline__ uint32_t rotr(uint32_t x, int n)
+__host__ __device__ __forceinline__ uint rotr(const uint x, const int n)
 {
     return (x >> n) ^ (x << (32 - n));
 }
 
-__host__ __device__ __forceinline__ uint32_t MAJ(uint32_t a, uint32_t b, uint32_t c)
+__host__ __device__ __forceinline__ uint MAJ(const uint a, const uint b, const uint c)
 {
     return (a & b) ^ (a & c) ^ (b & c);
 }
 
-__host__ __device__ __forceinline__ uint32_t CH(uint32_t e, uint32_t f, uint32_t g)
+__host__ __device__ __forceinline__ uint CH(const uint e, const uint f, const uint g)
 {
     return (e & f) ^ (~e & g);
 }
 
-__host__ __device__ __forceinline__ uint32_t s0(uint32_t x)
+__host__ __device__ __forceinline__ uint s0(const uint x)
 {
     return rotr(x, 7) ^ rotr(x, 18) ^ (x >> 3);
 }
 
-__host__ __device__ __forceinline__ uint32_t s1(uint32_t x)
+__host__ __device__ __forceinline__ uint s1(const uint x)
 {
     return rotr(x, 17) ^ rotr(x, 19) ^ (x >> 10);
 }
 
 
-__host__ __device__ __forceinline__ void roundSha256(uint32_t a, uint32_t b, uint32_t c, uint32_t &d, uint32_t e, uint32_t f, uint32_t g, uint32_t &h, uint32_t m, uint32_t k)
+__host__ __device__ __forceinline__ void roundSha256(const uint a, const uint b, const uint c, uint &d, const uint e, const uint f, const uint g, uint &h, const uint m, const uint k)
 {
-    const uint32_t s = CH(e, f, g) + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + k + m;
+    const uint s = CH(e, f, g) + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + k + m;
 
     d += s + h;
 
     h += s + MAJ(a, b, c) + (rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22));
 }
 
-__host__ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], const uint32_t y[8], uint32_t digest[8])
+__host__ __device__ __forceinline__ void sha256PublicKey(const uint256_t& x, const uint256_t& y, uint256_t& digest)
 {
-    uint32_t a, b, c, d, e, f, g, h;
-    uint32_t w[16];
+    uint a, b, c, d, e, f, g, h;
+    uint w[16];
 
     // 0x04 || x || y
     w[0] = (x[0] >> 8) | 0x04000000;
@@ -146,7 +139,6 @@ __host__ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], co
     roundSha256(c, d, e, f, g, h, a, b, w[14], d_K[30]);
     roundSha256(b, c, d, e, f, g, h, a, w[15], d_K[31]);
 
-
     w[0] = w[0] + s0(w[1]) + w[9] + s1(w[14]);
     w[1] = w[1] + s0(w[2]) + w[10] + s1(w[15]);
     w[2] = w[2] + s0(w[3]) + w[11] + s1(w[0]);
@@ -225,7 +217,7 @@ __host__ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], co
     h += d_IV[7];
 
     // store the intermediate hash value
-    uint32_t tmp[8];
+    uint tmp[8];
     tmp[0] = a;
     tmp[1] = b;
     tmp[2] = c;
@@ -367,10 +359,11 @@ __host__ __device__ __forceinline__ void sha256PublicKey(const uint32_t x[8], co
     digest[7] = tmp[7] + h;
 }
 
-__host__ __device__ __forceinline__ void sha256PublicKeyCompressed(const uint32_t x[8], const uint32_t yParity, uint32_t digest[8])
+__host__ __device__ __forceinline__
+void sha256PublicKeyCompressed(const uint256_t& x, const uint yParity, uint256_t& digest)
 {
-    uint32_t a, b, c, d, e, f, g, h;
-    uint32_t w[16];
+    uint a, b, c, d, e, f, g, h;
+    uint w[16];
 
     // 0x03 || x  or  0x02 || x
     w[0] = 0x02000000 | ((yParity & 1) << 24) | (x[0] >> 8);
@@ -534,7 +527,7 @@ __host__ __device__ __forceinline__ void sha256PublicKeyCompressed(const uint32_
 
 __host__ __device__ __forceinline__ void sha256PrivateKeyBase(const uint2& p, uint256_t& digest)
 {
-    uint32_t w[16]{};
+    uint w[16]{};
 
     w[0] = p.x;
     w[1] = p.y;

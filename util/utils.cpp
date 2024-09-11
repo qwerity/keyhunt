@@ -1,7 +1,7 @@
 #include "utils.h"
 #include "secp256k1.h"
 
-#include "../cuda/defines.cuh"
+#include "cuda/defines.cuh"
 
 #include <cstdio>
 #include <string>
@@ -60,14 +60,14 @@ namespace utils
 
     std::string formatThousands(const uint64_t x)
     {
-        char buf[32] = "";
-        sprintf(buf, "%lud", x);
-        std::string s(buf);
-        auto len = static_cast<int>(s.length());
-        if (int numCommas = (len - 1) / 3; numCommas == 0)
+        std::string s = std::to_string(x);
+
+        const auto len = static_cast<int>(s.length());
+        if (const int numCommas = (len - 1) / 3; numCommas == 0)
         {
             return s;
         }
+
         std::string result;
         int count = ((len % 3) == 0) ? 0 : (3 - (len % 3));
         for (int i = 0; i < len; i++)
@@ -122,19 +122,19 @@ namespace utils
         return std::ranges::all_of(s, [](const char c) { return std::isxdigit(c); });
     }
 
-    std::string formatSeconds(unsigned int seconds)
+    std::string formatSeconds(const uint32_t seconds)
     {
-        unsigned int days = seconds / 86400;
-        unsigned int hours = (seconds % 86400) / 3600;
-        unsigned int minutes = (seconds % 3600) / 60;
-        unsigned int sec = seconds % 60;
+        const uint32_t days = seconds / 86400;
+        const uint32_t hours = (seconds % 86400) / 3600;
+        const uint32_t minutes = (seconds % 3600) / 60;
+        const uint32_t sec = seconds % 60;
 
         if (days > 0)
         {
-            return std::format("%d:%02d:%02d:%02d", days, hours, minutes, sec);
+            return utils::format("%d:%02d:%02d:%02d", days, hours, minutes, sec);
         }
 
-        return std::format("%02d:%02d:%02d", hours, minutes, sec);
+        return utils::format("%02d:%02d:%02d", hours, minutes, sec);
     }
 
     long getFileSize(const std::string &fileName)
@@ -248,21 +248,21 @@ namespace utils
         return ss.str();
     }
 
-    void initLogging(const std::string& logFile)
+    void initLogging([[maybe_unused]] const std::string& logFile)
     {
-        // Setting up a simple console logger
-        boost::log::add_console_log(std::cerr);
+        boost::log::add_console_log(std::cerr, boost::log::keywords::auto_flush = true);
         // boost::log::add_console_log(std::cerr, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
 
         // // Setting up a file logger
-        // boost::log::add_file_log(logFile);
+        // boost::log::add_file_log(logFile, boost::log::keywords::auto_flush = true);
         // boost::log::add_file_log(logFile, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
-        //
-        // // Enable logging for all levels
-        // boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::trace);
 
         // Add attributes like timestamp and thread id
-        boost::log::add_common_attributes();
+        // boost::log::add_common_attributes();
+
+        // boost::log::core::get()->set_filter(
+        //     boost::log::trivial::severity > boost::log::trivial::fatal
+        // );
     }
 
     std::vector<secp256k1::uint256> generateRandomPrivateKeys(const uint32_t keysNumberToGenerate)

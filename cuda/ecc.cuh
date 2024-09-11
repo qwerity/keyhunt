@@ -18,7 +18,7 @@ public:
     ECC& operator=(ECC&& rhs) noexcept;
 
     void init(uint32_t pointsPerThread, const thrust::host_vector<secp256k1::uint256>& privateKeys) const;
-    void initWithPrivateDefinedXRandomY(uint32_t pointsPerThread, uint32_t blockSize = 0) const;
+    void initWithPrivateDefinedXRandomY(uint32_t pointsPerThread, uint32_t publicKeyCompressionTypeToCheck, uint32_t blockSize = 0) const;
 
     [[nodiscard]] uint32_t getKeysNumberPerIteration() const;
 
