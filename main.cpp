@@ -35,7 +35,7 @@ int main(const int argc, const char **argv)
 
     keyHunter.findPublicHashWithPrivateDefinedXRandomY();
     // keyHunter.startWithRandomPrivateKeys();
-    keyProcessor.start();
+    // keyProcessor.start();
 
     // Giving some time to process, otherwise main thread will force stop the processing
     while (!keyHunter.isDone() && sharedDataQueue->empty())
@@ -45,7 +45,7 @@ int main(const int argc, const char **argv)
     }
 
     keyHunter.stop();
-    keyProcessor.stop();
+    // keyProcessor.stop();
 
     return 0;
 }
