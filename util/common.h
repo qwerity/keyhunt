@@ -5,6 +5,10 @@
 
 #include "cuda_util.h"
 #include "secp256k1.h"
+#include "config.h"
+
+/*################################################################################################################################################################################*/
+constexpr uint32_t MB{1024 * 1024};
 
 /*################################################################################################################################################################################*/
 namespace PointCompressionType
@@ -16,28 +20,6 @@ namespace PointCompressionType
         BOTH = 2
     };
 }
-
-/*################################################################################################################################################################################*/
-struct Settings
-{
-    // GPU device params
-    int cudaDeviceId{0};
-    std::string cudaDeviceName;
-
-    // Cuda key generation params
-    uint32_t pointsPerThread{128};
-
-    // Private Keys generation
-    uint32_t keysNumberToGenerate{0};
-
-    // Input data
-    std::string ripemd160TargetsFilePath;
-
-    int privateXPart{1};
-    PointCompressionType::Value publicKeyCompressionTypeToCheck{PointCompressionType::BOTH};
-
-    uint32_t statusCallbackPeriodMs{1000};
-};
 
 /*################################################################################################################################################################################*/
 struct StatusInfo
@@ -70,7 +52,7 @@ using DataQueue = boost::lockfree::spsc_queue<Secp256k1KeyPairs*, boost::lockfre
 /*################################################################################################################################################################################*/
 struct GlobalContext
 {
-    Settings settings;
+    Config config;
     cu::CudaDeviceInfo cudaInfo;
     std::shared_ptr<DataQueue> dataQueue;
     std::function<void(StatusInfo)> statusCallback;

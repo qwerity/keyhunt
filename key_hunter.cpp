@@ -30,7 +30,6 @@ struct KeyHunter::Impl
     mutable std::atomic<bool> mDone{false};
 
     Hash160Lookup mhash160Lookup;
-    std::vector<hash160> mHash160Targets;
 
     // callbacks
     std::function<void(StatusInfo)> mStatusCallback;
@@ -44,7 +43,7 @@ struct KeyHunter::Impl
     , mDataQueue(context.dataQueue)
     , mStatusCallback(context.statusCallback)
     {
-        cu::cudaInit(context.settings.cudaDeviceId);
+        cu::cudaInit(context.config.cudaDeviceId);
     }
 
     ~Impl()
@@ -64,12 +63,15 @@ struct KeyHunter::Impl
         }
     }
 
-    void signalStatusInfo(const uint64_t elapsedTimeMs, const uint64_t totalGeneratedPointsCounter, const uint64_t generatedPointsCounter, const uint32_t iteration, const uint32_t remainsIterations) const
+    void signalStatusInfo(const uint64_t totalGeneratedPointsCounter, const uint64_t generatedPointsCounter, const uint32_t iteration, const uint32_t remainsIterations) const
     {
+        static uint64_t elapsedTimeMs{0};
+        elapsedTimeMs += mTimer.getTime();
+
         static uint64_t totalTime{0};
         totalTime += elapsedTimeMs;
 
-        if (elapsedTimeMs >= mgContext.settings.statusCallbackPeriodMs)
+        if (elapsedTimeMs >= mgContext.config.statusCallbackPeriodMs)
         {
             const auto seconds = static_cast<double>(elapsedTimeMs) / 1000.0;
 
@@ -85,6 +87,9 @@ struct KeyHunter::Impl
             cu::safeCall(cudaMemGetInfo(&info.freeDeviceMemory, &info.totalDeviceMemory));
 
             mStatusCallback(info);
+
+            elapsedTimeMs = 0;
+            mTimer.start();
         }
     }
 
@@ -116,12 +121,9 @@ struct KeyHunter::Impl
 
     void start(const thrust::host_vector<secp256k1::uint256>& privateKeys)
     {
-        if (!mgContext.settings.ripemd160TargetsFilePath.empty())
-        {
-            setHash160Targets(mgContext.settings.ripemd160TargetsFilePath);
-        }
+        setHash160Targets(mgContext.config.ripemd160TargetsFilePaths);
 
-        mCuECC->init(mgContext.settings.pointsPerThread, privateKeys);
+        mCuECC->init(mgContext.config.pointsPerThread, privateKeys);
 
         mThread = std::thread([&privateKeys, this]()
         {
@@ -131,7 +133,7 @@ struct KeyHunter::Impl
             cu::safeCall(mCuECC->calculatePublicKeys());
 
             const uint64_t generatedPointsCounter = privateKeys.size();
-            signalStatusInfo(mTimer.getTime(), generatedPointsCounter, generatedPointsCounter, 0, 0);
+            signalStatusInfo(generatedPointsCounter, generatedPointsCounter, 0, 0);
 
             BOOST_LOG_TRIVIAL(info) << "KeyGenerator: done, generated " << utils::formatThousands(generatedPointsCounter) << "keys";
 
@@ -142,22 +144,19 @@ struct KeyHunter::Impl
 
     void startWithRandomPrivateKeys()
     {
-        start(utils::generateRandomPrivateKeys(mgContext.settings.keysNumberToGenerate));
+        start(utils::generateRandomPrivateKeys(mgContext.config.keysNumberToGenerate));
     }
 
     void findPublicHashWithPrivateDefinedXRandomY()
     {
-        if (!mgContext.settings.ripemd160TargetsFilePath.empty())
-        {
-            setHash160Targets(mgContext.settings.ripemd160TargetsFilePath);
-        }
+        setHash160Targets(mgContext.config.ripemd160TargetsFilePaths);
 
-        mCuECC->initWithPrivateDefinedXRandomY(mgContext.settings.pointsPerThread, mgContext.settings.publicKeyCompressionTypeToCheck);
+        mCuECC->initWithPrivateDefinedXRandomY(mgContext.config.pointsPerThread, mgContext.config.publicKeyCompressionTypeToCheck);
 
         mThread = std::thread([&]()
         {
             uint64_t totalGeneratedPublicKeys{0};
-            const uint32_t totalKeysToGenerate = (mgContext.settings.keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : mgContext.settings.keysNumberToGenerate;
+            const uint32_t totalKeysToGenerate = (mgContext.config.keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : mgContext.config.keysNumberToGenerate;
 
             const uint32_t keysNumberPerIteration = mCuECC->getKeysNumberPerIteration();
             const uint32_t iterationsCount = totalKeysToGenerate / keysNumberPerIteration;
@@ -173,14 +172,14 @@ struct KeyHunter::Impl
                 const uint32_t remainsIterations{finalIterationsCount - mIteration - 1};
 
                 mTimer.start();
+                {
+                    mCuECC->generatePrivateKeysForXPerIteration(mgContext.config.privateXPart, mIteration);
 
-                mCuECC->generatePrivateKeysForXPerIteration(mgContext.settings.privateXPart, mIteration);
-
-                cu::safeCall(mCuECC->calculatePublicKeys());
+                    cu::safeCall(mCuECC->calculatePublicKeys());
+                }
 
                 totalGeneratedPublicKeys += keysNumberPerIteration;
-
-                signalStatusInfo(mTimer.getTime(), totalGeneratedPublicKeys, keysNumberPerIteration, mIteration, remainsIterations);
+                signalStatusInfo(totalGeneratedPublicKeys, keysNumberPerIteration, mIteration, remainsIterations);
 
                 // pushResultsToQueue();
 
@@ -216,37 +215,46 @@ struct KeyHunter::Impl
         cu::safeCall(mCuECC->getResults(results));
     }
 
-    void setHash160Targets(const std::string &hash160TargetsFile)
+    void setHash160Targets(const std::vector<std::string>& ripemd160TargetsFilePaths)
     {
-        std::ifstream inFile(hash160TargetsFile);
-        if (!inFile.is_open())
-        {
-            BOOST_LOG_TRIVIAL(error) << "Unable to open " << hash160TargetsFile;
-            throw std::runtime_error(std::string("Unable to open ") + hash160TargetsFile);
-        }
-        mHash160Targets.clear();
-
-        BOOST_LOG_TRIVIAL(info) << "Loading RipeMD-160 hashes from: " << hash160TargetsFile;
-
+        std::vector<hash160> mHash160Targets;
         std::set<hash160> hash160Targets;
-        std::string line;
-        while (std::getline(inFile, line))
+
+        for (const auto& hash160TargetsFile : mgContext.config.ripemd160TargetsFilePaths)
         {
-            if (line.empty())
+            if (hash160TargetsFile.empty())
                 continue;
 
-            utils::removeNewline(line);
-            line = utils::trim(line);
-            if (!line.empty())
+            std::ifstream inFile(hash160TargetsFile);
+            if (!inFile.is_open())
             {
-                hash160Targets.insert(utils::toHash160(line));
+                BOOST_LOG_TRIVIAL(warning) << "Unable to open " << hash160TargetsFile;
+                continue;
             }
+
+            uint32_t insertedTargetsCount{0};
+            std::string line;
+            while (std::getline(inFile, line))
+            {
+                if (line.empty())
+                    continue;
+
+                utils::removeNewline(line);
+                line = utils::trim(line);
+                if (!line.empty())
+                {
+                    hash160Targets.insert(utils::toHash160(line));
+                    ++insertedTargetsCount;
+                }
+            }
+
+            BOOST_LOG_TRIVIAL(info) << "Loading RipeMD-160 " << utils::formatThousands(insertedTargetsCount)
+                                    << " hashes from: " << hash160TargetsFile
+                                    << ", (" << utils::format("%.02f", static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB) << " Mb)";
         }
 
         // mHash160Targets.reserve(hash160Targets.size());
         mHash160Targets.assign(std::make_move_iterator(hash160Targets.begin()), std::make_move_iterator(hash160Targets.end()));
-
-        BOOST_LOG_TRIVIAL(info) << utils::formatThousands(mHash160Targets.size()) << " hashes loaded " << static_cast<double>(sizeof(hash160) * mHash160Targets.size()) / (1024.0 * 1024.0) << "MB";
         mhash160Lookup.setTargets(mHash160Targets);
     }
 };
