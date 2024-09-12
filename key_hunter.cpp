@@ -232,6 +232,8 @@ struct KeyHunter::Impl
                 continue;
             }
 
+            BOOST_LOG_TRIVIAL(info) << "Loading RipeMD-160 hashes from: " << hash160TargetsFile;
+
             uint32_t insertedTargetsCount{0};
             std::string line;
             while (std::getline(inFile, line))
@@ -248,12 +250,10 @@ struct KeyHunter::Impl
                 }
             }
 
-            BOOST_LOG_TRIVIAL(info) << "Loading RipeMD-160 " << utils::formatThousands(insertedTargetsCount)
-                                    << " hashes from: " << hash160TargetsFile
-                                    << ", (" << utils::format("%.02f", static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB) << " Mb)";
+            BOOST_LOG_TRIVIAL(info) << "Loaded " << utils::formatThousands(insertedTargetsCount)
+                                    << " hashes, (" << utils::format("%.02f", static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB) << " Mb)";
         }
 
-        // mHash160Targets.reserve(hash160Targets.size());
         mHash160Targets.assign(std::make_move_iterator(hash160Targets.begin()), std::make_move_iterator(hash160Targets.end()));
         mhash160Lookup.setTargets(mHash160Targets);
     }

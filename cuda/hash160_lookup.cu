@@ -114,7 +114,7 @@ cudaError_t Hash160Lookup::setTargetBloomFilter(const std::vector<hash160> &targ
     const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
     const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
     const uint64_t bloomFilterMask = (1ULL << bloomFilterBits) - 1;
-    fprintf(stderr, "Allocating bloom filter: %.1fMB", static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
+    fprintf(stderr, "Allocating bloom filter (%d bits): %.1fMB\n", bloomFilterBits, static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
 
     cudaError_t err{cudaSuccess};
     try
