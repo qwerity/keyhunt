@@ -80,20 +80,6 @@ struct alignas(4 * 8) uint256_t
     }
 
     __host__ __device__ __forceinline__
-    uint256_t& operator=(const uint256_t& other) noexcept
-    {
-        if (this != &other)
-        {
-            const auto other_uint4 = reinterpret_cast<const uint4 *>(other.v);
-            const auto v_uint4 = reinterpret_cast<uint4 *>(v);
-            v_uint4[0] = other_uint4[0];
-            v_uint4[1] = other_uint4[1];
-        }
-        return *this;
-    }
-
-
-    __host__ __device__ __forceinline__
     bool operator==(const uint256_t& other) const noexcept
     {
         bool eq = true;
