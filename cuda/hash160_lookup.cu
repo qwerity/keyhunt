@@ -33,17 +33,20 @@ static void undoRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5])
 /**
 Copies the target hashes to constant memory
 */
-cudaError_t Hash160Lookup::setTargetConstantMemory(const std::vector<hash160> &targets)
+cudaError_t Hash160Lookup::setTargetConstantMemory(const std::unordered_set<hash160> &targets)
 {
     const size_t count = targets.size();
     cudaError_t err{cudaSuccess};
     try
     {
         uint32_t h[5];
-        for (size_t i = 0; i < count; i++)
+        uint32_t i{0};
+        for (const auto& target : targets)
         {
-            undoRMD160FinalRound(targets[i].h, h);
+            undoRMD160FinalRound(target.h, h);
             cu::safeCall(cudaMemcpyToSymbol(_TARGET_HASH, h, sizeof(uint32_t) * 5, i * sizeof(uint32_t) * 5));
+
+            ++i;
         }
         cu::safeCall(cudaMemcpyToSymbol(d_NumTargetHashes, &count, sizeof(uint32_t)));
 
@@ -69,13 +72,13 @@ uint32_t Hash160Lookup::getOptimalBloomFilterBits(const double p, const size_t n
     return static_cast<uint32_t>(ceil(log(m) / log(2)));
 }
 
-void Hash160Lookup::initializeBloomFilter(const std::vector<hash160> &targets, thrust::host_vector<uint32_t> &filter, const uint32_t mask)
+void Hash160Lookup::initializeBloomFilter(const std::unordered_set<hash160> &targets, thrust::host_vector<uint32_t> &filter, const uint32_t mask)
 {
     // Use the low 16 bits of each word in the hash as the index into the bloom filter
-    for (uint32_t i = 0; i < targets.size(); i++)
+    for (const auto& target : targets)
     {
         uint32_t h[5];
-        undoRMD160FinalRound(targets[i].h, h);
+        undoRMD160FinalRound(target.h, h);
         for (int j = 0; j < 5; j++)
         {
             const uint32_t idx = h[j] & mask;
@@ -84,13 +87,13 @@ void Hash160Lookup::initializeBloomFilter(const std::vector<hash160> &targets, t
     }
 }
 
-void Hash160Lookup::initializeBloomFilter64(const std::vector<hash160> &targets, thrust::host_vector<uint32_t> &filter, const uint64_t mask)
+void Hash160Lookup::initializeBloomFilter64(const std::unordered_set<hash160> & targets, thrust::host_vector<uint32_t> &filter, const uint64_t mask)
 {
-    for (uint32_t k = 0; k < targets.size(); k++)
+    for (const auto& target : targets)
     {
         uint32_t hash[5];
         uint64_t idx[5];
-        undoRMD160FinalRound(targets[k].h, hash);
+        undoRMD160FinalRound(target.h, hash);
 
         idx[0] = (static_cast<uint64_t>(hash[0]) << 32 | hash[1]) & mask;
         idx[1] = (static_cast<uint64_t>(hash[2]) << 32 | hash[3]) & mask;
@@ -108,7 +111,7 @@ void Hash160Lookup::initializeBloomFilter64(const std::vector<hash160> &targets,
 /**
 Populates the bloom filter with the target hashes
 */
-cudaError_t Hash160Lookup::setTargetBloomFilter(const std::vector<hash160> &targets)
+cudaError_t Hash160Lookup::setTargetBloomFilter(const std::unordered_set<hash160> &targets)
 {
     const uint32_t bloomFilterBits = getOptimalBloomFilterBits(1.0e-9, targets.size());
     const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
@@ -158,7 +161,7 @@ cudaError_t Hash160Lookup::setTargetBloomFilter(const std::vector<hash160> &targ
 *Copies the target hashes to either constant memory, or the bloom filter depending
 on how many targets there are
 */
-cudaError_t Hash160Lookup::setTargets(const std::vector<hash160>& hash160Targets)
+cudaError_t Hash160Lookup::setTargets(const std::unordered_set<hash160> &hash160Targets)
 {
     thrust::release(d_bloomFilter);
 

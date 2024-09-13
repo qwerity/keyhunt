@@ -1,12 +1,11 @@
 #include "ecc_helper.cuh"
-
-#include "common.h"
+#include "atomic_list.cuh"
 #include "ripemd160.cuh"
 #include "sha256.cuh"
 #include "ptx.cuh"
-
 #include "hash160_lookup.cuh"
 #include "secp256k1.cuh"
+
 
 __device__ void hashPublicKey(const uint256_t& x, const uint256_t& y, uint *digestOut)
 {
@@ -30,6 +29,23 @@ __device__ void hashPublicKeyCompressed(const uint256_t& x, const uint yParity, 
         hash[i] = endian(hash[i]);
     }
     ripemd160sha256NoFinal(hash, digestOut);
+}
+
+__device__ void setResultFound(const uint idx, const bool compressed, const uint256_t& privateKey, const uint32_t digest[5])
+{
+    Hash160SearchResult r;
+    r.block = blockIdx.x;
+    r.thread = threadIdx.x;
+    r.idx = idx;
+    r.compressed = compressed;
+
+    for (uint i = 0; i < 8; ++i)
+    {
+        r.privateKey[i] = endian(privateKey[i]);
+    }
+    doRMD160FinalRound(digest, r.digest);
+
+    atomicListAdd(&r, sizeof(r));
 }
 
 __global__ void multiplyStepKernel(const uint256_t *privateKeys)
@@ -101,6 +117,8 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
 
     for(uint i = 0; i < d_pointsPerThread; ++i)
     {
+        readUInt256(privateKeys, i, p);
+
         uint256_t x;
         readInt(xPtr, i, x);
 
@@ -113,8 +131,7 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
             hashPublicKeyCompressed(x, readIntLSW(yPtr, i), hash160.h);
             if (checkHash(hash160))
             {
-                printf("found match %u\n", index);
-                // setResultFound(i, true, x, y, digest);
+                setResultFound(index, true, p, hash160.h);
             }
         }
         if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
@@ -125,7 +142,8 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
             hashPublicKey(x, y, hash160.h);
             if (checkHash(hash160))
             {
-                printf("found match %u\n", index);
+                // printf("found match %u\n", index);
+                setResultFound(index, false, p, hash160.h);
             }
         }
     }

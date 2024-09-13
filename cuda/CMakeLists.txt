@@ -49,6 +49,9 @@ set(SRC
 
     hash160_lookup.cu
     hash160_lookup.cuh
+
+    atomic_list.cuh
+    atomic_list.cu
 )
 
 # Add device-side debugging (-G) only for ecc_helper.cu

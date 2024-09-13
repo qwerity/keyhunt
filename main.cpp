@@ -27,10 +27,11 @@ int main()
     const Config config;
 
     const auto sharedDataQueue = std::make_shared<DataQueue>();
+    const auto sharedHash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();
     const auto cudaInfo = cu::getDeviceInfo(config.cudaDeviceId);
     // printDeviceInfo(cudaInfo);
 
-    const KeyHunter keyHunter({config, cudaInfo, sharedDataQueue, statusCallback});
+    const KeyHunter keyHunter({config, cudaInfo, sharedDataQueue, sharedHash160SearchResultsQueue, statusCallback});
     const KeyProcessor keyProcessor(sharedDataQueue);
 
     keyHunter.findPublicHashWithPrivateDefinedXRandomY();

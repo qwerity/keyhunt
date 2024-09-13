@@ -155,4 +155,26 @@ struct hash160
 
         return false;  // Return false if all elements are equal
     }
+
+    __host__ __device__
+    bool operator==(const hash160& other) const = default;
 };
+
+#ifndef __CUDA_ARCH__
+#include <functional>
+
+// std::hash specialization for hash160
+template<>
+struct std::hash<hash160>
+{
+    std::size_t operator()(const hash160& h) const noexcept
+    {
+        std::size_t seed = 0;
+        for (int i = 0; i < 5; ++i)
+        {
+            seed ^= std::hash<uint>{}(h.h[i]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        return seed;
+    }
+};
+#endif

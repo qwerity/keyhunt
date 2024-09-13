@@ -3,14 +3,16 @@
 #include <fstream>
 #include <utility>
 #include <functional>
-#include <set>
+#include <unordered_set>
 
 #include <boost/log/trivial.hpp>
 #include <boost/algorithm/string.hpp>
 
+#include "cuda/atomic_list.cuh"
 #include "cuda/defines.cuh"
 #include "cuda/ecc.cuh"
 #include "cuda/hash160_lookup.cuh"
+
 #include "util/cuda_util.h"
 #include "util/utils.h"
 
@@ -25,15 +27,13 @@ struct KeyHunter::Impl
 
     mutable utils::Timer mTimer;
 
-    std::shared_ptr<DataQueue> mDataQueue;
-
     std::atomic<bool> mStopFlag{false};
     mutable std::atomic<bool> mDone{false};
 
-    Hash160Lookup mhash160Lookup;
+    Hash160Lookup mHash160Lookup;
+    std::unordered_set<hash160> mHash160Targets;
 
-    // callbacks
-    std::function<void(StatusInfo)> mStatusCallback;
+    CudaAtomicList mResultAtomicList;
 
     mutable uint32_t mIteration{0};
 
@@ -41,8 +41,6 @@ struct KeyHunter::Impl
     explicit Impl(const GlobalContext& context)
     : mgContext(context)
     , mCuECC(std::make_unique<ECC>())
-    , mDataQueue(context.dataQueue)
-    , mStatusCallback(context.statusCallback)
     {
         cu::cudaInit(context.config.cudaDeviceId);
     }
@@ -87,7 +85,7 @@ struct KeyHunter::Impl
             info.remainsIterations = remainsIterations;
             cu::safeCall(cudaMemGetInfo(&info.freeDeviceMemory, &info.totalDeviceMemory));
 
-            mStatusCallback(info);
+            mgContext.statusCallback(info);
 
             elapsedTimeMs = 0;
             mTimer.start();
@@ -110,7 +108,7 @@ struct KeyHunter::Impl
             pairs->emplace_back(p, publicKey);
         }
 
-        while (!mDataQueue->push(pairs))
+        while (!mgContext.dataQueue->push(pairs))
         {
             if (mStopFlag)
                 return;
@@ -148,9 +146,38 @@ struct KeyHunter::Impl
         start(utils::generateRandomPrivateKeys(mgContext.config.keysNumberToGenerate));
     }
 
+    bool isTargetInList(const uint32_t hash[5]) const
+    {
+        return mHash160Targets.contains(hash160(hash));
+    }
+
+    void pushResultsToQueue2(const uint32_t iteration) const
+    {
+        const auto count = mResultAtomicList.size();
+
+        Hash160SearchResult results[count];
+        mResultAtomicList.read(&results, count);
+        mResultAtomicList.clear();
+
+        for (uint32_t i = 0; i < count; i++)
+        {
+            // might be false-positive
+            if (!mHash160Targets.contains(hash160(results[i].digest)))
+            {
+                continue;
+            }
+
+            BOOST_LOG_TRIVIAL(info) << "hash: " << utils::convertToHexString(results[i].digest, 5)
+                                    << ", private key: " << utils::convertToHexString(results[i].privateKey, 8)
+                                    << ", iteration: " << iteration << ", index: " << results[i].idx << ", compressed: " << results[i].compressed;
+        }
+    }
+
+
     void findPublicHashWithPrivateDefinedXRandomY()
     {
         setHash160Targets(mgContext.config.ripemd160TargetsFilePaths);
+        mResultAtomicList.init(sizeof(Hash160SearchResult), 16);
 
         mCuECC->initWithPrivateDefinedXRandomY(mgContext.config.pointsPerThread, mgContext.config.publicKeyCompressionTypeToCheck);
 
@@ -183,6 +210,7 @@ struct KeyHunter::Impl
                 signalStatusInfo(totalGeneratedPublicKeys, keysNumberPerIteration, mIteration, remainsIterations);
 
                 // pushResultsToQueue();
+                pushResultsToQueue2(mIteration);
 
                 ++mIteration;
             }
@@ -221,9 +249,6 @@ struct KeyHunter::Impl
         if (ripemd160TargetsFilePaths.empty())
             return;
 
-        std::vector<hash160> mHash160Targets;
-        std::set<hash160> hash160Targets;
-
         utils::Timer timer;
         for (const auto& hash160TargetsFile : mgContext.config.ripemd160TargetsFilePaths)
         {
@@ -250,7 +275,7 @@ struct KeyHunter::Impl
                 boost::algorithm::trim(line);
                 if (!line.empty())
                 {
-                    hash160Targets.insert(utils::toHash160(line));
+                    mHash160Targets.insert(utils::toHash160(line));
                     ++insertedTargetsCount;
                 }
             }
@@ -260,8 +285,8 @@ struct KeyHunter::Impl
                                     << " hashes, (" << utils::format("%.02fs | %.02f", fileReadTimeS, static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB) << " Mb)";
         }
 
-        mHash160Targets.assign(std::make_move_iterator(hash160Targets.begin()), std::make_move_iterator(hash160Targets.end()));
-        mhash160Lookup.setTargets(mHash160Targets);
+        // mHash160Targets.assign(std::make_move_iterator(hash160Targets.begin()), std::make_move_iterator(hash160Targets.end()));
+        mHash160Lookup.setTargets(mHash160Targets);
     }
 };
 
