@@ -5,15 +5,6 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 set(THRUST_CPP_DIALECT 20)
 
-# Set the CUDA compiler flags for Debug and Release configurations
-set(CUDA_PROFILING_OUTPUT "--ptxas-options=-v")
-set(CUDA_SUPPRESS_WARNINGS "-diag-suppress 20091")
-set(CMAKE_CUDA_FLAGS "-rdc=true --default-stream per-thread ${CUDA_PROFILING_OUTPUT} ${CUDA_SUPPRESS_WARNINGS}")
-# -G enables device-side debugging but significantly slows down the compilation. Use it only when necessary.
-set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -g -G")
-set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -DNDEBUG")
-set(CMAKE_CUDA_FLAGS_RELWITHDEBINFO "-O2 -g -lineinfo")
-
 ####################################################################################################################################################################################
 include_directories(${CMAKE_SOURCE_DIR}/util)
 
@@ -28,14 +19,15 @@ if (NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
 endif()
 message(STATUS "Using CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 
-# Apply the compiler flags based on the build type
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_DEBUG} -Xcompiler=${CMAKE_CXX_FLAGS_DEBUG}")
-elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_RELEASE} -Xcompiler=${CMAKE_CXX_FLAGS_RELEASE}")
-elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_RELWITHDEBINFO} -Xcompiler=${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
-endif()
+####################################################################################################################################################################################
+# Set the CUDA compiler flags for Debug and Release configurations
+set(CUDA_PROFILING_OUTPUT "--ptxas-options=-v")
+set(CUDA_SUPPRESS_WARNINGS "-diag-suppress 20091")
+set(CUDA_OPTIMIZATIONS "--split-compile=0 --threads=0")
+set(CMAKE_CUDA_FLAGS "-rdc=true --default-stream per-thread ${CUDA_PROFILING_OUTPUT} ${CUDA_SUPPRESS_WARNINGS} ${CUDA_OPTIMIZATIONS}")
+set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -g -lineinfo") # -G enables device-side debugging but significantly slows down the compilation
+set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -DNDEBUG")
+set(CMAKE_CUDA_FLAGS_RELWITHDEBINFO "-O2 -g -lineinfo")
 
 ####################################################################################################################################################################################
 set(SRC
@@ -59,14 +51,21 @@ set(SRC
     hash160_lookup.cuh
 )
 
+# Add device-side debugging (-G) only for ecc_helper.cu
+set_source_files_properties(hash160_lookup.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
+set_source_files_properties(ecc.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
+
 add_library(cuda_keys ${SRC})
 set_target_properties(cuda_keys PROPERTIES
     CUDA_RESOLVE_DEVICE_SYMBOLS ON
     CUDA_SEPARABLE_COMPILATION ON
     POSITION_INDEPENDENT_CODE ON
 )
-target_link_libraries(cuda_keys PRIVATE util)
-target_link_libraries(cuda_keys PRIVATE CUDA::cudart_static)
-target_link_libraries(cuda_keys PRIVATE Thrust)
+#target_compile_options(cuda_keys PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G0>)
 target_compile_options(cuda_keys PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall -Wextra>)
 
+target_link_libraries(cuda_keys PRIVATE util)
+target_link_libraries(cuda_keys PRIVATE Thrust)
+target_link_libraries(cuda_keys PRIVATE CUDA::cudart_static)
+
+####################################################################################################################################################################################

@@ -21,7 +21,7 @@ void statusCallback(const StatusInfo &info)
         , speedStr.c_str(), totalStr.c_str(), timeStr.c_str());
 }
 
-int main(const int argc, const char **argv)
+int main()
 {
     utils::initLogging();
     const Config config;

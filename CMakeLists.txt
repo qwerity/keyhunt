@@ -4,6 +4,12 @@ project(cuda-keyhunt-pvk CXX CUDA)
 ####################################################################################################################################################################################
 include(FetchContent)
 
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+endif()
+
 ####################################################################################################################################################################################
 # Set the C++ standard
 set(CMAKE_CXX_STANDARD 20)
@@ -23,7 +29,7 @@ include_directories(${Boost_INCLUDE_DIRS})
 # Set the C++ compiler flags for Debug and Release configurations
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -Wall")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -Wall")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O0 -g -Wall")
 
 ####################################################################################################################################################################################
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
