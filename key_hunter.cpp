@@ -6,6 +6,7 @@
 #include <set>
 
 #include <boost/log/trivial.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include "cuda/defines.cuh"
 #include "cuda/ecc.cuh"
@@ -217,14 +218,19 @@ struct KeyHunter::Impl
 
     void setHash160Targets(const std::vector<std::string>& ripemd160TargetsFilePaths)
     {
+        if (ripemd160TargetsFilePaths.empty())
+            return;
+
         std::vector<hash160> mHash160Targets;
         std::set<hash160> hash160Targets;
 
+        utils::Timer timer;
         for (const auto& hash160TargetsFile : mgContext.config.ripemd160TargetsFilePaths)
         {
             if (hash160TargetsFile.empty())
                 continue;
 
+            timer.start();
             std::ifstream inFile(hash160TargetsFile);
             if (!inFile.is_open())
             {
@@ -241,8 +247,7 @@ struct KeyHunter::Impl
                 if (line.empty())
                     continue;
 
-                utils::removeNewline(line);
-                line = utils::trim(line);
+                boost::algorithm::trim(line);
                 if (!line.empty())
                 {
                     hash160Targets.insert(utils::toHash160(line));
@@ -250,8 +255,9 @@ struct KeyHunter::Impl
                 }
             }
 
+            const auto fileReadTimeS = static_cast<float>(timer.getTime()) / 1000;
             BOOST_LOG_TRIVIAL(info) << "Loaded " << utils::formatThousands(insertedTargetsCount)
-                                    << " hashes, (" << utils::format("%.02f", static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB) << " Mb)";
+                                    << " hashes, (" << utils::format("%.02fs | %.02f", fileReadTimeS, static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB) << " Mb)";
         }
 
         mHash160Targets.assign(std::make_move_iterator(hash160Targets.begin()), std::make_move_iterator(hash160Targets.end()));

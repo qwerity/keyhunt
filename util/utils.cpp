@@ -49,15 +49,6 @@ namespace utils
         return getSystemTime() - _startTime;
     }
 
-    void sleep(int seconds)
-    {
-#ifdef _WIN32
-        Sleep(seconds * 1000);
-#else
-        ::sleep(seconds);
-#endif
-    }
-
     std::string formatThousands(const uint64_t x)
     {
         std::string s = std::to_string(x);
@@ -150,29 +141,6 @@ namespace utils
         return pos;
     }
 
-    bool readLinesFromStream(const std::string &fileName, std::vector<std::string> &lines)
-    {
-        std::ifstream inFile(fileName.c_str());
-        if (!inFile.is_open())
-        {
-            return false;
-        }
-        return readLinesFromStream(inFile, lines);
-    }
-
-    bool readLinesFromStream(std::istream &in, std::vector<std::string> &lines)
-    {
-        std::string line;
-        while (std::getline(in, line))
-        {
-            if (!line.empty())
-            {
-                lines.push_back(line);
-            }
-        }
-        return true;
-    }
-
     bool appendToFile(const std::string &fileName, const std::string &s)
     {
         std::ofstream outFile;
@@ -193,44 +161,6 @@ namespace utils
         }
         outFile << s;
         return true;
-    }
-
-    void removeNewline(std::string &s)
-    {
-        const size_t len = s.length();
-        int toRemove = 0;
-        if (len >= 2)
-        {
-            if (s[len - 2] == '\r' || s[len - 2] == '\n')
-            {
-                toRemove++;
-            }
-        }
-        if (len >= 1)
-        {
-            if (s[len - 1] == '\r' || s[len - 1] == '\n')
-            {
-                toRemove++;
-            }
-        }
-        if (toRemove)
-        {
-            s.erase(len - toRemove);
-        }
-    }
-
-    std::string toLower(const std::string &s)
-    {
-        std::string lowerCase = s;
-        std::ranges::transform(lowerCase, lowerCase.begin(), ::tolower);
-        return lowerCase;
-    }
-
-    std::string trim(const std::string &s, char c)
-    {
-        size_t left = s.find_first_not_of(c);
-        size_t right = s.find_last_not_of(c);
-        return s.substr(left, right - left + 1);
     }
 
     std::string convertToHexString(const uint32_t* arr, const uint32_t size)

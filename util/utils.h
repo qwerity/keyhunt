@@ -46,8 +46,6 @@ namespace utils
 
     uint64_t getSystemTime();
 
-    void sleep(int seconds);
-
     std::string formatThousands(uint64_t x);
     std::string formatSeconds(unsigned int seconds);
 
@@ -57,9 +55,6 @@ namespace utils
     bool isHex(const std::string &s);
 
     bool appendToFile(const std::string &fileName, const std::string &s);
-
-    bool readLinesFromStream(std::istream &in, std::vector<std::string> &lines);
-    bool readLinesFromStream(const std::string &fileName, std::vector<std::string> &lines);
 
     template <typename T>
     std::string format(T value, std::enable_if_t<std::is_integral_v<T>>* = nullptr)
@@ -86,13 +81,7 @@ namespace utils
         return buf.data();
     }
 
-    void removeNewline(std::string &s);
-
     inline unsigned int endian(unsigned int x) { return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24); }
-
-    std::string toLower(const std::string &s);
-
-    std::string trim(const std::string &s, char c = ' ');
 
     std::string convertToHexString(const uint32_t* arr, uint32_t size);
     void initLogging(const std::string& logFile = "app.log");
