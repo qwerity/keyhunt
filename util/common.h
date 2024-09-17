@@ -1,7 +1,6 @@
 #pragma once
 
 #include <boost/lockfree/spsc_queue.hpp>
-#include <thrust/host_vector.h>
 
 #include "cuda_util.h"
 #include "secp256k1.h"

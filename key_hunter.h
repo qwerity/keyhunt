@@ -1,6 +1,6 @@
 #pragma once
-#include <thread>
 
+#include <thrust/host_vector.h>
 #include "util/common.h"
 
 class KeyHunter

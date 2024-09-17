@@ -9,11 +9,6 @@ set(THRUST_CPP_DIALECT 20)
 include_directories(${CMAKE_SOURCE_DIR}/util)
 
 ####################################################################################################################################################################################
-# CUDA setup
-find_package(CUDAToolkit REQUIRED)
-find_package(Thrust 2 REQUIRED CONFIG)
-thrust_create_target(Thrust)
-
 if (NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES "52;61;70;86") # lowest CUDA 12 standard + lowest for integer intrinsics
 endif()
@@ -54,7 +49,6 @@ set(SRC
     atomic_list.cu
 )
 
-# Add device-side debugging (-G) only for ecc_helper.cu
 set_source_files_properties(hash160_lookup.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
 set_source_files_properties(ecc.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
 
@@ -64,11 +58,9 @@ set_target_properties(cuda_keys PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     POSITION_INDEPENDENT_CODE ON
 )
-#target_compile_options(cuda_keys PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G0>)
 target_compile_options(cuda_keys PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall -Wextra>)
 
 target_link_libraries(cuda_keys PRIVATE util)
-target_link_libraries(cuda_keys PRIVATE Thrust)
-target_link_libraries(cuda_keys PRIVATE CUDA::cudart_static)
+target_link_libraries(cuda_keys PRIVATE CUDA::cudart)
 
 ####################################################################################################################################################################################

@@ -20,8 +20,11 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(BUILD_TESTS "Build test_bitcoin executable." OFF)
 
 ####################################################################################################################################################################################
-find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log program_options)
+find_package(CUDAToolkit REQUIRED)
+include_directories(${CUDAToolkit_INCLUDE_DIRS})
 
+####################################################################################################################################################################################
+find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log program_options)
 include_directories(${Boost_INCLUDE_DIRS})
 
 ####################################################################################################################################################################################

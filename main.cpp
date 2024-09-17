@@ -3,6 +3,7 @@
 
 #include "util/utils.h"
 
+#include <thread>
 #include <boost/log/trivial.hpp>
 
 void statusCallback(const StatusInfo &info)

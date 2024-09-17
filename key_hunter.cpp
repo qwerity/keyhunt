@@ -1,5 +1,6 @@
 #include "key_hunter.h"
 
+#include <thread>
 #include <fstream>
 #include <utility>
 #include <functional>

@@ -11,8 +11,9 @@ __device__ void hashPublicKey(const uint256_t& x, const uint256_t& y, uint *dige
 {
     uint256_t hash;
     sha256PublicKey(x, y, hash);
+
     // Swap to little-endian
-    for (int i = 0; i < 8; i++)
+    for (uint i = 0; i < 8; ++i)
     {
         hash[i] = endian(hash[i]);
     }
@@ -23,8 +24,9 @@ __device__ void hashPublicKeyCompressed(const uint256_t& x, const uint yParity, 
 {
     uint256_t hash;
     sha256PublicKeyCompressed(x, yParity, hash);
+
     // Swap to little-endian
-    for (int i = 0; i < 8; i++)
+    for (uint i = 0; i < 8; ++i)
     {
         hash[i] = endian(hash[i]);
     }
@@ -58,7 +60,7 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
     uint *xPtr = d_publicKeyXPtr;
     uint *yPtr = d_publicKeyYPtr;
 
-    for (int step{0}; step < bitsNumber; ++step)
+    for (uint step{0}; step < bitsNumber; ++step)
     {
         const ecpoint_t& stepGPoint = d_gPointsPtr[step];
 
