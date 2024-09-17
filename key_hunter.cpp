@@ -62,22 +62,21 @@ struct KeyHunter::Impl
         }
     }
 
-    void signalStatusInfo(const uint64_t totalGeneratedPointsCounter, const uint64_t generatedPointsCounter, const uint32_t iteration, const uint32_t remainsIterations) const
+    void signalStatusInfo(const uint64_t keysNumberPerIteration, const uint32_t iteration, const uint32_t remainsIterations, const uint64_t elapsedTimeMs) const
     {
-        static uint64_t elapsedTimeMs{0};
-        elapsedTimeMs += mTimer.getTime();
-
+        static uint64_t periodElapsedTimeMS{0};
+        static uint64_t periodKeysNumber{0};
         static uint64_t totalTime{0};
         totalTime += elapsedTimeMs;
 
-        if (elapsedTimeMs >= mgContext.config.statusCallbackPeriodMs)
+        if (periodElapsedTimeMS >= mgContext.config.statusCallbackPeriodMs)
         {
-            const auto seconds = static_cast<double>(elapsedTimeMs) / 1000.0;
+            const auto periodElapsedTimeS = static_cast<double>(periodElapsedTimeMS) / 1000.0;
 
             StatusInfo info;
-            info.pointsPerSecond = (static_cast<double>(generatedPointsCounter) / seconds) / 1e6; // Mpoints per second
-            info.seconds = seconds;
-            info.total = totalGeneratedPointsCounter;
+            info.pointsPerSecond = (static_cast<double>(periodKeysNumber) / periodElapsedTimeS) / 1e6; // Mpoints per second
+            info.seconds = periodElapsedTimeS;
+            info.total = keysNumberPerIteration * iteration;
             info.totalTime = totalTime;
             info.device = mgContext.cudaInfo.id;
             info.deviceName = mgContext.cudaInfo.name;
@@ -87,8 +86,13 @@ struct KeyHunter::Impl
 
             mgContext.statusCallback(info);
 
-            elapsedTimeMs = 0;
-            mTimer.start();
+            periodElapsedTimeMS = 0;
+            periodKeysNumber = 0;
+        }
+        else
+        {
+            periodElapsedTimeMS += elapsedTimeMs;
+            periodKeysNumber += keysNumberPerIteration;
         }
     }
 
@@ -131,10 +135,9 @@ struct KeyHunter::Impl
             mTimer.start();
             cu::safeCall(mCuECC->calculatePublicKeys());
 
-            const uint64_t generatedPointsCounter = privateKeys.size();
-            signalStatusInfo(generatedPointsCounter, generatedPointsCounter, 0, 0);
+            signalStatusInfo(privateKeys.size(), 0, 0, mTimer.getTime());
 
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: done, generated " << utils::formatThousands(generatedPointsCounter) << "keys";
+            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: done, generated " << utils::formatThousands(privateKeys.size()) << "keys";
 
             mDone = true;
             pushResultsToQueue();
@@ -161,10 +164,15 @@ struct KeyHunter::Impl
 
         for (uint32_t i = 0; i < count; i++)
         {
-            // might be false-positive
+            // recheck the false-positive
             if (!mHash160Targets.contains(hash160(results[i].digest)))
             {
                 continue;
+            }
+
+            for (uint& d : results[i].digest)
+            {
+                d = utils::endian(d);
             }
 
             BOOST_LOG_TRIVIAL(info) << "hash: " << utils::convertToHexString(results[i].digest, 5)
@@ -183,14 +191,13 @@ struct KeyHunter::Impl
 
         mThread = std::thread([&]()
         {
-            uint64_t totalGeneratedPublicKeys{0};
             const uint32_t totalKeysToGenerate = (mgContext.config.keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : mgContext.config.keysNumberToGenerate;
 
             const uint32_t keysNumberPerIteration = mCuECC->getKeysNumberPerIteration();
             const uint32_t iterationsCount = totalKeysToGenerate / keysNumberPerIteration;
             const uint32_t remainder = totalKeysToGenerate - (iterationsCount * keysNumberPerIteration);
 
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: totalKeysToGenerate: " << totalKeysToGenerate << ", keysNumberPerIteration: " << keysNumberPerIteration;
+            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: totalKeysToGenerate: " << utils::formatThousands(totalKeysToGenerate) << ", keysNumberPerIteration: " << utils::formatThousands(keysNumberPerIteration);
 
             const uint32_t finalIterationsCount = iterationsCount + (remainder > 0 ? 1 : 0);
             BOOST_LOG_TRIVIAL(info) << "KeyGenerator: total iterations: " << finalIterationsCount << ", remaining data: " << remainder;
@@ -206,8 +213,7 @@ struct KeyHunter::Impl
                     cu::safeCall(mCuECC->calculatePublicKeys());
                 }
 
-                totalGeneratedPublicKeys += keysNumberPerIteration;
-                signalStatusInfo(totalGeneratedPublicKeys, keysNumberPerIteration, mIteration, remainsIterations);
+                signalStatusInfo(keysNumberPerIteration, mIteration, remainsIterations, mTimer.getTime());
 
                 // pushResultsToQueue();
                 pushResultsToQueue2(mIteration);
@@ -215,7 +221,7 @@ struct KeyHunter::Impl
                 ++mIteration;
             }
 
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: done, generated " << utils::formatThousands(totalGeneratedPublicKeys) << " keys";
+            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: done, generated " << utils::formatThousands(keysNumberPerIteration * (mIteration - 1)) << " keys";
             mIteration = 0;
             mDone = true;
         });
