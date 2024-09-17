@@ -21,8 +21,8 @@ struct ECC::Impl
 
     uint mKeysNumberPerIteration{mGridSize * mBlockSize * mPointsPerThread};
 
-    thrust::udevice_vector<uint> d_publicKeysX;
-    thrust::udevice_vector<uint> d_publicKeysY;
+    thrust::udevice_vector<uint256_t> d_publicKeysX;
+    thrust::udevice_vector<uint256_t> d_publicKeysY;
 
     thrust::udevice_vector<uint256_t> d_privateKeys;
 
@@ -166,15 +166,15 @@ struct ECC::Impl
     {
         const uint keysNumber = getKeysNumberPerIteration();
 
-        d_publicKeysX.resize(keysNumber * 8);
+        d_publicKeysX.resize(keysNumber);
 
-        const uint* d_publicKeysXRawPtr = thrust::raw_pointer_cast(d_publicKeysX.data());
-        cu::safeCall(cudaMemcpyToSymbol(d_publicKeyXPtr, &d_publicKeysXRawPtr, sizeof(uint *)));
+        const uint256_t* d_publicKeysXRawPtr = thrust::raw_pointer_cast(d_publicKeysX.data());
+        cu::safeCall(cudaMemcpyToSymbol(d_publicKeyXPtr, &d_publicKeysXRawPtr, sizeof(uint256_t *)));
 
-        d_publicKeysY.resize(keysNumber * 8);
+        d_publicKeysY.resize(keysNumber);
 
-        const uint* d_publicKeysYRawPtr = thrust::raw_pointer_cast(d_publicKeysY.data());
-        cu::safeCall(cudaMemcpyToSymbol(d_publicKeyYPtr, &d_publicKeysYRawPtr, sizeof(uint *)));
+        const uint256_t* d_publicKeysYRawPtr = thrust::raw_pointer_cast(d_publicKeysY.data());
+        cu::safeCall(cudaMemcpyToSymbol(d_publicKeyYPtr, &d_publicKeysYRawPtr, sizeof(uint256_t *)));
     }
 
     void allocateMultChainDeviceMemory()
@@ -281,8 +281,8 @@ struct ECC::Impl
 
     cudaError_t getResults(thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> &results) const
     {
-        thrust::host_vector<uint> h_publicKeysX = d_publicKeysX;
-        thrust::host_vector<uint> h_publicKeysY = d_publicKeysY;
+        thrust::host_vector<uint256_t> h_publicKeysX = d_publicKeysX;
+        thrust::host_vector<uint256_t> h_publicKeysY = d_publicKeysY;
         thrust::host_vector<uint256_t> h_privateKeys = d_privateKeys;
 
         for (uint grid = 0; grid < mGridSize; ++grid)
@@ -291,11 +291,12 @@ struct ECC::Impl
             {
                 for (uint idx = 0; idx < mPointsPerThread; ++idx)
                 {
-                    secp256k1::uint256 x = readBigInt(h_publicKeysX.data(), grid, block, idx);
-                    secp256k1::uint256 y = readBigInt(h_publicKeysY.data(), grid, block, idx);
+                    const auto index = getIndex(grid, block, idx);
 
-                    const auto privateKeyIndex = getIndex(grid, block, idx);
-                    results.push_back({h_privateKeys[privateKeyIndex], {x, y}});
+                    const auto x = secp256k1::uint256(h_publicKeysX[index].v, secp256k1::uint256::BigEndian);
+                    const auto y = secp256k1::uint256(h_publicKeysY[index].v, secp256k1::uint256::BigEndian);
+
+                    results.push_back({h_privateKeys[index], {x, y}});
                 }
             }
         }
@@ -305,8 +306,9 @@ struct ECC::Impl
 
     cudaError_t calculatePublicKeys()
     {
-        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), 0xFFFFFFFF);
-        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), 0xFFFFFFFF);
+        uint256_t infinite{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), infinite);
+        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), infinite);
 
         constexpr uint mSharedMemSize{0};
         multiplyStepKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(thrust::raw_pointer_cast(d_privateKeys.data()));
@@ -333,8 +335,8 @@ struct ECC::Impl
 
     bool selfTest(const thrust::host_vector<secp256k1::uint256> &privateKeys) const
     {
-        thrust::host_vector<uint> h_publicKeysX = d_publicKeysX;
-        thrust::host_vector<uint> h_publicKeysY = d_publicKeysY;
+        thrust::host_vector<uint256_t> h_publicKeysX = d_publicKeysX;
+        thrust::host_vector<uint256_t> h_publicKeysY = d_publicKeysY;
 
         bool result{true};
         for (uint grid = 0; grid < mGridSize; ++grid)
@@ -346,8 +348,8 @@ struct ECC::Impl
                     const auto index = getIndex(grid, block, idx);
                     const secp256k1::uint256 privateKey = privateKeys[index];
 
-                    secp256k1::uint256 x = readBigInt(h_publicKeysX.data(), grid, block, idx);
-                    secp256k1::uint256 y = readBigInt(h_publicKeysY.data(), grid, block, idx);
+                    const auto x = secp256k1::uint256(h_publicKeysX[index].v, secp256k1::uint256::BigEndian);
+                    const auto y = secp256k1::uint256(h_publicKeysY[index].v, secp256k1::uint256::BigEndian);
 
                     const secp256k1::ecpoint pGPU(x, y);
                     if (!secp256k1::pointExists(pGPU))

@@ -33,7 +33,7 @@ __device__ void hashPublicKeyCompressed(const uint256_t& x, const uint yParity, 
     ripemd160sha256NoFinal(hash, digestOut);
 }
 
-__device__ void setResultFound(const uint idx, const bool compressed, const uint256_t& privateKey, const uint32_t digest[5])
+__device__ void setResultFound(const uint idx, const bool compressed, const uint256_t& privateKey, const uint256_t& publicX, const uint32_t digest[5])
 {
     Hash160SearchResult r;
     r.block = blockIdx.x;
@@ -45,9 +45,33 @@ __device__ void setResultFound(const uint idx, const bool compressed, const uint
     {
         r.privateKey[i] = endian(privateKey[i]);
     }
+
+    for (uint i = 0; i < 8; ++i)
+    {
+        r.publicXKey[i] = endian(publicX[i]);
+    }
     doRMD160FinalRound(digest, r.digest);
 
     atomicListAdd(&r, sizeof(r));
+}
+
+__device__ void print(uint256_t& x, uint step, uint idx, char op)
+{
+    if (idx != 0)
+        return;
+
+    printf("op: %c step: %u, idx: %u, x: ", op, step, idx);
+    for (size_t i = 0; i < 8; ++i)
+    {
+        // Print the 4 bytes of each uint32_t directly
+        printf("%02x %02x %02x %02x ",
+               (x[i] & 0x000000FF),        // Least significant byte
+               (x[i] & 0x0000FF00) >> 8,   // Second byte
+               (x[i] & 0x00FF0000) >> 16,  // Third byte
+               (x[i] & 0xFF000000) >> 24   // Most significant byte
+        );
+    }
+    printf("\n");
 }
 
 __global__ void multiplyStepKernel(const uint256_t *privateKeys)
@@ -55,10 +79,7 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
     // 256 is a 256 bit in a private key
     constexpr uint bitsNumber{256};
 
-    uint256_t p;
-
-    uint *xPtr = d_publicKeyXPtr;
-    uint *yPtr = d_publicKeyYPtr;
+    uint256_t privateKey;
 
     for (uint step{0}; step < bitsNumber; ++step)
     {
@@ -70,13 +91,13 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
 
         for(uint i = 0; i < d_pointsPerThread; ++i)
         {
-            uint256_t x;
-            readInt(xPtr, i, x);
+            uint256_t publicX;
+            readUInt256(d_publicKeyXPtr, i, publicX);
 
-            readUInt256(privateKeys, i, p);
-            if (const uint bit = p[7 - step / 32] & 1 << (step % 32); bit != 0 && !isInfinity(x))
+            readUInt256(privateKeys, i, privateKey);
+            if (const uint bit = privateKey[7 - step / 32] & 1 << (step % 32); bit != 0 && !isInfinity(publicX))
             {
-                beginBatchAddWithDouble(&stepGPoint, x, d_multChainPtr, batchIdx, inverse);
+                beginBatchAddWithDouble(&stepGPoint, publicX, d_multChainPtr, batchIdx, inverse);
                 batchIdx++;
             }
         }
@@ -85,22 +106,22 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
 
         for(int i = d_pointsPerThread - 1; i >= 0; --i)
         {
-            readUInt256(privateKeys, i, p);
-            if (const uint bit = p[7 - step / 32] & 1 << (step % 32); bit != 0)
+            readUInt256(privateKeys, i, privateKey);
+            if (const uint bit = privateKey[7 - step / 32] & 1 << (step % 32); bit != 0)
             {
                 uint256_t newX;
                 uint256_t newY;
 
-                uint256_t x;
-                readInt(xPtr, i, x);
+                uint256_t publicX;
+                readUInt256(d_publicKeyXPtr, i, publicX);
 
-                if (!isInfinity(x))
+                if (!isInfinity(publicX))
                 {
-                    uint256_t y;
-                    readInt(yPtr, i, y);
+                    uint256_t publicY;
+                    readUInt256(d_publicKeyYPtr, i, publicY);
 
                     batchIdx--;
-                    completeBatchAddWithDouble(&stepGPoint, x, y, batchIdx, d_multChainPtr, inverse, newX, newY);
+                    completeBatchAddWithDouble(&stepGPoint, publicX, publicY, batchIdx, d_multChainPtr, inverse, newX, newY);
                 }
                 else
                 {
@@ -108,8 +129,8 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
                     newY = stepGPoint.y;
                 }
 
-                writeInt(newX, i, xPtr);
-                writeInt(newY, i, yPtr);
+                writeUInt256(newX, i, d_publicKeyXPtr);
+                writeUInt256(newY, i, d_publicKeyYPtr);
             }
         }
     }
@@ -119,10 +140,10 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
 
     for(uint i = 0; i < d_pointsPerThread; ++i)
     {
-        readUInt256(privateKeys, i, p);
+        readUInt256(privateKeys, i, privateKey);
 
-        uint256_t x;
-        readInt(xPtr, i, x);
+        uint256_t publicX;
+        readUInt256(d_publicKeyXPtr, i, publicX);
 
         const uint base = i * totalThreads;
         const uint index = base + threadId;
@@ -130,22 +151,21 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
 
         if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
         {
-            hashPublicKeyCompressed(x, readIntLSW(yPtr, i), hash160.h);
+            hashPublicKeyCompressed(publicX, readUInt256LSW(d_publicKeyYPtr, i), hash160.h);
             if (checkHash(hash160))
             {
-                setResultFound(index, true, p, hash160.h);
+                setResultFound(index, true, privateKey, publicX, hash160.h);
             }
         }
         if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
         {
-            uint256_t y;
-            readInt(yPtr, i, y);
+            uint256_t publicY;
+            readUInt256(d_publicKeyYPtr, i, publicY);
 
-            hashPublicKey(x, y, hash160.h);
+            hashPublicKey(publicX, publicY, hash160.h);
             if (checkHash(hash160))
             {
-                // printf("found match %u\n", index);
-                setResultFound(index, false, p, hash160.h);
+                setResultFound(index, false, privateKey, publicX, hash160.h);
             }
         }
     }

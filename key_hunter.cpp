@@ -176,8 +176,9 @@ struct KeyHunter::Impl
                 d = utils::endian(d);
             }
 
-            BOOST_LOG_TRIVIAL(info) << "hash: " << utils::convertToHexString(results[i].digest, 5)
-                                    << ", private key: " << utils::convertToHexString(results[i].privateKey, 8)
+            BOOST_LOG_TRIVIAL(info) << " private key: " << utils::convertToHexString(results[i].privateKey, 8)
+                                    << ", public X key: " << utils::convertToHexString(results[i].publicXKey, 8)
+                                    << ", hash: " << utils::convertToHexString(results[i].digest, 5)
                                     << ", iteration: " << iteration << ", index: " << results[i].idx << ", compressed: " << results[i].compressed;
         }
     }

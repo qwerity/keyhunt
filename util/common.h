@@ -46,7 +46,8 @@ struct Hash160SearchResult
 
     bool compressed{false};
     uint32_t privateKey[8]{};
-    // uint32_t publicKey[16]{};
+    uint32_t publicXKey[8]{};
+    uint32_t publicYKey[8]{};
     uint digest[5]{};
 };
 

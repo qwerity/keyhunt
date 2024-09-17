@@ -40,13 +40,13 @@ __device__ __forceinline__ void readInt(const uint *data, const uint depth, uint
     const uint totalThreads = gridDim.x * blockDim.x;
     const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
 
-    const uint base = depth * totalThreads * 2;
+    const uint base = depth * totalThreads;
     const uint index = base + threadId;
 
     const auto x_uint4 = reinterpret_cast<uint4 *>(x.v);
     const auto data_uint4 = reinterpret_cast<const uint4 *>(data);
-    x_uint4[0] = data_uint4[index];
-    x_uint4[1] = data_uint4[index + totalThreads];
+    x_uint4[0] = data_uint4[index*2];
+    x_uint4[1] = data_uint4[index*2 + 1];
 }
 
 __device__ __forceinline__ uint readIntLSW(const uint *data, const uint depth)
@@ -54,11 +54,11 @@ __device__ __forceinline__ uint readIntLSW(const uint *data, const uint depth)
     const uint totalThreads = gridDim.x * blockDim.x;
     const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
 
-    const uint base = depth * totalThreads * 2;
-    const uint index = base + threadId + totalThreads;
+    const uint base = depth * totalThreads;
+    const uint index = base + threadId;
 
     const auto data_uint4 = reinterpret_cast<const uint4 *>(data);
-    return data_uint4[index].w;
+    return data_uint4[index*2 + 1].w;
 }
 
 /**
@@ -69,14 +69,25 @@ __device__ __forceinline__ void writeInt(const uint256_t& x, const uint depth, u
     const uint totalThreads = gridDim.x * blockDim.x;
     const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
 
-    const uint base = depth * totalThreads * 2;
+    const uint base = depth * totalThreads;
     const uint index = base + threadId;
 
     const auto x_uint4 = reinterpret_cast<const uint4 *>(x.v);
     const auto data_uint4 = reinterpret_cast<uint4 *>(data);
 
-    data_uint4[index] = x_uint4[0];
-    data_uint4[index + totalThreads] = x_uint4[1];
+    data_uint4[index*2] = x_uint4[0];
+    data_uint4[index*2 + 1] = x_uint4[1];
+}
+
+__device__ __forceinline__ uint readUInt256LSW(const uint256_t *data, const uint depth)
+{
+    const uint totalThreads = gridDim.x * blockDim.x;
+    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint base = depth * totalThreads;
+    const uint index = base + threadId;
+
+    return data[index].v[7];
 }
 
 __device__ __forceinline__ void readUInt256(const uint256_t *data, const uint depth, uint256_t& x)
@@ -381,7 +392,7 @@ __device__ __forceinline__ void mulModP(const uint256_t& a, const uint256_t& b, 
 
     // At this point we have 16 32-bit words representing a 512-bit value
     // high[0 ... 7] and c[0 ... 7]
-    const uint s{977};
+    constexpr uint s{977};
     // Store high[6] and high[7] since they will be overwritten
     uint high7 = high[7];
     uint high6 = high[6];
@@ -588,7 +599,7 @@ __device__ __forceinline__ void beginBatchAdd(const ecpoint_t *gPoint, const uin
     writeUInt256(inverse, batchIdx, chain);
 }
 
-__device__ __forceinline__ void completeBatchAdd(const ecpoint_t *gPoint, const uint256_t& publicX, const uint256_t& publicY, const int batchIdx, uint256_t *chain, uint256_t& inverse, uint256_t& newX, uint256_t& newY)
+__device__ __forceinline__ void completeBatchAdd(const ecpoint_t *gPoint, const uint256_t& publicX, const uint256_t& publicY, const int batchIdx, const uint256_t *chain, uint256_t& inverse, uint256_t& newX, uint256_t& newY)
 {
     uint256_t s;
     if (batchIdx >= 1)

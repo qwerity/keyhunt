@@ -51,6 +51,8 @@ set(SRC
 
 set_source_files_properties(hash160_lookup.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
 set_source_files_properties(ecc.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
+set_source_files_properties(secp256k1.cuh PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
+set_source_files_properties(hash160_lookup.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
 
 add_library(cuda_keys ${SRC})
 set_target_properties(cuda_keys PROPERTIES

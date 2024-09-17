@@ -9,8 +9,8 @@ __constant__ inline int d_publicKeyCompressionTypeToCheck{PointCompressionType::
 
 __constant__ inline uint d_pointsPerThread{};
 
-__constant__ inline uint *d_publicKeyXPtr{};
-__constant__ inline uint *d_publicKeyYPtr{};
+__constant__ inline uint256_t *d_publicKeyXPtr{};
+__constant__ inline uint256_t *d_publicKeyYPtr{};
 
 __constant__ inline uint256_t *d_multChainPtr{};
 __constant__ inline ecpoint_t *d_gPointsPtr{};
