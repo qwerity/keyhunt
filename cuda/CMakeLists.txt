@@ -22,9 +22,9 @@ message(STATUS "Using CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 ####################################################################################################################################################################################
 # Set the CUDA compiler flags for Debug and Release configurations
 set(CUDA_PROFILING_OUTPUT "--ptxas-options=-v")
-set(CUDA_SUPPRESS_WARNINGS "-diag-suppress 20091")
-set(CUDA_OPTIMIZATIONS "--split-compile=0 --threads=0")
-set(CMAKE_CUDA_FLAGS "-rdc=true --default-stream per-thread ${CUDA_PROFILING_OUTPUT} ${CUDA_SUPPRESS_WARNINGS} ${CUDA_OPTIMIZATIONS}")
+#set(CUDA_SUPPRESS_WARNINGS "-diag-suppress 20091")
+set(NVCC_COMPILATION_FLAGS "--split-compile=0 --threads=0")
+set(CMAKE_CUDA_FLAGS "-rdc=true --default-stream per-thread ${CUDA_PROFILING_OUTPUT} ${CUDA_SUPPRESS_WARNINGS} ${NVCC_COMPILATION_FLAGS}")
 set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -g -lineinfo") # -G enables device-side debugging but significantly slows down the compilation
 set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -DNDEBUG")
 set(CMAKE_CUDA_FLAGS_RELWITHDEBINFO "-O2 -g -lineinfo")

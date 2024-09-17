@@ -21,33 +21,33 @@ __constant__ constexpr uint d_IV[8] = {
 };
 
 
-__host__ __device__ __forceinline__ uint rotr(const uint x, const int n)
+__device__ __forceinline__ uint rotr(const uint x, const int n)
 {
     return (x >> n) ^ (x << (32 - n));
 }
 
-__host__ __device__ __forceinline__ uint MAJ(const uint a, const uint b, const uint c)
+__device__ __forceinline__ uint MAJ(const uint a, const uint b, const uint c)
 {
     return (a & b) ^ (a & c) ^ (b & c);
 }
 
-__host__ __device__ __forceinline__ uint CH(const uint e, const uint f, const uint g)
+__device__ __forceinline__ uint CH(const uint e, const uint f, const uint g)
 {
     return (e & f) ^ (~e & g);
 }
 
-__host__ __device__ __forceinline__ uint s0(const uint x)
+__device__ __forceinline__ uint s0(const uint x)
 {
     return rotr(x, 7) ^ rotr(x, 18) ^ (x >> 3);
 }
 
-__host__ __device__ __forceinline__ uint s1(const uint x)
+__device__ __forceinline__ uint s1(const uint x)
 {
     return rotr(x, 17) ^ rotr(x, 19) ^ (x >> 10);
 }
 
 
-__host__ __device__ __forceinline__ void roundSha256(const uint a, const uint b, const uint c, uint &d, const uint e, const uint f, const uint g, uint &h, const uint m, const uint k)
+__device__ __forceinline__ void roundSha256(const uint a, const uint b, const uint c, uint &d, const uint e, const uint f, const uint g, uint &h, const uint m, const uint k)
 {
     const uint s = CH(e, f, g) + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + k + m;
 
@@ -56,7 +56,7 @@ __host__ __device__ __forceinline__ void roundSha256(const uint a, const uint b,
     h += s + MAJ(a, b, c) + (rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22));
 }
 
-__host__ __device__ __forceinline__ void sha256PublicKey(const uint256_t& x, const uint256_t& y, uint256_t& digest)
+__device__ __forceinline__ void sha256PublicKey(const uint256_t& x, const uint256_t& y, uint256_t& digest)
 {
     uint w[16];
 
@@ -358,7 +358,7 @@ __host__ __device__ __forceinline__ void sha256PublicKey(const uint256_t& x, con
     digest[7] = tmp[7] + h;
 }
 
-__host__ __device__ __forceinline__
+__device__ __forceinline__
 void sha256PublicKeyCompressed(const uint256_t& x, const uint yParity, uint256_t& digest)
 {
     uint w[16];
@@ -514,7 +514,7 @@ void sha256PublicKeyCompressed(const uint256_t& x, const uint yParity, uint256_t
     digest[7] = h + d_IV[7];
 }
 
-__host__ __device__ __forceinline__ void sha256PrivateKeyBase(const uint2& p, uint256_t& digest)
+__device__ __forceinline__ void sha256PrivateKeyBase(const uint2& p, uint256_t& digest)
 {
     uint w[16]{};
 

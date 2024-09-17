@@ -14,7 +14,7 @@ struct PrivateKeyForXWithRandomYFunctor
     __host__ __device__
      explicit PrivateKeyForXWithRandomYFunctor(const uint x, const uint yPartInc) : xPart{x}, yPartIncrementBy{yPartInc} {}
 
-    __host__ __device__
+    __device__
     uint256_t operator()(const uint& i) const
     {
         uint2 p;

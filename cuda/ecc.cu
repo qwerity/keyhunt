@@ -167,13 +167,11 @@ struct ECC::Impl
         const uint keysNumber = getKeysNumberPerIteration();
 
         d_publicKeysX.resize(keysNumber * 8);
-        thrust::fill(thrust::cuda_cub::par.on(mInitStream), d_publicKeysX.begin(), d_publicKeysX.end(), 0xFFFFFFFF);
 
         const uint* d_publicKeysXRawPtr = thrust::raw_pointer_cast(d_publicKeysX.data());
         cu::safeCall(cudaMemcpyToSymbol(d_publicKeyXPtr, &d_publicKeysXRawPtr, sizeof(uint *)));
 
         d_publicKeysY.resize(keysNumber * 8);
-        thrust::fill(thrust::cuda_cub::par.on(mInitStream), d_publicKeysY.begin(), d_publicKeysY.end(), 0xFFFFFFFF);
 
         const uint* d_publicKeysYRawPtr = thrust::raw_pointer_cast(d_publicKeysY.data());
         cu::safeCall(cudaMemcpyToSymbol(d_publicKeyYPtr, &d_publicKeysYRawPtr, sizeof(uint *)));
@@ -307,14 +305,14 @@ struct ECC::Impl
 
     cudaError_t calculatePublicKeys()
     {
-        thrust::fill(thrust::cuda_cub::par.on(mInitStream), d_publicKeysX.begin(), d_publicKeysX.end(), 0xFFFFFFFF);
-        thrust::fill(thrust::cuda_cub::par.on(mInitStream), d_publicKeysY.begin(), d_publicKeysY.end(), 0xFFFFFFFF);
+        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), 0xFFFFFFFF);
+        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), 0xFFFFFFFF);
 
         constexpr uint mSharedMemSize{0};
         multiplyStepKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(thrust::raw_pointer_cast(d_privateKeys.data()));
 
         // Wait for kernel to complete
-        const cudaError_t err = cudaDeviceSynchronize();
+        const cudaError_t err = cudaStreamSynchronize(mGeneratorStream);
 
         fflush(stdout);
 
