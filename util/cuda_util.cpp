@@ -93,7 +93,7 @@ namespace cu
         printf("Name:   %s\n", info.name.c_str());
         printf("Minor: %d, Major: %d\n", info.major, info.minor);
         printf("warpSize: %d\n", info.warpSize);
-        printf("Memory: %luMB\n", info.mem / (static_cast<uint64_t>(1024) * 1024));
+        printf("Memory: %lluMB\n", info.mem / (static_cast<uint64_t>(1024) * 1024));
         printf("multiProcessorCount: %d\n", info.multiProcessorCount);
         printf("maxThreadsPerMultiProcessor: %d\n", info.maxThreadsPerMultiProcessor);
         printf("globalL1CacheSupported: %d\n", info.globalL1CacheSupported);
