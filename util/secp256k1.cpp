@@ -2,16 +2,12 @@
 #include "secp256k1.h"
 
 #include <algorithm>
-#include <cstring>
-#include <cstdio>
 #include <iomanip>
-
-#include "common.h"
 
 using namespace secp256k1;
 
-static uint256 _ONE{1};
-static uint256 _ZERO{0};
+static uint256 uint256_ZERO{0};
+static uint256 uint256_ONE{1};
 
 inline void addc(uint32_t a, uint32_t b, uint32_t carryIn, uint32_t &sum, int &carryOut)
 {
@@ -278,8 +274,8 @@ uint256 secp256k1::invModP(const uint256 &x)
 {
     uint256 u{x};
     uint256 v{P};
-    uint256 x1{_ONE};
-    uint256 x2{_ZERO};
+    uint256 x1{uint256_ONE};
+    uint256 x2{uint256_ZERO};
 
     // Signed part of the 256-bit words
     int x1Signed = 0;
@@ -535,7 +531,7 @@ std::string secp256k1::uint256::toString(int) const
     for (int i = 7; i >= 0; i--)
     {
         char hex[9]{};
-        sprintf(hex, "%.8X", v[i]);
+        snprintf(hex, 8, "%.8X", v[i]);
         s += std::string(hex);
     }
     return s;

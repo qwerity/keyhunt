@@ -1,11 +1,9 @@
 #include "crypto_util.h"
 #include "address_util.h"
 #include "secp256k1.h"
-#include "common.h"
 #include "utils.h"
 
-#include <cstring>
-#include <string>
+#include <algorithm>
 
 bool Address::verifyAddress(const std::string &address)
 {
@@ -33,7 +31,7 @@ bool Address::verifyAddress(const std::string &address)
     return crypto::checksum(hash) == checksum;
 }
 
-std::string Address::fromPublicKey(const secp256k1::ecpoint &p, bool compressed)
+std::string Address::fromPublicKey(const secp256k1::ecpoint &p, const bool compressed)
 {
     uint32_t xWords[8]{};
     uint32_t yWords[8]{};

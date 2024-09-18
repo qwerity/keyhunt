@@ -18,6 +18,7 @@ set(SRC_FILES
     sha256.cpp
 
     common.h
+    common_host.h
 
     cuda_util.cpp
     cuda_util.h
