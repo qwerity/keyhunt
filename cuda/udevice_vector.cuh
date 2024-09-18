@@ -1,13 +1,8 @@
 #pragma once
 
-// #pragma hd_warning_disable
-
 #include <thrust/device_vector.h>
 
-#include <cassert>
-#include <cuda_runtime_api.h>
 #include <thrust/device_allocator.h>
-#include <thrust/functional.h>
 #include <thrust/host_vector.h>
 
 namespace thrust
@@ -28,14 +23,14 @@ namespace thrust
         // marked __host__ __device__, but the current Thrust device_allocator
         // can only be constructed and destroyed on the host; therefore, we
         // define these as host only
-        __host__ uninitialized_allocator() = default;
+        uninitialized_allocator() = default;
 
-        __host__ uninitialized_allocator(const uninitialized_allocator &other)
+        uninitialized_allocator(const uninitialized_allocator &other)
             : thrust::device_allocator<T>(other)
         {
         }
 
-        __host__ ~uninitialized_allocator() = default;
+        ~uninitialized_allocator() = default;
 
         // for correctness, you should also redefine rebind when you inherit
         // from an allocator type; this way, if the allocator is rebound somewhere,

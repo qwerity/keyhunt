@@ -14,7 +14,7 @@ struct alignas(4 * 8) uint256_t
 {
     alignas(4 * 8) uint32_t v[8]{};
 
-    __host__ __device__ __forceinline__
+    __forceinline__
     uint256_t() = default;
 
     __host__ __device__ __forceinline__
@@ -114,7 +114,7 @@ struct alignas(2 * 4 * 8) ecpoint_t
     uint256_t x;
     uint256_t y;
 
-    __host__ __device__ __forceinline__
+    __forceinline__
     constexpr ecpoint_t() = default;
 
     // assign as big endian
@@ -126,7 +126,7 @@ struct hash160
 {
     uint32_t h[5]{};
 
-    __host__ __device__  hash160() = default;
+    hash160() = default;
 
     __host__ __device__
     explicit hash160(const uint32_t hash[5])
@@ -156,7 +156,6 @@ struct hash160
         return false;  // Return false if all elements are equal
     }
 
-    __host__ __device__
     bool operator==(const hash160& other) const = default;
 };
 

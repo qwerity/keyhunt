@@ -1,7 +1,5 @@
 #include "atomic_list.cuh"
 
-#include <cuda_runtime.h>
-
 static __constant__ void *_LIST_BUF[1];
 static __constant__ uint32_t *_LIST_SIZE[1];
 

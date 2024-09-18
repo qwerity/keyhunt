@@ -1,6 +1,8 @@
 #pragma once
 #include "defines.cuh"
-#include "common.h"
+
+#include "util/common.h"
+
 
 __global__ void multiplyStepKernel(const uint256_t *privateKeys);
 

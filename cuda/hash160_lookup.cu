@@ -1,6 +1,6 @@
 #include "hash160_lookup.cuh"
 
-#include "cuda_util.h"
+#include "util/cuda_util.h"
 #include "ptx.cuh"
 
 constexpr uint32_t MAX_TARGETS_CONSTANT_MEM{16};
