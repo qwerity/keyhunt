@@ -3,33 +3,33 @@
 #include <cuda_runtime.h>
 
 static __constant__ void *_LIST_BUF[1];
-static __constant__ uint *_LIST_SIZE[1];
+static __constant__ uint32_t *_LIST_SIZE[1];
 
 
-__device__ void atomicListAdd(const void *info, const uint size)
+__device__ void atomicListAdd(const void *info, const uint32_t size)
 {
-    const uint count = atomicAdd(_LIST_SIZE[0], 1);
+    const uint32_t count = atomicAdd(_LIST_SIZE[0], 1);
     unsigned char *ptr = static_cast<unsigned char *>(_LIST_BUF[0]) + count * size;
     memcpy(ptr, info, size);
 }
 
-static cudaError_t setListPtr(void *ptr, uint *numResults)
+static cudaError_t setListPtr(void *ptr, uint32_t *numResults)
 {
     if (const cudaError_t err = cudaMemcpyToSymbol(_LIST_BUF, &ptr, sizeof(void *)))
     {
         return err;
     }
 
-    return cudaMemcpyToSymbol(_LIST_SIZE, &numResults, sizeof(uint *));
+    return cudaMemcpyToSymbol(_LIST_SIZE, &numResults, sizeof(uint32_t *));
 }
 
-cudaError_t CudaAtomicList::init(uint itemSize, uint maxItems)
+cudaError_t CudaAtomicList::init(uint32_t itemSize, uint32_t maxItems)
 {
     _itemSize = itemSize;
 
     // The number of results found in the most recent kernel run
     _countHostPtr = nullptr;
-    cudaError_t err = cudaHostAlloc(&_countHostPtr, sizeof(uint), cudaHostAllocMapped);
+    cudaError_t err = cudaHostAlloc(&_countHostPtr, sizeof(uint32_t), cudaHostAllocMapped);
     if (err)
     {
         goto end;
@@ -69,7 +69,7 @@ end:
     return err;
 }
 
-uint CudaAtomicList::size() const
+uint32_t CudaAtomicList::size() const
 {
     return *_countHostPtr;
 }
@@ -79,7 +79,7 @@ void CudaAtomicList::clear() const
     *_countHostPtr = 0;
 }
 
-uint CudaAtomicList::read(void *dest, uint count) const
+uint32_t CudaAtomicList::read(void *dest, uint32_t count) const
 {
     if (count >= *_countHostPtr)
     {

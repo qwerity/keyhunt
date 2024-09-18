@@ -171,9 +171,9 @@ struct KeyHunter::Impl
                 continue;
             }
 
-            for (uint& d : results[i].digest)
+            for (uint32_t k{0}; k < 5; ++k)
             {
-                d = utils::endian(d);
+                results[i].digest[k] = utils::endian(results[i].digest[k]);
             }
 
             BOOST_LOG_TRIVIAL(info) << " private key: " << utils::convertToHexString(results[i].privateKey, 8)
@@ -182,7 +182,6 @@ struct KeyHunter::Impl
                                     << ", iteration: " << iteration << ", index: " << results[i].idx << ", compressed: " << results[i].compressed;
         }
     }
-
 
     void findPublicHashWithPrivateDefinedXRandomY()
     {

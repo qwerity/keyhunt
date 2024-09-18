@@ -15,11 +15,11 @@ struct ECC::Impl
     cudaStream_t mGeneratorStream{};
     cudaStream_t mInitStream{};
 
-    uint mGridSize{32};
-    uint mBlockSize{512};
-    uint mPointsPerThread{32};
+    uint32_t mGridSize{32};
+    uint32_t mBlockSize{512};
+    uint32_t mPointsPerThread{32};
 
-    uint mKeysNumberPerIteration{mGridSize * mBlockSize * mPointsPerThread};
+    uint32_t mKeysNumberPerIteration{mGridSize * mBlockSize * mPointsPerThread};
 
     thrust::udevice_vector<uint256_t> d_publicKeysX;
     thrust::udevice_vector<uint256_t> d_publicKeysY;
@@ -51,13 +51,13 @@ struct ECC::Impl
         cudaStreamDestroy(mInitStream);
     }
 
-    void setPointsPerThread(const uint value)
+    void setPointsPerThread(const uint32_t value)
     {
         mPointsPerThread = value;
-        cu::safeCall(cudaMemcpyToSymbol(d_pointsPerThread, &mPointsPerThread, sizeof(uint)));
+        cu::safeCall(cudaMemcpyToSymbol(d_pointsPerThread, &mPointsPerThread, sizeof(uint32_t)));
     }
 
-    void computeResolutionForMaxOccupancy(const uint pointsPerThread, const uint blockSize = 0)
+    void computeResolutionForMaxOccupancy(const uint32_t pointsPerThread, const uint32_t blockSize = 0)
     {
         int minGridSize{};
         int recommendedBlockSize{};
@@ -72,33 +72,33 @@ struct ECC::Impl
         mKeysNumberPerIteration = mGridSize * mBlockSize * mPointsPerThread;
     }
 
-    uint getIndex(const uint grid, const uint block, const uint idx) const
+    uint32_t getIndex(const uint32_t grid, const uint32_t block, const uint32_t idx) const
     {
         // Total number of threads
-        const uint totalThreads = mGridSize * mBlockSize;
+        const uint32_t totalThreads = mGridSize * mBlockSize;
         // Global ID of the current thread
-        const uint threadId = grid * mBlockSize + block;
+        const uint32_t threadId = grid * mBlockSize + block;
 
-        const uint base = idx * totalThreads;
+        const uint32_t base = idx * totalThreads;
         return base + threadId;
     }
 
-    secp256k1::uint256 readBigInt(const uint *src, const uint grid, const uint block, const uint idx) const
+    secp256k1::uint256 readBigInt(const uint32_t *src, const uint32_t grid, const uint32_t block, const uint32_t idx) const
     {
-        uint value[8];
-        const uint totalThreads = mGridSize * mBlockSize;
-        const uint threadId = grid * mBlockSize * 4 + block * 4;
-        const uint base = idx * mGridSize * mBlockSize * 8;
+        uint32_t value[8];
+        const uint32_t totalThreads = mGridSize * mBlockSize;
+        const uint32_t threadId = grid * mBlockSize * 4 + block * 4;
+        const uint32_t base = idx * mGridSize * mBlockSize * 8;
 
-        uint index = base + threadId;
-        for (uint k = 0; k < 4; ++k)
+        uint32_t index = base + threadId;
+        for (uint32_t k = 0; k < 4; ++k)
         {
             value[k] = src[index];
             ++index;
         }
 
         index = base + totalThreads * 4 + threadId;
-        for (uint k = 4; k < 8; ++k)
+        for (uint32_t k = 4; k < 8; ++k)
         {
             value[k] = src[index];
             ++index;
@@ -107,7 +107,7 @@ struct ECC::Impl
         return {value, secp256k1::uint256::BigEndian};
     }
 
-    uint getKeysNumberPerIteration() const
+    uint32_t getKeysNumberPerIteration() const
     {
         return mKeysNumberPerIteration;
     }
@@ -116,13 +116,13 @@ struct ECC::Impl
     // generate a table of points G, 2G, 4G, 8G...(2^255)G
     void initializeGPoints()
     {
-        constexpr uint gPointsNumber{256};
+        constexpr uint32_t gPointsNumber{256};
 
         thrust::host_vector<ecpoint_t> h_gPointsTmp;
         h_gPointsTmp.resize(gPointsNumber);
 
         secp256k1::ecpoint p{secp256k1::G()};
-        for (uint i = 0; i < gPointsNumber; ++i)
+        for (uint32_t i = 0; i < gPointsNumber; ++i)
         {
             if (!pointExists(p))
             {
@@ -147,11 +147,11 @@ struct ECC::Impl
         h_privateKeys.resize(privateKeys.size());
 
         // Copy private keys to system memory buffer
-        for (uint grid = 0; grid < mGridSize; ++grid)
+        for (uint32_t grid = 0; grid < mGridSize; ++grid)
         {
-            for (uint block = 0; block < mBlockSize; ++block)
+            for (uint32_t block = 0; block < mBlockSize; ++block)
             {
-                for (uint idx = 0; idx < mPointsPerThread; ++idx)
+                for (uint32_t idx = 0; idx < mPointsPerThread; ++idx)
                 {
                     /// todo:
                     const int index = getIndex(grid, block, idx);
@@ -164,7 +164,7 @@ struct ECC::Impl
 
     void allocatePublicKeysDeviceMemory()
     {
-        const uint keysNumber = getKeysNumberPerIteration();
+        const uint32_t keysNumber = getKeysNumberPerIteration();
 
         d_publicKeysX.resize(keysNumber);
 
@@ -187,7 +187,7 @@ struct ECC::Impl
 
     void allocatePrivateKeysDeviceMemory()
     {
-        const uint keysNumberPerIteration = getKeysNumberPerIteration();
+        const uint32_t keysNumberPerIteration = getKeysNumberPerIteration();
         d_privateKeys.resize(keysNumberPerIteration);
     }
 
@@ -196,17 +196,17 @@ struct ECC::Impl
         h_privateKeys = d_privateKeys;
     }
 
-    void generatePrivateKeysForXPerIteration(const uint privateXPart, const uint iteration)
+    void generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration)
     {
-        const uint keysNumberPerIteration = getKeysNumberPerIteration();
+        const uint32_t keysNumberPerIteration = getKeysNumberPerIteration();
 
         if (d_privateKeys.size() != keysNumberPerIteration)
         {
             throw std::runtime_error("Private keys device storage has wrong size");
         }
 
-        /// TODO: check for uint overflow
-        const uint increment = iteration * keysNumberPerIteration;
+        /// TODO: check for uint32_t overflow
+        const uint32_t increment = iteration * keysNumberPerIteration;
 
         // {x, 0}, {x, 1}, ... , {x, keysNumberPerIteration - 1}
         thrust::transform(thrust::cuda::par.on(mInitStream),
@@ -217,11 +217,11 @@ struct ECC::Impl
         );
     }
 
-    void initWithPrivateDefinedXRandomY(const uint pointsPerThread, const uint publicKeyCompressionTypeToCheck, const uint blockSize)
+    void initWithPrivateDefinedXRandomY(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t blockSize)
     {
         computeResolutionForMaxOccupancy(pointsPerThread, blockSize);
 
-        cu::safeCall(cudaMemcpyToSymbol(d_publicKeyCompressionTypeToCheck, &publicKeyCompressionTypeToCheck, sizeof(uint)));
+        cu::safeCall(cudaMemcpyToSymbol(d_publicKeyCompressionTypeToCheck, &publicKeyCompressionTypeToCheck, sizeof(uint32_t)));
 
         // Allocate space for private keys on device
         allocatePrivateKeysDeviceMemory();
@@ -233,16 +233,16 @@ struct ECC::Impl
         allocateMultChainDeviceMemory();
     }
 
-    void init(const uint pointsPerThread, const thrust::host_vector<secp256k1::uint256> &privateKeys)
+    void init(const uint32_t pointsPerThread, const thrust::host_vector<secp256k1::uint256> &privateKeys)
     {
-        const uint keysNumber = privateKeys.size();
+        const uint32_t keysNumber = privateKeys.size();
 
         int minGridSize{};
         int blockSize{};
         cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, multiplyStepKernel);
         std::cout << "minGridSize: " << minGridSize << ", blockSize: " << blockSize << std::endl;
 
-        if (keysNumber < static_cast<uint>(blockSize))
+        if (keysNumber < static_cast<uint32_t>(blockSize))
         {
             setPointsPerThread(1);
 
@@ -253,7 +253,7 @@ struct ECC::Impl
         {
             setPointsPerThread(pointsPerThread);
 
-            if (keysNumber / mPointsPerThread < static_cast<uint>(blockSize))
+            if (keysNumber / mPointsPerThread < static_cast<uint32_t>(blockSize))
             {
                 mBlockSize = keysNumber / mPointsPerThread;
             }
@@ -285,11 +285,11 @@ struct ECC::Impl
         thrust::host_vector<uint256_t> h_publicKeysY = d_publicKeysY;
         thrust::host_vector<uint256_t> h_privateKeys = d_privateKeys;
 
-        for (uint grid = 0; grid < mGridSize; ++grid)
+        for (uint32_t grid = 0; grid < mGridSize; ++grid)
         {
-            for (uint block = 0; block < mBlockSize; ++block)
+            for (uint32_t block = 0; block < mBlockSize; ++block)
             {
-                for (uint idx = 0; idx < mPointsPerThread; ++idx)
+                for (uint32_t idx = 0; idx < mPointsPerThread; ++idx)
                 {
                     const auto index = getIndex(grid, block, idx);
 
@@ -310,7 +310,7 @@ struct ECC::Impl
         thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), infinite);
         thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), infinite);
 
-        constexpr uint mSharedMemSize{0};
+        constexpr uint32_t mSharedMemSize{0};
         multiplyStepKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(thrust::raw_pointer_cast(d_privateKeys.data()));
 
         // Wait for kernel to complete
@@ -339,11 +339,11 @@ struct ECC::Impl
         thrust::host_vector<uint256_t> h_publicKeysY = d_publicKeysY;
 
         bool result{true};
-        for (uint grid = 0; grid < mGridSize; ++grid)
+        for (uint32_t grid = 0; grid < mGridSize; ++grid)
         {
-            for (uint block = 0; block < mBlockSize; ++block)
+            for (uint32_t block = 0; block < mBlockSize; ++block)
             {
-                for (uint idx = 0; idx < mPointsPerThread; ++idx)
+                for (uint32_t idx = 0; idx < mPointsPerThread; ++idx)
                 {
                     const auto index = getIndex(grid, block, idx);
                     const secp256k1::uint256 privateKey = privateKeys[index];
@@ -389,17 +389,17 @@ ECC::~ECC() = default;
 ECC::ECC(ECC&& rhs) noexcept = default;
 ECC& ECC::operator=(ECC &&rhs) noexcept = default;
 
-void ECC::init(const uint pointsPerThread, const thrust::host_vector<secp256k1::uint256> &privateKeys) const
+void ECC::init(const uint32_t pointsPerThread, const thrust::host_vector<secp256k1::uint256> &privateKeys) const
 {
     mImpl->init(pointsPerThread, privateKeys);
 }
 
-void ECC::initWithPrivateDefinedXRandomY(const uint pointsPerThread, const uint publicKeyCompressionTypeToCheck, const uint blockSize) const
+void ECC::initWithPrivateDefinedXRandomY(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t blockSize) const
 {
     mImpl->initWithPrivateDefinedXRandomY(pointsPerThread, publicKeyCompressionTypeToCheck, blockSize);
 }
 
-uint ECC::getKeysNumberPerIteration() const
+uint32_t ECC::getKeysNumberPerIteration() const
 {
     return mImpl->getKeysNumberPerIteration();
 }
@@ -414,7 +414,7 @@ cudaError_t ECC::calculatePublicKeys() const
     return mImpl->calculatePublicKeys();
 }
 
-void ECC::generatePrivateKeysForXPerIteration(const uint privateXPart, const uint iteration) const
+void ECC::generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration) const
 {
     mImpl->generatePrivateKeysForXPerIteration(privateXPart, iteration);
 }

@@ -7,33 +7,33 @@
 #include "secp256k1.cuh"
 
 
-__device__ void hashPublicKey(const uint256_t& x, const uint256_t& y, uint *digestOut)
+__device__ void hashPublicKey(const uint256_t& x, const uint256_t& y, uint32_t *digestOut)
 {
     uint256_t hash;
     sha256PublicKey(x, y, hash);
 
     // Swap to little-endian
-    for (uint i = 0; i < 8; ++i)
+    for (uint32_t i = 0; i < 8; ++i)
     {
         hash[i] = endian(hash[i]);
     }
     ripemd160sha256NoFinal(hash, digestOut);
 }
 
-__device__ void hashPublicKeyCompressed(const uint256_t& x, const uint yParity, uint *digestOut)
+__device__ void hashPublicKeyCompressed(const uint256_t& x, const uint32_t yParity, uint32_t *digestOut)
 {
     uint256_t hash;
     sha256PublicKeyCompressed(x, yParity, hash);
 
     // Swap to little-endian
-    for (uint i = 0; i < 8; ++i)
+    for (uint32_t i = 0; i < 8; ++i)
     {
         hash[i] = endian(hash[i]);
     }
     ripemd160sha256NoFinal(hash, digestOut);
 }
 
-__device__ void setResultFound(const uint idx, const bool compressed, const uint256_t& privateKey, const uint256_t& publicX, const uint32_t digest[5])
+__device__ void setResultFound(const uint32_t idx, const bool compressed, const uint256_t& privateKey, const uint256_t& publicX, const uint32_t digest[5])
 {
     Hash160SearchResult r;
     r.block = blockIdx.x;
@@ -41,12 +41,12 @@ __device__ void setResultFound(const uint idx, const bool compressed, const uint
     r.idx = idx;
     r.compressed = compressed;
 
-    for (uint i = 0; i < 8; ++i)
+    for (uint32_t i = 0; i < 8; ++i)
     {
         r.privateKey[i] = endian(privateKey[i]);
     }
 
-    for (uint i = 0; i < 8; ++i)
+    for (uint32_t i = 0; i < 8; ++i)
     {
         r.publicXKey[i] = endian(publicX[i]);
     }
@@ -55,7 +55,7 @@ __device__ void setResultFound(const uint idx, const bool compressed, const uint
     atomicListAdd(&r, sizeof(r));
 }
 
-__device__ void print(uint256_t& x, uint step, uint idx, char op)
+__device__ void print(uint256_t& x, uint32_t step, uint32_t idx, char op)
 {
     if (idx != 0)
         return;
@@ -77,11 +77,11 @@ __device__ void print(uint256_t& x, uint step, uint idx, char op)
 __global__ void multiplyStepKernel(const uint256_t *privateKeys)
 {
     // 256 is a 256 bit in a private key
-    constexpr uint bitsNumber{256};
+    constexpr uint32_t bitsNumber{256};
 
     uint256_t privateKey;
 
-    for (uint step{0}; step < bitsNumber; ++step)
+    for (uint32_t step{0}; step < bitsNumber; ++step)
     {
         const ecpoint_t& stepGPoint = d_gPointsPtr[step];
 
@@ -89,13 +89,13 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
         uint256_t inverse{0, 0, 0, 0, 0, 0, 0, 1};
         int batchIdx{0};
 
-        for(uint i = 0; i < d_pointsPerThread; ++i)
+        for(uint32_t i = 0; i < d_pointsPerThread; ++i)
         {
             uint256_t publicX;
             readUInt256(d_publicKeyXPtr, i, publicX);
 
             readUInt256(privateKeys, i, privateKey);
-            if (const uint bit = privateKey[7 - step / 32] & 1 << (step % 32); bit != 0 && !isInfinity(publicX))
+            if (const uint32_t bit = privateKey[7 - step / 32] & 1 << (step % 32); bit != 0 && !isInfinity(publicX))
             {
                 beginBatchAddWithDouble(&stepGPoint, publicX, d_multChainPtr, batchIdx, inverse);
                 batchIdx++;
@@ -107,7 +107,7 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
         for(int i = d_pointsPerThread - 1; i >= 0; --i)
         {
             readUInt256(privateKeys, i, privateKey);
-            if (const uint bit = privateKey[7 - step / 32] & 1 << (step % 32); bit != 0)
+            if (const uint32_t bit = privateKey[7 - step / 32] & 1 << (step % 32); bit != 0)
             {
                 uint256_t newX;
                 uint256_t newY;
@@ -135,18 +135,18 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
         }
     }
 
-    const uint totalThreads = gridDim.x * blockDim.x;
-    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
 
-    for(uint i = 0; i < d_pointsPerThread; ++i)
+    for(uint32_t i = 0; i < d_pointsPerThread; ++i)
     {
         readUInt256(privateKeys, i, privateKey);
 
         uint256_t publicX;
         readUInt256(d_publicKeyXPtr, i, publicX);
 
-        const uint base = i * totalThreads;
-        const uint index = base + threadId;
+        const uint32_t base = i * totalThreads;
+        const uint32_t index = base + threadId;
         hash160 hash160;
 
         if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)

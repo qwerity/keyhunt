@@ -8,14 +8,14 @@
 
 struct PrivateKeyForXWithRandomYFunctor
 {
-    uint xPart{};
-    uint yPartIncrementBy{};
+    uint32_t xPart{};
+    uint32_t yPartIncrementBy{};
 
     __host__ __device__
-     explicit PrivateKeyForXWithRandomYFunctor(const uint x, const uint yPartInc) : xPart{x}, yPartIncrementBy{yPartInc} {}
+     explicit PrivateKeyForXWithRandomYFunctor(const uint32_t x, const uint32_t yPartInc) : xPart{x}, yPartIncrementBy{yPartInc} {}
 
     __device__
-    uint256_t operator()(const uint& i) const
+    uint256_t operator()(const uint32_t& i) const
     {
         uint2 p;
         p.x = endian(xPart);

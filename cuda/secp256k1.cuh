@@ -28,20 +28,20 @@ __constant__ static constexpr uint256_t d_GY{0x483ADA77, 0x26A3C465, 0x5DA4FBFC,
 __constant__ static constexpr uint256_t d_N{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFE, 0xBAAEDCE6, 0xAF48A03B, 0xBFD25E8C, 0xD0364141};
 
 // TODO(ksh): not used
-// __constant__ static constexpr uint _BETA[8] = {0x7AE96A2B, 0x657C0710, 0x6E64479E, 0xAC3434E9, 0x9CF04975, 0x12F58995, 0xC1396C28, 0x719501EE};
-// __constant__ static constexpr uint _LAMBDA[8] = {0x5363AD4C, 0xC05C30E0, 0xA5261C02, 0x8812645A, 0x122E22EA, 0x20816678, 0xDF02967C, 0x1B23BD72};
+// __constant__ static constexpr uint32_t _BETA[8] = {0x7AE96A2B, 0x657C0710, 0x6E64479E, 0xAC3434E9, 0x9CF04975, 0x12F58995, 0xC1396C28, 0x719501EE};
+// __constant__ static constexpr uint32_t _LAMBDA[8] = {0x5363AD4C, 0xC05C30E0, 0xA5261C02, 0x8812645A, 0x122E22EA, 0x20816678, 0xDF02967C, 0x1B23BD72};
 
 
 /**
  * Reads an 8-word big integer from device memory
  */
-__device__ __forceinline__ void readInt(const uint *data, const uint depth, uint256_t& x)
+__device__ __forceinline__ void readInt(const uint32_t *data, const uint32_t depth, uint256_t& x)
 {
-    const uint totalThreads = gridDim.x * blockDim.x;
-    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
 
-    const uint base = depth * totalThreads;
-    const uint index = base + threadId;
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
 
     const auto x_uint4 = reinterpret_cast<uint4 *>(x.v);
     const auto data_uint4 = reinterpret_cast<const uint4 *>(data);
@@ -49,13 +49,13 @@ __device__ __forceinline__ void readInt(const uint *data, const uint depth, uint
     x_uint4[1] = data_uint4[index*2 + 1];
 }
 
-__device__ __forceinline__ uint readIntLSW(const uint *data, const uint depth)
+__device__ __forceinline__ uint32_t readIntLSW(const uint32_t *data, const uint32_t depth)
 {
-    const uint totalThreads = gridDim.x * blockDim.x;
-    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
 
-    const uint base = depth * totalThreads;
-    const uint index = base + threadId;
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
 
     const auto data_uint4 = reinterpret_cast<const uint4 *>(data);
     return data_uint4[index*2 + 1].w;
@@ -64,13 +64,13 @@ __device__ __forceinline__ uint readIntLSW(const uint *data, const uint depth)
 /**
  * Writes an 8-word big integer to device memory
  */
-__device__ __forceinline__ void writeInt(const uint256_t& x, const uint depth, uint *data)
+__device__ __forceinline__ void writeInt(const uint256_t& x, const uint32_t depth, uint32_t *data)
 {
-    const uint totalThreads = gridDim.x * blockDim.x;
-    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
 
-    const uint base = depth * totalThreads;
-    const uint index = base + threadId;
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
 
     const auto x_uint4 = reinterpret_cast<const uint4 *>(x.v);
     const auto data_uint4 = reinterpret_cast<uint4 *>(data);
@@ -79,35 +79,35 @@ __device__ __forceinline__ void writeInt(const uint256_t& x, const uint depth, u
     data_uint4[index*2 + 1] = x_uint4[1];
 }
 
-__device__ __forceinline__ uint readUInt256LSW(const uint256_t *data, const uint depth)
+__device__ __forceinline__ uint32_t readUInt256LSW(const uint256_t *data, const uint32_t depth)
 {
-    const uint totalThreads = gridDim.x * blockDim.x;
-    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
 
-    const uint base = depth * totalThreads;
-    const uint index = base + threadId;
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
 
     return data[index].v[7];
 }
 
-__device__ __forceinline__ void readUInt256(const uint256_t *data, const uint depth, uint256_t& x)
+__device__ __forceinline__ void readUInt256(const uint256_t *data, const uint32_t depth, uint256_t& x)
 {
-    const uint totalThreads = gridDim.x * blockDim.x;
-    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
 
-    const uint base = depth * totalThreads;
-    const uint index = base + threadId;
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
 
     x = data[index];
 }
 
-__device__ __forceinline__ void writeUInt256(const uint256_t& x, const uint depth, uint256_t *data)
+__device__ __forceinline__ void writeUInt256(const uint256_t& x, const uint32_t depth, uint256_t *data)
 {
-    const uint totalThreads = gridDim.x * blockDim.x;
-    const uint threadId = blockDim.x * blockIdx.x + threadIdx.x;
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
 
-    const uint base = depth * totalThreads;
-    const uint index = base + threadId;
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
 
     data[index] = x;
 }
@@ -139,7 +139,7 @@ __device__ __forceinline__ void subModP(const uint256_t& a, const uint256_t& b, 
     subc_cc(c[1], a[1], b[1]);
     subc_cc(c[0], a[0], b[0]);
 
-    uint borrow{0};
+    uint32_t borrow{0};
     subc(borrow, 0, 0);
 
     if (borrow)
@@ -155,7 +155,7 @@ __device__ __forceinline__ void subModP(const uint256_t& a, const uint256_t& b, 
     }
 }
 
-__device__ __forceinline__ uint add(const uint256_t& a, const uint256_t& b, uint256_t& c)
+__device__ __forceinline__ uint32_t add(const uint256_t& a, const uint256_t& b, uint256_t& c)
 {
     add_cc(c[7], a[7], b[7]);
     addc_cc(c[6], a[6], b[6]);
@@ -166,12 +166,12 @@ __device__ __forceinline__ uint add(const uint256_t& a, const uint256_t& b, uint
     addc_cc(c[1], a[1], b[1]);
     addc_cc(c[0], a[0], b[0]);
 
-    uint carry{0};
+    uint32_t carry{0};
     addc(carry, 0, 0);
     return carry;
 }
 
-__device__ __forceinline__ uint sub(const uint256_t& a, const uint256_t& b, uint256_t& c)
+__device__ __forceinline__ uint32_t sub(const uint256_t& a, const uint256_t& b, uint256_t& c)
 {
     sub_cc(c[7], a[7], b[7]);
     subc_cc(c[6], a[6], b[6]);
@@ -182,7 +182,7 @@ __device__ __forceinline__ uint sub(const uint256_t& a, const uint256_t& b, uint
     subc_cc(c[1], a[1], b[1]);
     subc_cc(c[0], a[0], b[0]);
 
-    uint borrow{0};
+    uint32_t borrow{0};
     subc(borrow, 0, 0);
     return (borrow & 0x01);
 }
@@ -199,7 +199,7 @@ __device__ __forceinline__ void addModP(const uint256_t& a, const uint256_t& b, 
     addc_cc(c[1], a[1], b[1]);
     addc_cc(c[0], a[0], b[0]);
 
-    uint carry{0};
+    uint32_t carry{0};
     addc(carry, 0, 0);
 
     bool gt = false;
@@ -232,8 +232,8 @@ __device__ __forceinline__ void addModP(const uint256_t& a, const uint256_t& b, 
 
 __device__ __forceinline__ void mulModP(const uint256_t& a, const uint256_t& b, uint256_t& c)
 {
-    uint high[8]{};
-    uint t{a[7]};
+    uint32_t high[8]{};
+    uint32_t t{a[7]};
 
     // a[7] * b (low)
     for (int i = 7; i >= 0; i--)
@@ -392,10 +392,10 @@ __device__ __forceinline__ void mulModP(const uint256_t& a, const uint256_t& b, 
 
     // At this point we have 16 32-bit words representing a 512-bit value
     // high[0 ... 7] and c[0 ... 7]
-    constexpr uint s{977};
+    constexpr uint32_t s{977};
     // Store high[6] and high[7] since they will be overwritten
-    uint high7 = high[7];
-    uint high6 = high[6];
+    uint32_t high7 = high[7];
+    uint32_t high6 = high[6];
     // Take high 256 bits, multiply by 2^32, add to low 256 bits
     // That is, take high[0 ... 7], shift it left 1 word and add it to c[0 ... 7]
     add_cc(c[6], high[7], c[6]);
@@ -460,7 +460,7 @@ __device__ __forceinline__ void mulModP(const uint256_t& a, const uint256_t& b, 
     addc(high[7], high[7], 0);
 
     bool overflow{high[7] != 0};
-    uint borrow = sub(c, d_P, c);
+    uint32_t borrow = sub(c, d_P, c);
     if (overflow)
     {
         if (!borrow)
