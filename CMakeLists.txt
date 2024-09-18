@@ -4,12 +4,6 @@ project(cuda-keyhunt-pvk CXX CUDA)
 ####################################################################################################################################################################################
 include(FetchContent)
 
-find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
-    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
-    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
-endif()
-
 ####################################################################################################################################################################################
 # Set the C++ standard
 set(CMAKE_CXX_STANDARD 20)
