@@ -90,19 +90,19 @@ namespace cu
 
     void printDeviceInfo(const CudaDeviceInfo& info)
     {
-        printf("ID:     %d\n", info.id);
-        printf("Name:   %s\n", info.name.c_str());
-        printf("Minor: %d, Major: %d\n", info.major, info.minor);
-        printf("Capability: %d%d\n", info.major, info.minor);
-        printf("warpSize: %d\n", info.warpSize);
-        printf("Memory: %luMB\n", info.mem / MB);
-        printf("multiProcessorCount: %d\n", info.multiProcessorCount);
-        printf("maxThreadsPerMultiProcessor: %d\n", info.maxThreadsPerMultiProcessor);
-        printf("globalL1CacheSupported: %d\n", info.globalL1CacheSupported);
-        printf("localL1CacheSupported: %d\n", info.localL1CacheSupported);
-        printf("l2CacheSize: %d\n", info.l2CacheSize);
-        printf("persistingL2CacheMaxSize: %d\n", info.persistingL2CacheMaxSize);
-        printf("\n");
+        std::fprintf(stderr, "ID:     %d\n", info.id);
+        std::fprintf(stderr, "Name:   %s\n", info.name.c_str());
+        std::fprintf(stderr, "Minor: %d, Major: %d\n", info.major, info.minor);
+        std::fprintf(stderr, "Capability: %d%d\n", info.major, info.minor);
+        std::fprintf(stderr, "warpSize: %d\n", info.warpSize);
+        std::fprintf(stderr, "Memory: %I64u\n", info.mem / MB);
+        std::fprintf(stderr, "multiProcessorCount: %d\n", info.multiProcessorCount);
+        std::fprintf(stderr, "maxThreadsPerMultiProcessor: %d\n", info.maxThreadsPerMultiProcessor);
+        std::fprintf(stderr, "globalL1CacheSupported: %d\n", info.globalL1CacheSupported);
+        std::fprintf(stderr, "localL1CacheSupported: %d\n", info.localL1CacheSupported);
+        std::fprintf(stderr, "l2CacheSize: %d\n", info.l2CacheSize);
+        std::fprintf(stderr, "persistingL2CacheMaxSize: %d\n", info.persistingL2CacheMaxSize);
+        std::fprintf(stderr, "\n");
     }
 
     void cudaInit(const int cudaDeviceId)
