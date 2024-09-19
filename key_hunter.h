@@ -1,7 +1,7 @@
 #pragma once
 
 #include <thrust/host_vector.h>
-#include "util/common.h"
+#include "util/common_host.h"
 
 class KeyHunter
 {

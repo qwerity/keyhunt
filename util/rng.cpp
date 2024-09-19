@@ -6,6 +6,8 @@
 #include <string>
 
 #ifdef _WIN32
+    #pragma comment(lib, "bcrypt.lib")
+
     #include<Windows.h>
     #include <bcrypt.h>
 
@@ -65,7 +67,8 @@ void crypto::rng::get(unsigned char *buf, int len)
             memcpy(&buf[i], digest, 32);
             i += 32;
             len -= 32;
-        } else
+        }
+        else
         {
             memcpy(&buf[i], digest, len);
             i += len;

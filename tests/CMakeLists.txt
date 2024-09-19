@@ -9,12 +9,10 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(catch2)
 
 ####################################################################################################################################################################################
-find_package(TBB REQUIRED)
+if(UNIX)
+    find_package(TBB REQUIRED)
+endif()
 find_package(OpenSSL 3 REQUIRED)
-
-####################################################################################################################################################################################
-include_directories(${CMAKE_SOURCE_DIR}/util)
-include_directories(${CMAKE_SOURCE_DIR}/cuda)
 
 ####################################################################################################################################################################################
 add_executable(hash_test
@@ -23,16 +21,17 @@ add_executable(hash_test
 )
 target_link_libraries(hash_test PRIVATE util)
 target_link_libraries(hash_test PRIVATE cuda_keys)
-target_link_libraries(hash_test PRIVATE TBB::tbb)
 target_link_libraries(hash_test PRIVATE Catch2::Catch2WithMain)
 target_link_libraries(hash_test PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+if(UNIX)
+    target_link_libraries(hash_test PRIVATE TBB::tbb)
+endif()
 
 ####################################################################################################################################################################################
 add_executable(private_key_generation_tests
     private_key_generation_tests.cpp
 )
-target_link_libraries(private_key_generation_tests PRIVATE util)
-target_link_libraries(private_key_generation_tests PRIVATE cuda_keys)
+target_link_libraries(private_key_generation_tests PRIVATE util cuda_keys)
 target_link_libraries(private_key_generation_tests PRIVATE Catch2::Catch2WithMain)
 target_link_libraries(private_key_generation_tests PRIVATE ${Boost_LIBRARIES})
 

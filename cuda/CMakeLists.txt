@@ -1,5 +1,3 @@
-project(cuda_keys CUDA)
-
 set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
@@ -59,6 +57,6 @@ set_target_properties(cuda_keys PROPERTIES
 )
 #target_compile_options(cuda_keys PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall>)
 
-target_link_libraries(cuda_keys PRIVATE CUDA::cudart)
+target_link_libraries(cuda_keys PRIVATE CUDA::cudart_static)
 
 ####################################################################################################################################################################################

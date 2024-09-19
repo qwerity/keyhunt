@@ -18,6 +18,6 @@ namespace crypto
 
     void ripemd160(uint32_t *msg, uint32_t *digest);
     void sha256Init(uint32_t *digest);
-    void sha256(uint32_t *msg, uint32_t *digest);
+    void sha256(const uint32_t *msg, uint32_t *digest);
     uint32_t checksum(const uint32_t *hash);
 }

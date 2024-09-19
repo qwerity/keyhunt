@@ -92,6 +92,7 @@ namespace cu
         printf("ID:     %d\n", info.id);
         printf("Name:   %s\n", info.name.c_str());
         printf("Minor: %d, Major: %d\n", info.major, info.minor);
+        printf("Capability: %d%d\n", info.major, info.minor);
         printf("warpSize: %d\n", info.warpSize);
         printf("Memory: %lluMB\n", info.mem / (static_cast<uint64_t>(1024) * 1024));
         printf("multiProcessorCount: %d\n", info.multiProcessorCount);

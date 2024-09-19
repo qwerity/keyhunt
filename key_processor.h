@@ -1,6 +1,8 @@
 #pragma once
 
-#include "util/common.h"
+#include <memory>
+
+#include "util/common_host.h"
 
 class KeyProcessor
 {

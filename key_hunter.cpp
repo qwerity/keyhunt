@@ -63,6 +63,31 @@ struct KeyHunter::Impl
         }
     }
 
+    void initializeGPoints() const
+    {
+        constexpr uint32_t gPointsNumber{256};
+
+        std::vector<ecpoint_t> h_gPointsTmp;
+        h_gPointsTmp.resize(gPointsNumber);
+
+        secp256k1::ecpoint p{secp256k1::G()};
+        for (uint32_t i = 0; i < gPointsNumber; ++i)
+        {
+            if (!pointExists(p))
+            {
+                throw std::runtime_error("Point does not exist!");
+            }
+
+            // set as BigEndian to device memory
+            h_gPointsTmp[i] = {p.x.v, p.y.v, Endianness::BigEndian};
+
+            // ... 2G, 4G, 8G...(2^255)G
+            p = secp256k1::doublePoint(p);
+        }
+
+        mCuECC->setGPoints(h_gPointsTmp);
+    }
+
     void signalStatusInfo(const uint64_t keysNumberPerIteration, const uint32_t iteration, const uint32_t remainsIterations, const uint64_t elapsedTimeMs) const
     {
         static uint64_t periodElapsedTimeMS{0};
@@ -97,11 +122,11 @@ struct KeyHunter::Impl
         }
     }
 
-    /// TODO: to be optimized
+    /// TODO: to be fixed
     void pushResultsToQueue() const
     {
         thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
-        cu::safeCall(mCuECC->getResults(results));
+        // cu::safeCall(mCuECC->getResults(results));
 
         BOOST_LOG_TRIVIAL(info) << utils::format("KeyGenerator: generated %s keys\n", results.size());
 
@@ -123,11 +148,12 @@ struct KeyHunter::Impl
         }
     }
 
+    ///todo: to be fixed
     void start(const thrust::host_vector<secp256k1::uint256>& privateKeys)
     {
         setHash160Targets(mgContext.config.ripemd160TargetsFilePaths);
 
-        mCuECC->init(mgContext.config.pointsPerThread, privateKeys);
+        // mCuECC->init(mgContext.config.pointsPerThread, privateKeys);
 
         mThread = std::thread([&privateKeys, this]()
         {
@@ -145,9 +171,10 @@ struct KeyHunter::Impl
         });
     }
 
+    ///todo: to be fixed
     void startWithRandomPrivateKeys()
     {
-        start(utils::generateRandomPrivateKeys(mgContext.config.keysNumberToGenerate));
+        // start(utils::generateRandomPrivateKeys(mgContext.config.keysNumberToGenerate));
     }
 
     bool isTargetInList(const uint32_t hash[5]) const
@@ -157,10 +184,12 @@ struct KeyHunter::Impl
 
     void pushResultsToQueue2(const uint32_t iteration) const
     {
-        const auto count = mResultAtomicList.size();
+        const uint32_t count = mResultAtomicList.size();
 
-        Hash160SearchResult results[count];
-        mResultAtomicList.read(&results, count);
+        std::vector<Hash160SearchResult> results;
+        results.resize(count);
+
+        mResultAtomicList.read(results.data(), count);
         mResultAtomicList.clear();
 
         for (uint32_t i = 0; i < count; i++)
@@ -188,6 +217,7 @@ struct KeyHunter::Impl
         setHash160Targets(mgContext.config.ripemd160TargetsFilePaths);
         mResultAtomicList.init(sizeof(Hash160SearchResult), 16);
 
+        initializeGPoints();
         mCuECC->initWithPrivateDefinedXRandomY(mgContext.config.pointsPerThread, mgContext.config.publicKeyCompressionTypeToCheck);
 
         mThread = std::thread([&]()
@@ -228,27 +258,28 @@ struct KeyHunter::Impl
         });
     }
 
+    /// todo: to be fixed
     void selfTest(const uint32_t keysNumberToGenerate) const
     {
-        BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest started";
-
-        const thrust::host_vector<secp256k1::uint256> privateKeys = utils::generateRandomPrivateKeys(keysNumberToGenerate);
-
-        mCuECC->init(32, privateKeys);
-
-        cu::safeCall(mCuECC->calculatePublicKeys());
-
-        if (mCuECC->selfTest(privateKeys))
-        {
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest done";
-        }
-        else
-        {
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest fails";
-        }
-
-        thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
-        cu::safeCall(mCuECC->getResults(results));
+        // BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest started";
+        //
+        // const thrust::host_vector<secp256k1::uint256> privateKeys = utils::generateRandomPrivateKeys(keysNumberToGenerate);
+        //
+        // mCuECC->init(32, privateKeys);
+        //
+        // cu::safeCall(mCuECC->calculatePublicKeys());
+        //
+        // if (mCuECC->selfTest(privateKeys))
+        // {
+        //     BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest done";
+        // }
+        // else
+        // {
+        //     BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest fails";
+        // }
+        //
+        // thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
+        // cu::safeCall(mCuECC->getResults(results));
     }
 
     void setHash160Targets(const std::vector<std::string>& ripemd160TargetsFilePaths)

@@ -1,20 +1,19 @@
 #include"crypto_util.h"
 #include "utils.h"
 
-static const uint32_t _IV[5] = {0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0};
+static const uint32_t h_IV[5] = {0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0};
 
-static const uint32_t _K0 = 0x5a827999;
-static const uint32_t _K1 = 0x6ed9eba1;
-static const uint32_t _K2 = 0x8f1bbcdc;
-static const uint32_t _K3 = 0xa953fd4e;
+constexpr uint32_t h_K0 = 0x5a827999;
+constexpr uint32_t h_K1 = 0x6ed9eba1;
+constexpr uint32_t h_K2 = 0x8f1bbcdc;
+constexpr uint32_t h_K3 = 0xa953fd4e;
+constexpr uint32_t h_K4 = 0x7a6d76e9;
+constexpr uint32_t h_K5 = 0x6d703ef3;
+constexpr uint32_t h_K6 = 0x5c4dd124;
+constexpr uint32_t h_K7 = 0x50a28be6;
 
-static const uint32_t _K4 = 0x7a6d76e9;
-static const uint32_t _K5 = 0x6d703ef3;
-static const uint32_t _K6 = 0x5c4dd124;
-static const uint32_t _K7 = 0x50a28be6;
 
-
-static uint32_t rotl(uint32_t x, int n)
+static uint32_t rotl(const uint32_t x, const uint32_t n)
 {
     return (x << n) | (x >> (32 - n));
 }
@@ -53,28 +52,28 @@ static void FF(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e, 
 
 static void GG(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e, uint32_t x, uint32_t s)
 {
-    a += G(b, c, d) + x + _K0;
+    a += G(b, c, d) + x + h_K0;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 static void HH(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e, uint32_t x, uint32_t s)
 {
-    a += H(b, c, d) + x + _K1;
+    a += H(b, c, d) + x + h_K1;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 static void II(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e, uint32_t x, uint32_t s)
 {
-    a += I(b, c, d) + x + _K2;
+    a += I(b, c, d) + x + h_K2;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 static void JJ(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e, uint32_t x, uint32_t s)
 {
-    a += J(b, c, d) + x + _K3;
+    a += J(b, c, d) + x + h_K3;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
@@ -88,44 +87,44 @@ static void FFF(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e,
 
 static void GGG(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e, uint32_t x, uint32_t s)
 {
-    a += G(b, c, d) + x + _K4;
+    a += G(b, c, d) + x + h_K4;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 static void HHH(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e, uint32_t x, uint32_t s)
 {
-    a += H(b, c, d) + x + _K5;
+    a += H(b, c, d) + x + h_K5;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 static void III(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e, uint32_t x, uint32_t s)
 {
-    a += I(b, c, d) + x + _K6;
+    a += I(b, c, d) + x + h_K6;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 static void JJJ(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e, uint32_t x, uint32_t s)
 {
-    a += J(b, c, d) + x + _K7;
+    a += J(b, c, d) + x + h_K7;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 void crypto::ripemd160(uint32_t *x, uint32_t *digest)
 {
-    uint32_t a1 = _IV[0];
-    uint32_t b1 = _IV[1];
-    uint32_t c1 = _IV[2];
-    uint32_t d1 = _IV[3];
-    uint32_t e1 = _IV[4];
-    uint32_t a2 = _IV[0];
-    uint32_t b2 = _IV[1];
-    uint32_t c2 = _IV[2];
-    uint32_t d2 = _IV[3];
-    uint32_t e2 = _IV[4];
+    uint32_t a1 = h_IV[0];
+    uint32_t b1 = h_IV[1];
+    uint32_t c1 = h_IV[2];
+    uint32_t d1 = h_IV[3];
+    uint32_t e1 = h_IV[4];
+    uint32_t a2 = h_IV[0];
+    uint32_t b2 = h_IV[1];
+    uint32_t c2 = h_IV[2];
+    uint32_t d2 = h_IV[3];
+    uint32_t e2 = h_IV[4];
     /* round 1 */
     FF(a1, b1, c1, d1, e1, x[0], 11);
     FF(e1, a1, b1, c1, d1, x[1], 14);
@@ -296,9 +295,9 @@ void crypto::ripemd160(uint32_t *x, uint32_t *digest)
     FFF(d2, e2, a2, b2, c2, x[3], 13);
     FFF(c2, d2, e2, a2, b2, x[9], 11);
     FFF(b2, c2, d2, e2, a2, x[11], 11);
-    digest[0] = utils::endian(_IV[1] + c1 + d2);
-    digest[1] = utils::endian(_IV[2] + d1 + e2);
-    digest[2] = utils::endian(_IV[3] + e1 + a2);
-    digest[3] = utils::endian(_IV[4] + a1 + b2);
-    digest[4] = utils::endian(_IV[0] + b1 + c2);
+    digest[0] = utils::endian(h_IV[1] + c1 + d2);
+    digest[1] = utils::endian(h_IV[2] + d1 + e2);
+    digest[2] = utils::endian(h_IV[3] + e1 + a2);
+    digest[3] = utils::endian(h_IV[4] + a1 + b2);
+    digest[4] = utils::endian(h_IV[0] + b1 + c2);
 }

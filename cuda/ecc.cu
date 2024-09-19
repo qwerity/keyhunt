@@ -1,10 +1,22 @@
 #include "ecc.cuh"
+
+#include "udevice_vector.cuh"
 #include "ecc_helper.cuh"
 #include "functors.cuh"
 
 #include "util/cuda_util.h"
+#include "util/common.h"
 
-#include <thrust/host_vector.h>
+// Check public key hash160 compressed/uncompressed/both
+__constant__ int d_publicKeyCompressionTypeToCheck{PointCompressionType::BOTH};
+
+__constant__ uint32_t d_pointsPerThread{};
+
+__constant__ uint256_t *d_publicKeyXPtr{};
+__constant__ uint256_t *d_publicKeyYPtr{};
+
+__constant__ uint256_t *d_multChainPtr{};
+__constant__ ecpoint_t *d_gPointsPtr{};
 
 struct ECC::Impl
 {
@@ -35,9 +47,10 @@ struct ECC::Impl
 
     ~Impl()
     {
-        clearPublicKeys();
-        clearPrivateKeys();
-
+        release(d_privateKeys);
+        release(d_multChain);
+        release(d_publicKeysX);
+        release(d_publicKeysY);
         release(d_gPoints);
 
         cudaStreamDestroy(mGeneratorStream);
@@ -81,11 +94,12 @@ struct ECC::Impl
         return mKeysNumberPerIteration;
     }
 
-    // TODO:move calculation to functor
     // generate a table of points G, 2G, 4G, 8G...(2^255)G
-    void setGPoints(const thrust::host_vector<ecpoint_t>& h_GPoints)
+    void setGPoints(const std::vector<ecpoint_t>& gPoints)
     {
-        d_gPoints = h_GPoints;
+        thrust::host_vector<ecpoint_t> h_gPoints(gPoints.begin(), gPoints.end());
+
+        d_gPoints = h_gPoints;
         const auto* d_gPointsRawPtr = thrust::raw_pointer_cast(d_gPoints.data());
         cu::safeCall(cudaMemcpyToSymbol(d_gPointsPtr, &d_gPointsRawPtr, sizeof(ecpoint_t*)));
     }
@@ -138,8 +152,8 @@ struct ECC::Impl
 
         // {x, 0}, {x, 1}, ... , {x, keysNumberPerIteration - 1}
         thrust::transform(thrust::cuda::par.on(mInitStream),
-                  thrust::counting_iterator(0u),
-                  thrust::counting_iterator(keysNumberPerIteration),
+                  thrust::counting_iterator<uint32_t>(0u),
+                  thrust::counting_iterator<uint32_t>(keysNumberPerIteration),
                   d_privateKeys.begin(),
                   PrivateKeyForXWithRandomYFunctor(privateXPart, increment)
         );
@@ -178,18 +192,6 @@ struct ECC::Impl
         return err;
     }
 
-    void clearPrivateKeys()
-    {
-        release(d_privateKeys);
-        release(d_multChain);
-    }
-
-    void clearPublicKeys()
-    {
-        release(d_publicKeysX);
-        release(d_publicKeysY);
-    }
-
     cudaError_t getResults(const thrust::host_vector<std::pair<uint256_t, ecpoint_t>> & pairs)
     {
        return cudaSuccess;
@@ -202,7 +204,7 @@ ECC::~ECC() = default;
 ECC::ECC(ECC&& rhs) noexcept = default;
 ECC& ECC::operator=(ECC &&rhs) noexcept = default;
 
-void ECC::setGPoints(const thrust::host_vector<ecpoint_t>& h_GPoints) const
+void ECC::setGPoints(const std::vector<ecpoint_t>& h_GPoints) const
 {
     mImpl->setGPoints(h_GPoints);
 }

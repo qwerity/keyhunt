@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <cuda_runtime.h>
 
 __device__ void atomicListAdd(const void *info, uint32_t size);

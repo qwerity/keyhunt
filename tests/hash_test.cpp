@@ -3,17 +3,16 @@
 
 #include <openssl/sha.h>
 
-#include "secp256k1.h"
-#include "address_util.h"
+#include "util/crypto_util.h"
+#include "util/utils.h"
+#include "util/secp256k1.h"
+#include "util/address_util.h"
 
 #include <iostream>
 #include <cstdint>
 #include <utility>
 #include <vector>
-
-#include "common.h"
-#include "crypto_util.h"
-#include "utils.h"
+#include <vector_types.h>
 
 struct Hash160Test
 {

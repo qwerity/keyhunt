@@ -11,29 +11,46 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 ####################################################################################################################################################################################
+#set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+
+####################################################################################################################################################################################
 option(BUILD_TESTS "Build test_bitcoin executable." OFF)
 
 ####################################################################################################################################################################################
-find_package(CUDAToolkit REQUIRED)
+find_package(CUDAToolkit 12 EXACT REQUIRED)
 include_directories(${CUDAToolkit_INCLUDE_DIRS})
 
 ####################################################################################################################################################################################
-find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log program_options)
+if (WIN32)
+    set(BOOST_ROOT "C:/boost/boost-1.86.0/")
+    set(BOOST_LIBRARYDIR "${BOOST_ROOT}/stage/lib")
+
+    set(Boost_USE_STATIC_LIBS ON)
+    set(Boost_NO_WARN_NEW_VERSIONS ON)
+endif()
+
+find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log)
 include_directories(${Boost_INCLUDE_DIRS})
 
 ####################################################################################################################################################################################
 # Set compiler options
 # Set the C++ compiler flags for Debug and Release configurations
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -Wall")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O0 -g -Wall")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -Wall")
+set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -Wall")
 
 ####################################################################################################################################################################################
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/bin)
+
+include_directories(${CMAKE_SOURCE_DIR})
 
 ####################################################################################################################################################################################
 add_subdirectory(util)
 add_subdirectory(cuda)
+add_subdirectory(tools)
 
 ####################################################################################################################################################################################
 set(MAIN_SRC

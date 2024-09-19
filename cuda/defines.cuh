@@ -68,7 +68,7 @@ struct alignas(4 * 8) uint256_t
     }
 
     __host__ __device__ __forceinline__
-    constexpr explicit uint256_t(const std::initializer_list<uint32_t>& list) noexcept
+    constexpr uint256_t(const std::initializer_list<uint32_t>& list) noexcept
     {
         assert(list.size() <= 8 && "Too many initializers");
 
@@ -156,7 +156,15 @@ struct hash160
         return false;  // Return false if all elements are equal
     }
 
-    bool operator==(const hash160& other) const = default;
+    bool operator==(const hash160& other) const
+    {
+        bool eq = true;
+        for (int i = 0; i < 5; i++)
+        {
+            eq &= (h[i] == other.h[i]);
+        }
+        return eq;
+    }
 };
 
 #ifndef __CUDA_ARCH__
@@ -169,9 +177,9 @@ struct std::hash<hash160>
     std::size_t operator()(const hash160& h) const noexcept
     {
         std::size_t seed = 0;
-        for (uint32_t i = 0; i < 5; ++i)
+        for (unsigned int hi : h.h)
         {
-            seed ^= std::hash<uint32_t>{}(h.h[i]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed ^= std::hash<uint32_t>{}(hi) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
         }
         return seed;
     }

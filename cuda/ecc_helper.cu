@@ -6,6 +6,7 @@
 #include "hash160_lookup.cuh"
 #include "secp256k1.cuh"
 
+#include "util/common.h"
 
 __device__ void hashPublicKey(const uint256_t& x, const uint256_t& y, uint32_t *digestOut)
 {
@@ -95,7 +96,9 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
             readUInt256(d_publicKeyXPtr, i, publicX);
 
             readUInt256(privateKeys, i, privateKey);
-            if (const uint32_t bit = privateKey[7 - step / 32] & 1 << (step % 32); bit != 0 && !isInfinity(publicX))
+
+            const uint32_t bit = privateKey[7 - step / 32] & 1 << (step % 32);
+            if (bit != 0 && !isInfinity(publicX))
             {
                 beginBatchAddWithDouble(&stepGPoint, publicX, d_multChainPtr, batchIdx, inverse);
                 batchIdx++;
@@ -107,7 +110,9 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
         for(int i = d_pointsPerThread - 1; i >= 0; --i)
         {
             readUInt256(privateKeys, i, privateKey);
-            if (const uint32_t bit = privateKey[7 - step / 32] & 1 << (step % 32); bit != 0)
+
+            const uint32_t bit = privateKey[7 - step / 32] & 1 << (step % 32);
+            if (bit != 0)
             {
                 uint256_t newX;
                 uint256_t newY;

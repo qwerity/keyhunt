@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defines.cuh"
-#include "udevice_vector.cuh"
+#include <thrust/host_vector.h>
 
 class ECC
 {
@@ -15,7 +15,7 @@ public:
     ECC(ECC&& rhs) noexcept;
     ECC& operator=(ECC&& rhs) noexcept;
 
-    void setGPoints(const thrust::host_vector<ecpoint_t>& h_GPoints) const;
+    void setGPoints(const std::vector<ecpoint_t>& h_GPoints) const;
 
     void initWithPrivateDefinedXRandomY(uint32_t pointsPerThread, uint32_t publicKeyCompressionTypeToCheck, uint32_t blockSize = 0) const;
 
