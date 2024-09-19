@@ -531,7 +531,7 @@ std::string secp256k1::uint256::toString(int) const
     for (int i = 7; i >= 0; i--)
     {
         char hex[9]{};
-        snprintf(hex, 8, "%.8X", v[i]);
+        snprintf(hex, 9, "%.8X", v[i]);
         s += std::string(hex);
     }
     return s;

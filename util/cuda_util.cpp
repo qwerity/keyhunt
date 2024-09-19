@@ -1,4 +1,5 @@
 #include "cuda_util.h"
+#include "common.h"
 
 namespace cu
 {
@@ -94,7 +95,7 @@ namespace cu
         printf("Minor: %d, Major: %d\n", info.major, info.minor);
         printf("Capability: %d%d\n", info.major, info.minor);
         printf("warpSize: %d\n", info.warpSize);
-        printf("Memory: %lluMB\n", info.mem / (static_cast<uint64_t>(1024) * 1024));
+        printf("Memory: %luMB\n", info.mem / MB);
         printf("multiProcessorCount: %d\n", info.multiProcessorCount);
         printf("maxThreadsPerMultiProcessor: %d\n", info.maxThreadsPerMultiProcessor);
         printf("globalL1CacheSupported: %d\n", info.globalL1CacheSupported);

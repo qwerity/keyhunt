@@ -94,13 +94,13 @@ namespace utils
         }
         if (isHex)
         {
-            if (sscanf(s.c_str(), "%llux", &val) != 1)
+            if (sscanf(s.c_str(), "%lux", &val) != 1)
             {
                 throw std::string("Expected an integer");
             }
         } else
         {
-            if (sscanf(s.c_str(), "%llud", &val) != 1)
+            if (sscanf(s.c_str(), "%lud", &val) != 1)
             {
                 throw std::string("Expected an integer");
             }
