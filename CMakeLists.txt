@@ -30,7 +30,7 @@ if (WIN32)
     set(Boost_NO_WARN_NEW_VERSIONS ON)
 endif()
 
-find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log)
+find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log iostreams)
 include_directories(${Boost_INCLUDE_DIRS})
 
 ####################################################################################################################################################################################

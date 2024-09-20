@@ -89,4 +89,5 @@ namespace utils
     std::vector<secp256k1::uint256> generateRandomPrivateKeys(uint32_t keysNumberToGenerate = 5);
 
     hash160 toHash160(const std::string& hexString);
+    hash160 hexToHash160(const char *data);
 }

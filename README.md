@@ -16,7 +16,7 @@ There is needed to install following packages to be able to compile
   - Unpack to `C:/boost/boost-1.86.0/` -> BOOST_ROOT
   - Open Powershell in **BOOST_ROOT**
     - `./bootstrap.bat`
-    - `./b2 -j14 toolset=msvc-14.2 threading=multi address-model=64 link=static runtime-link=static variant=release --with-system --with-log stage`
+    - `./b2 -j14 toolset=msvc-14.2 threading=multi address-model=64 link=static runtime-link=static variant=release --with-system --with-log --with-iostreams stage`
 
 # Build Win x64
 - Open Terminal in project directory

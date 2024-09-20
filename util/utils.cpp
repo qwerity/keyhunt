@@ -228,4 +228,17 @@ namespace utils
 
         return hash;
     }
+
+    // Function to convert 20 bytes (40 hex characters) to uint32_t[5]
+    hash160 hexToHash160(const char *data)
+    {
+        hash160 hash;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            std::string hex_str(data + i * 8, 8);  // Create a string from 8 characters
+            hash.h[i] = std::stoul(hex_str, nullptr, 16);
+        }
+
+        return std::move(hash);
+    }
 }
