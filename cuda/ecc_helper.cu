@@ -45,10 +45,6 @@ __device__ void setResultFound(const uint32_t idx, const bool compressed, const 
     for (uint32_t i = 0; i < 8; ++i)
     {
         r.privateKey[i] = endian(privateKey[i]);
-    }
-
-    for (uint32_t i = 0; i < 8; ++i)
-    {
         r.publicXKey[i] = endian(publicX[i]);
     }
     doRMD160FinalRound(digest, r.digest);
@@ -73,6 +69,47 @@ __device__ void print(uint256_t& x, uint32_t step, uint32_t idx, char op)
         );
     }
     printf("\n");
+}
+
+__global__ void checkHashKernel(const uint256_t *privateKeys)
+{
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    uint256_t privateKey;
+
+    for(uint32_t i = 0; i < d_pointsPerThread; ++i)
+    {
+        readUInt256(privateKeys, i, privateKey);
+
+        uint256_t publicX;
+        readUInt256(d_publicKeyXPtr, i, publicX);
+
+        const uint32_t base = i * totalThreads;
+        const uint32_t index = base + threadId;
+        hash160 hash160;
+
+        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+        {
+            hashPublicKeyCompressed(publicX, readUInt256LSW(d_publicKeyYPtr, i), hash160.h);
+            if (checkHash(hash160))
+            {
+                setResultFound(index, true, privateKey, publicX, hash160.h);
+            }
+        }
+
+        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+        {
+            uint256_t publicY;
+            readUInt256(d_publicKeyYPtr, i, publicY);
+
+            hashPublicKey(publicX, publicY, hash160.h);
+            if (checkHash(hash160))
+            {
+                setResultFound(index, false, privateKey, publicX, hash160.h);
+            }
+        }
+    }
 }
 
 __global__ void multiplyStepKernel(const uint256_t *privateKeys)
@@ -107,7 +144,7 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
 
         doBatchInverse(inverse);
 
-        for(int i = d_pointsPerThread - 1; i >= 0; --i)
+        for (int i = d_pointsPerThread - 1; i >= 0; --i)
         {
             readUInt256(privateKeys, i, privateKey);
 
@@ -136,41 +173,6 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
 
                 writeUInt256(newX, i, d_publicKeyXPtr);
                 writeUInt256(newY, i, d_publicKeyYPtr);
-            }
-        }
-    }
-
-    const uint32_t totalThreads = gridDim.x * blockDim.x;
-    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
-
-    for(uint32_t i = 0; i < d_pointsPerThread; ++i)
-    {
-        readUInt256(privateKeys, i, privateKey);
-
-        uint256_t publicX;
-        readUInt256(d_publicKeyXPtr, i, publicX);
-
-        const uint32_t base = i * totalThreads;
-        const uint32_t index = base + threadId;
-        hash160 hash160;
-
-        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
-        {
-            hashPublicKeyCompressed(publicX, readUInt256LSW(d_publicKeyYPtr, i), hash160.h);
-            if (checkHash(hash160))
-            {
-                setResultFound(index, true, privateKey, publicX, hash160.h);
-            }
-        }
-        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
-        {
-            uint256_t publicY;
-            readUInt256(d_publicKeyYPtr, i, publicY);
-
-            hashPublicKey(publicX, publicY, hash160.h);
-            if (checkHash(hash160))
-            {
-                setResultFound(index, false, privateKey, publicX, hash160.h);
             }
         }
     }

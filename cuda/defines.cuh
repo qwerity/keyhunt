@@ -185,3 +185,44 @@ struct std::hash<hash160>
     }
 };
 #endif
+
+template <typename LambdaFunc>
+cudaError_t cudaKernelSyncLaunch(const cudaStream_t& stream, LambdaFunc&& kernelLambda, const char* origin = "kernel")
+{
+    // Call the lambda function that launches the kernel
+    kernelLambda();
+
+    // Synchronize the stream
+    cudaError_t err = cudaStreamSynchronize(stream);
+    if (err != cudaSuccess)
+    {
+        std::fprintf(stderr, "%s: CUDA error: %s\n", origin, cudaGetErrorString(err));
+    }
+
+    return err;
+}
+
+template <typename LambdaFunc>
+cudaError_t cudaKernelSyncLaunchWithTiming(const cudaStream_t& stream, LambdaFunc&& kernelLambda, const char* origin = "kernel")
+{
+    // Create events for timing
+    cudaEvent_t startEvent, stopEvent;
+    cudaEventCreate(&startEvent);
+    cudaEventCreate(&stopEvent);
+
+    // Record the start event
+    cudaEventRecord(startEvent, stream);
+
+    cudaError_t err = cudaKernelSyncLaunch(stream, kernelLambda, origin);
+
+    // Calculate and print elapsed time
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, startEvent, stopEvent);
+    std::fprintf(stderr, "%s: kernel took %f ms.\n", origin, milliseconds);
+
+    // Clean up events
+    cudaEventDestroy(startEvent);
+    cudaEventDestroy(stopEvent);
+
+    return err;
+}

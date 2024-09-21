@@ -51,7 +51,7 @@ struct KeyHunter::Impl
 
     void stop()
     {
-        std::cout << "KeyGenerator stopping" << std::endl;
+        BOOST_LOG_TRIVIAL(info) << "KeyGenerator stopping" << std::endl;
         mStopFlag = true;
         // mDone = true;
 
@@ -155,7 +155,7 @@ struct KeyHunter::Impl
 
         mThread = std::thread([&privateKeys, this]()
         {
-            std::cout << "KeyGenerator Thread ID: " << std::this_thread::get_id() << std::endl;
+            BOOST_LOG_TRIVIAL(info) << "KeyGenerator Thread ID: " << std::this_thread::get_id();
 
             mTimer.start();
             cu::safeCall(mCuECC->calculatePublicKeys());
@@ -190,7 +190,7 @@ struct KeyHunter::Impl
         mResultAtomicList.read(results.data(), count);
         mResultAtomicList.clear();
 
-        for (uint32_t i = 0; i < count; i++)
+        for (uint32_t i = 0; i < count; ++i)
         {
             // recheck the false-positive
             if (!mHash160Targets.contains(hash160(results[i].digest)))
@@ -220,6 +220,8 @@ struct KeyHunter::Impl
 
         mThread = std::thread([&]()
         {
+            BOOST_LOG_TRIVIAL(info) << "KeyGenerator Thread ID: " << std::this_thread::get_id();
+
             const uint32_t totalKeysToGenerate = (mgContext.config.keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : mgContext.config.keysNumberToGenerate;
 
             const uint32_t keysNumberPerIteration = mCuECC->getKeysNumberPerIteration();

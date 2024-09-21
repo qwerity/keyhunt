@@ -23,9 +23,6 @@ struct ECC::Impl
     cudaStream_t mGeneratorStream{};
     cudaStream_t mInitStream{};
 
-    cudaEvent_t mStartEvent{};
-    cudaEvent_t mStopEvent{};
-
     uint32_t mGridSize{32};
     uint32_t mBlockSize{512};
     uint32_t mPointsPerThread{32};
@@ -45,9 +42,6 @@ struct ECC::Impl
         cudaStreamCreate(&mGeneratorStream);
         cudaStreamCreate(&mInitStream);
 
-        cudaEventCreate(&mStartEvent);
-        cudaEventCreate(&mStopEvent);
-
         setPointsPerThread(mPointsPerThread);
     }
 
@@ -58,9 +52,6 @@ struct ECC::Impl
         release(d_publicKeysX);
         release(d_publicKeysY);
         release(d_gPoints);
-
-        cudaEventDestroy(mStartEvent);
-        cudaEventDestroy(mStopEvent);
 
         cudaStreamDestroy(mGeneratorStream);
         cudaStreamDestroy(mInitStream);
@@ -159,25 +150,16 @@ struct ECC::Impl
         /// TODO: check for uint32_t overflow
         const uint32_t increment = iteration * keysNumberPerIteration;
 
-        cudaEventRecord(mStartEvent, mInitStream);
-
         // {x, 0}, {x, 1}, ... , {x, keysNumberPerIteration - 1}
-        thrust::transform(thrust::cuda::par.on(mInitStream),
-                  thrust::counting_iterator<uint32_t>(0u),
-                  thrust::counting_iterator<uint32_t>(keysNumberPerIteration),
-                  d_privateKeys.begin(),
-                  PrivateKeyForXWithRandomYFunctor(privateXPart, increment)
-        );
-
-        cudaEventRecord(mStopEvent, mInitStream);
-        cudaEventSynchronize(mStopEvent);
-
-        // Calculate the elapsed time in milliseconds
-        float milliseconds = 0;
-        cudaEventElapsedTime(&milliseconds, mStartEvent, mStopEvent);
-
-        // Output the timing result
-        std::fprintf(stderr, "thrust::transform took %f ms.\n", milliseconds);
+        cudaError_t err = cudaKernelSyncLaunch(mInitStream, [&]()
+        {
+            thrust::transform(thrust::cuda::par.on(mInitStream),
+                              thrust::counting_iterator<uint32_t>(0u),
+                              thrust::counting_iterator<uint32_t>(keysNumberPerIteration),
+                              d_privateKeys.begin(),
+                              PrivateKeyForXWithRandomYFunctor(privateXPart, increment)
+            );
+        }, "generatePrivateKeysForXPerIteration");
     }
 
     void initWithPrivateDefinedXRandomY(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t blockSize)
@@ -198,24 +180,27 @@ struct ECC::Impl
 
     cudaError_t calculatePublicKeys()
     {
-        constexpr uint256_t infinite{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
-        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), infinite);
-        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), infinite);
-
-        cudaStreamSynchronize(mGeneratorStream);
+        cudaError_t err = cudaKernelSyncLaunch(mGeneratorStream, [&]()
+        {
+            constexpr uint256_t infinite{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+            thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), infinite);
+            thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), infinite);
+        }, "Initialize public keys");
 
         constexpr uint32_t mSharedMemSize{0};
-        multiplyStepKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(thrust::raw_pointer_cast(d_privateKeys.data()));
+        const uint256_t *privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys.data());
+        err = cudaKernelSyncLaunch(mGeneratorStream, [&]()
+        {
+            multiplyStepKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+        }, "multiplyStepKernel");
 
-        cudaEventRecord(mStopEvent, mGeneratorStream);
-
-        const cudaError_t err = cudaStreamSynchronize(mGeneratorStream);
-
-        float milliseconds = 0;
-        cudaEventElapsedTime(&milliseconds, mStartEvent, mStopEvent);
-
-        // Output the timing result
-        std::fprintf(stderr, "multiplyStepKernel took %f ms.\n", milliseconds);
+        if (err == cudaSuccess)
+        {
+            err = cudaKernelSyncLaunch(mGeneratorStream, [&]()
+            {
+                checkHashKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+            }, "checkHashKernel");
+        }
 
         fflush(stderr);
         fflush(stdout);
