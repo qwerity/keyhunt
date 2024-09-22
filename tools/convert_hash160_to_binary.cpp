@@ -1,28 +1,18 @@
 #include "util/utils.h"
-#include "util/common.h"
 #include "cuda/defines.cuh"
+#include "util/config.h"
 
 #include <string>
 #include <unordered_set>
-#include <set>
-#include <vector>
 
 #include <boost/log/trivial.hpp>
 #include <boost/log/utility/setup.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 
-
-bool loadFileToMemoryAndValidate(const std::string_view fileName)
-{
-    return true;
-}
-
 int main(int argc, char* argv[])
 {
-    utils::Timer timer;
-
+    utils::initLogging({LogConfig::LogType::console, "", 0});
     boost::iostreams::mapped_file_source file;
-    boost::log::add_console_log(std::cerr, boost::log::keywords::auto_flush = true);
 
     if (argc != 2)
     {
@@ -31,63 +21,31 @@ int main(int argc, char* argv[])
     }
 
     const std::string hash160TargetsFilepath = argv[1];
+    std::unordered_set<hash160> hash160Set;
 
-    timer.start();
-
-    file.open(hash160TargetsFilepath);
-    if (!file.is_open())
+    if(!utils::readHash160HexStrFileToSet(hash160TargetsFilepath, hash160Set))
     {
-        BOOST_LOG_TRIVIAL(error) << "Unable to open " << hash160TargetsFilepath;
-        return -2;
+        return -1;
     }
 
-    BOOST_LOG_TRIVIAL(info) << "Loading RipeMD-160 hashes from: " << hash160TargetsFilepath;
-
-    const char* data = file.data();
-    const size_t size = file.size();
-    constexpr size_t chunkSize = 40;  // Each chunk is 20 bytes (without newlines)
-
-    std::vector<hash160> mHash160Targets;
-    mHash160Targets.reserve(size/chunkSize);
-
-    // Read the file in fixed-size chunks of 20 bytes
-    for (size_t i = 0; i < size;)
+    const std::string hash160TargetsBinFilepath{hash160TargetsFilepath + ".bin"};
+    if (!utils::writeHash160SetToBinaryFile(hash160TargetsBinFilepath, hash160Set))
     {
-        if (i + chunkSize <= size)
-        {
-            // Convert the 20-byte chunk into an array of uint32_t[5]
-            mHash160Targets.emplace_back(utils::hexToHash160(data + i));
-
-            // Move to the next chunk
-            i += chunkSize;
-        }
-
-        // Skip any newlines or whitespace characters
-        while (i < size && (data[i] == '\n' || data[i] == '\r' || data[i] == ' '))
-        {
-            ++i;
-        }
+        return -1;
     }
 
-    // Close the file
-    file.close();
-
-    for (uint32_t i = mHash160Targets.size() - 10; i < mHash160Targets.size(); ++i)
+    std::unordered_set<hash160> hash160SetFromBin;
+    if (!utils::readSetFromHash160BinaryFile(hash160TargetsBinFilepath, hash160SetFromBin))
     {
-        BOOST_LOG_TRIVIAL(info) << utils::convertToHexString(mHash160Targets[i].h, 5);
+        return -1;
     }
 
-    const auto fileReadTimeS = static_cast<float>(timer.getTime()) / 1000;
-    BOOST_LOG_TRIVIAL(info) << "Loaded " << utils::formatThousands(mHash160Targets.size())
-                            << " hashes, (" << utils::format("%.02fs | %.02f", fileReadTimeS, static_cast<double>(sizeof(hash160) * mHash160Targets.size()) / MB) << " Mb)";
+    BOOST_LOG_TRIVIAL(error) << "Verifying binary file is correct...";
+    if (hash160Set != hash160SetFromBin)
+    {
+        BOOST_LOG_TRIVIAL(error) << "Written binary is not match the written memory";
+    }
 
-    // timer.start();
-    // std::set<hash160> hash160Set(
-    //         std::make_move_iterator(mHash160Targets.begin()),
-    //         std::make_move_iterator(mHash160Targets.end())
-    //     );
-    // BOOST_LOG_TRIVIAL(info) << "vector to set took: " << utils::format("%.02fs", static_cast<float>(timer.getTime()) / 1000) << ", set size: " << hash160Set.size();
-
-
+    BOOST_LOG_TRIVIAL(error) << "Binary file is ok!";
     return 0;
 }
