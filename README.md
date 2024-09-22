@@ -24,3 +24,10 @@ There is needed to install following packages to be able to compile
 - `cmake --build .\build\ --config=Release -j 14 --target cuda-keyhunt-pvk`
 - If all good you can find the binary in `{project directory}/bin` folder
 - Copy the config.json to bin folder and 
+
+
+# Convert Hex string Hash160 target file to binary
+- Build `convert_hash160_to_binary` target
+- `convert_hash160_to_binary hex_str_hash160_targetx.txt`
+- This will generate `hex_str_hash160_targetx.txt.bin` binary file
+- Replace in config file the targets list with binary files
