@@ -1,5 +1,6 @@
 #include "utils.h"
 #include "secp256k1.h"
+#include "config.h"
 
 #include "cuda/defines.cuh"
 
@@ -92,13 +93,15 @@ namespace utils
             isHex = true;
             s = s.substr(0, s.length() - 1);
         }
+
         if (isHex)
         {
             if (std::sscanf(s.c_str(), "%I64u", &val) != 1)
             {
                 throw std::string("Expected an integer");
             }
-        } else
+        }
+        else
         {
             if (std::sscanf(s.c_str(), "%I64u", &val) != 1)
             {
@@ -178,21 +181,23 @@ namespace utils
         return ss.str();
     }
 
-    void initLogging([[maybe_unused]] const std::string& logFile)
+    void initLogging([[maybe_unused]] const LogConfig& log)
     {
-        boost::log::add_console_log(std::cerr, boost::log::keywords::auto_flush = true);
-        // boost::log::add_console_log(std::cerr, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
-
-        // // Setting up a file logger
-        // boost::log::add_file_log(logFile, boost::log::keywords::auto_flush = true);
-        // boost::log::add_file_log(logFile, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
+        if (log.type == LogConfig::LogType::console)
+        {
+            boost::log::add_console_log(std::cerr, boost::log::keywords::auto_flush = true);
+            // boost::log::add_console_log(std::cerr, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
+        }
+        else
+        {
+            // boost::log::add_file_log(log.logFilePath, boost::log::keywords::auto_flush = true);
+            // boost::log::add_file_log(log.logFilePath, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
+        }
 
         // Add attributes like timestamp and thread id
         // boost::log::add_common_attributes();
 
-        // boost::log::core::get()->set_filter(
-        //     boost::log::trivial::severity > boost::log::trivial::fatal
-        // );
+         boost::log::core::get()->set_filter(boost::log::trivial::severity >= static_cast<boost::log::trivial::severity_level>(log.severity));
     }
 
     std::vector<secp256k1::uint256> generateRandomPrivateKeys(const uint32_t keysNumberToGenerate)
@@ -239,6 +244,6 @@ namespace utils
             hash.h[i] = std::stoul(hex_str, nullptr, 16);
         }
 
-        return std::move(hash);
+        return hash;
     }
 }

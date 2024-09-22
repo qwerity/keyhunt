@@ -7,5 +7,11 @@
   "keysNumberToGenerate": 0,
   "privateX": 1,
   "publicKeyCompressionTypeToCheck": 2,
-  "statusCallbackPeriodMs": 1000
+  "statusCallbackPeriodMs": 1000,
+
+  "log" : {
+    "type": "console",
+    "file": "app.log",
+    "severity": 0
+  }
 }

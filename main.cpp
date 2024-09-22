@@ -24,8 +24,8 @@ void statusCallback(const StatusInfo &info)
 
 int main()
 {
-    utils::initLogging();
     const Config config;
+    utils::initLogging(config.log);
 
     const auto sharedDataQueue = std::make_shared<DataQueue>();
     const auto sharedHash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();

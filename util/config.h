@@ -3,6 +3,18 @@
 #include <string>
 #include <vector>
 
+struct LogConfig
+{
+    enum class LogType
+    {
+        file,
+        console
+    };
+
+    LogType type{LogType::console};
+    std::string logFilePath;
+    uint32_t severity{0};
+};
 struct Config
 {
     Config();
@@ -28,5 +40,7 @@ struct Config
 
     uint32_t statusCallbackPeriodMs{1000};
 
-    bool selftest{false};
+    [[maybe_unused]] bool selftest{false};
+
+    LogConfig log;
 };

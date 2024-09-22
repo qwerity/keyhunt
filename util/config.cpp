@@ -103,6 +103,31 @@ void Config::load(const std::string &configJsonFileName)
     {
         BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'statusCallbackPeriodMs' must be an unsigned integer, using default value: " << statusCallbackPeriodMs;
     }
+
+    // Validate the JSON structure
+    if (configJson.contains("log") && configJson["log"].is_object())
+    {
+        const auto& logConfig = configJson["log"];
+
+        // Check for required fields and their types
+        if (logConfig.contains("type") && logConfig["type"].is_string())
+        {
+            log.type = (logConfig["type"] == "file") ? LogConfig::LogType::file : LogConfig::LogType::console;
+        }
+        if (logConfig.contains("file") && logConfig["file"].is_string() && !logConfig["file"].empty())
+        {
+            log.logFilePath = logConfig["file"];
+        }
+        if (logConfig.contains("severity") && logConfig["severity"].is_number())
+        {
+            uint32_t logSeverity = logConfig["severity"];
+            if (logSeverity > 5) // fatal
+            {
+                logSeverity = 5;
+            }
+            log.severity = logSeverity;
+        }
+    }
 }
 
 void Config::print()

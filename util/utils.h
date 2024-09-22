@@ -4,6 +4,9 @@
 #include <vector>
 #include <cstdint>
 #include <functional>
+#include <unordered_set>
+
+struct LogConfig;
 
 namespace secp256k1
 {
@@ -23,7 +26,7 @@ namespace utils
         [[nodiscard]] uint64_t getTime() const;
 
     private:
-        uint64_t _startTime;
+        uint64_t _startTime{0};
     };
 
     class ScopeOutRunner
@@ -84,7 +87,7 @@ namespace utils
     inline unsigned int endian(unsigned int x) { return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24); }
 
     std::string convertToHexString(const uint32_t* arr, uint32_t size);
-    void initLogging(const std::string& logFile = "app.log");
+    void initLogging(const LogConfig& log);
 
     std::vector<secp256k1::uint256> generateRandomPrivateKeys(uint32_t keysNumberToGenerate = 5);
 
