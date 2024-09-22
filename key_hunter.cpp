@@ -2,11 +2,9 @@
 
 #include <thread>
 #include <utility>
-#include <functional>
 #include <unordered_set>
 
 #include <boost/log/trivial.hpp>
-#include <boost/algorithm/string.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 
 #include "cuda/atomic_list.cuh"
@@ -287,56 +285,16 @@ struct KeyHunter::Impl
         if (ripemd160TargetsFilePaths.empty())
             return;
 
-        utils::Timer timer;
         for (const auto& hash160TargetsFile : mgContext.config.ripemd160TargetsFilePaths)
         {
-            boost::iostreams::mapped_file_source file;
-
-            if (hash160TargetsFile.empty())
-                continue;
-
-            timer.start();
-
-            file.open(hash160TargetsFile);
-            if (!file.is_open())
+            if (hash160TargetsFile.substr(hash160TargetsFile.size() - 3) == "bin")
             {
-                BOOST_LOG_TRIVIAL(warning) << "Unable to open " << hash160TargetsFile;
-                continue;
+                utils::readSetFromHash160BinaryFile(hash160TargetsFile, mHash160Targets);
             }
-
-            BOOST_LOG_TRIVIAL(info) << "Loading RipeMD-160 hashes from: " << hash160TargetsFile;
-
-            const char* data = file.data();
-            const size_t size = file.size();
-            constexpr size_t chunkSize = 40;  // Each chunk is 20 bytes (without newlines)
-
-            uint64_t insertedTargetsCount{0};
-            // Read the file in fixed-size chunks of 20 bytes
-            for (size_t i = 0; i < size;)
+            else
             {
-                if (i + chunkSize <= size)
-                {
-                    // Convert the 20-byte chunk into an array of uint32_t[5]
-                    mHash160Targets.insert(utils::hexToHash160(data + i));
-                    ++insertedTargetsCount;
-
-                    // Move to the next chunk
-                    i += chunkSize;
-                }
-
-                // Skip any newlines or whitespace characters
-                while (i < size && (data[i] == '\n' || data[i] == '\r' || data[i] == ' '))
-                {
-                    ++i;
-                }
+                utils::readHash160HexStrFileToSet(hash160TargetsFile, mHash160Targets);
             }
-
-            // Close the file
-            file.close();
-
-            const auto fileReadTimeS = static_cast<float>(timer.getTime()) / 1000;
-            BOOST_LOG_TRIVIAL(info) << "Loaded " << utils::formatThousands(insertedTargetsCount)
-                                    << " hashes, (" << utils::format("%.02fs | %.02f", fileReadTimeS, static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB) << " Mb)";
         }
 
         mHash160Lookup.setTargets(mHash160Targets);
