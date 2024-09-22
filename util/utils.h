@@ -6,13 +6,12 @@
 #include <functional>
 #include <unordered_set>
 
-struct LogConfig;
-
 namespace secp256k1
 {
     struct uint256;
 }
 
+struct LogConfig;
 struct hash160;
 
 namespace utils
@@ -93,4 +92,8 @@ namespace utils
 
     hash160 toHash160(const std::string& hexString);
     hash160 hexToHash160(const char *data);
+
+    bool readHash160HexStrFileToSet(const std::string& hash160TargetsFile, std::unordered_set<hash160>& hashSet);
+    bool writeHash160SetToBinaryFile(const std::string& filename, const std::unordered_set<hash160>& hashSet);
+    bool readSetFromHash160BinaryFile(const std::string& filename, std::unordered_set<hash160>& set);
 }

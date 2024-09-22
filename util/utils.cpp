@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "common.h"
 #include "secp256k1.h"
 #include "config.h"
 
@@ -12,7 +13,9 @@
 #include <algorithm>
 #include <iomanip>
 
+#include <boost/log/trivial.hpp>
 #include <boost/log/utility/setup.hpp>
+#include <boost/iostreams/device/mapped_file.hpp>
 
 #ifdef _WIN32
     #include<windows.h>
@@ -246,4 +249,161 @@ namespace utils
 
         return hash;
     }
+
+    bool readHash160HexStrFileToSet(const std::string& hash160TargetsFile, std::unordered_set<hash160> &hashSet)
+    {
+        try
+        {
+            Timer timer;
+            boost::iostreams::mapped_file_source file;
+
+            if (hash160TargetsFile.empty())
+            {
+                BOOST_LOG_TRIVIAL(error) << "Filename is empty: " << hash160TargetsFile;
+                return false;
+            }
+
+            timer.start();
+
+            file.open(hash160TargetsFile);
+            if (!file.is_open())
+            {
+                BOOST_LOG_TRIVIAL(error) << "Unable to open " << hash160TargetsFile;
+                return false;
+            }
+
+            const char *data = file.data();
+            const size_t fileSize = file.size();
+            constexpr size_t hash160StrSize = 2 * sizeof(hash160);  // Each chunk is 20 bytes (without newlines)
+
+            // reserving memory to avoid memory allocation during insertion
+            hashSet.reserve(hashSet.size() + fileSize / (hash160StrSize + 1)); // +1 is new line
+
+            BOOST_LOG_TRIVIAL(trace) << "Loading RipeMD-160 hashes from: " << hash160TargetsFile << ", fileSize: " << utils::format("%.02f", static_cast<double>(fileSize) / MB) << " Mb)";
+
+            uint64_t insertedTargetsCount{0};
+            // Read the file in fixed-fileSize chunks of 20 bytes
+            for (size_t i = 0; i < fileSize;)
+            {
+                // Skip any newlines or whitespace characters
+                while (i < fileSize && (data[i] == '\n' || data[i] == '\r' || data[i] == ' '))
+                {
+                    ++i;
+                }
+
+                if (i + hash160StrSize <= fileSize)
+                {
+                    // Convert the 20-byte chunk into an array of uint32_t[5]
+                    hashSet.insert(utils::hexToHash160(data + i));
+                    ++insertedTargetsCount;
+
+                    // Move to the next chunk
+                    i += hash160StrSize;
+                }
+            }
+
+            file.close();
+
+            const auto fileReadTimeS = static_cast<float>(timer.getTime()) / 1000;
+            BOOST_LOG_TRIVIAL(trace) << "Read " << hashSet.size() << " unique hashes, from: " << utils::formatThousands(insertedTargetsCount)
+                                     << ", (" << utils::format("%.02fs | %.02f", fileReadTimeS, static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB) << " Mb)";
+        }
+        catch(const std::exception& e)
+        {
+            BOOST_LOG_TRIVIAL(trace) << e.what();
+            return false;
+        }
+
+        return true;
+    }
+
+    bool writeHash160SetToBinaryFile(const std::string& filename, const std::unordered_set<hash160>& hashSet)
+    {
+        try
+        {
+            Timer timer;
+
+            std::ofstream ofs(filename, std::ios::binary | std::ios::trunc);
+            if (!ofs.is_open())
+            {
+                std::cerr << "Error opening file for writing: " << filename << std::endl;
+                return false;
+            }
+
+            timer.start();
+
+            for (const auto &h: hashSet)
+            {
+                ofs.write(reinterpret_cast<const char *>(&h), sizeof(hash160));
+            }
+
+            const auto fileWriteTimeS = static_cast<float>(timer.getTime()) / 1000;
+            BOOST_LOG_TRIVIAL(trace) << "Written " << hashSet.size() << " hashes to " << filename
+                                     << " as a binary, in " << utils::format("%.02fs | %.02f", fileWriteTimeS, static_cast<double>(ofs.tellp()) / MB) << " Mb)";
+
+            ofs.close();
+        }
+        catch (const std::exception& e)
+        {
+            BOOST_LOG_TRIVIAL(error) << e.what();
+            return false;
+        }
+
+        return true;
+    }
+
+    bool readSetFromHash160BinaryFile(const std::string& filename, std::unordered_set<hash160>& hashSet)
+    {
+        try
+        {
+            Timer timer;
+
+            boost::iostreams::mapped_file_source file;
+            file.open(filename);
+
+            if (!file.is_open())
+            {
+                BOOST_LOG_TRIVIAL(error) << "Error opening file: " << filename;
+                return false;
+            }
+
+            timer.start();
+
+            // Pointer to the start of the file data
+            const char *data = file.data();
+            size_t fileSize = file.size();
+
+            // Make sure the file size is a multiple of sizeof(hash160)
+            if (fileSize % sizeof(hash160) != 0)
+            {
+                BOOST_LOG_TRIVIAL(error) << "File size is not aligned with hash160 structure!";
+                return false;
+            }
+
+            const size_t numEntries = fileSize / sizeof(hash160);
+
+            BOOST_LOG_TRIVIAL(trace) << "Loading RipeMD-160 hashes from: " << filename << ", size: " << utils::format("%.02f", static_cast<double>(fileSize) / MB) << " Mb)";
+
+            hashSet.reserve(numEntries);
+            for (size_t i = 0; i < numEntries; ++i)
+            {
+                hash160 h;
+                std::memcpy(&h, data + i * sizeof(hash160), sizeof(hash160));
+                hashSet.insert(h);
+            }
+
+            file.close();
+
+            const auto fileReadTimeS = static_cast<float>(timer.getTime()) / 1000;
+            BOOST_LOG_TRIVIAL(info) << "Read " << hashSet.size() << " hashes from binary file: " << filename << ", in " << utils::format("%.02fs", fileReadTimeS);
+        }
+        catch (const std::exception& e)
+        {
+            BOOST_LOG_TRIVIAL(error) << e.what();
+            return false;
+        }
+
+        return true;
+    }
 }
+
