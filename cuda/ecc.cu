@@ -138,7 +138,7 @@ struct ECC::Impl
         h_privateKeys = d_privateKeys;
     }
 
-    void generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration)
+    cudaError_t generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration)
     {
         const uint32_t keysNumberPerIteration = getKeysNumberPerIteration();
 
@@ -151,7 +151,7 @@ struct ECC::Impl
         const uint32_t increment = iteration * keysNumberPerIteration;
 
         // {x, 0}, {x, 1}, ... , {x, keysNumberPerIteration - 1}
-        cudaError_t err = cudaKernelSyncLaunch(mInitStream, [&]()
+        return cudaKernelSyncLaunch(mInitStream, [&]()
         {
             thrust::transform(thrust::cuda::par.on(mInitStream),
                               thrust::counting_iterator<uint32_t>(0u),
@@ -245,9 +245,9 @@ cudaError_t ECC::calculatePublicKeys() const
     return mImpl->calculatePublicKeys();
 }
 
-void ECC::generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration) const
+cudaError_t ECC::generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration) const
 {
-    mImpl->generatePrivateKeysForXPerIteration(privateXPart, iteration);
+    return mImpl->generatePrivateKeysForXPerIteration(privateXPart, iteration);
 }
 
 void ECC::getPrivateKeys(thrust::host_vector<uint256_t> &h_privateKeys) const

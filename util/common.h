@@ -31,7 +31,7 @@ struct StatusInfo
     uint64_t totalDeviceMemory{};
 
     uint32_t iteration{};
-    uint32_t remainsIterations{};
+    uint32_t totalIterations{};
 };
 
 /*################################################################################################################################################################################*/
@@ -40,6 +40,8 @@ struct Hash160SearchResult
     int thread{0};
     int block{0};
     int idx{0};
+
+    uint32_t iteration{0};
 
     bool compressed{false};
     uint32_t privateKey[8]{};
