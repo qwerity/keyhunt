@@ -1,5 +1,5 @@
 #include "key_hunter.h"
-#include "key_processor.h"
+#include "results_processor.h"
 
 #include "util/utils.h"
 
@@ -30,27 +30,28 @@ int main()
     const Config config;
     utils::initLogging(config.log);
 
-    const auto sharedDataQueue = std::make_shared<DataQueue>();
-    const auto sharedHash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();
-    const auto cudaInfo = cu::getDeviceInfo(config.cudaDeviceId);
-    // printDeviceInfo(cudaInfo);
+    const GlobalContext context{
+        .config = config,
+        .cudaInfo = cu::getDeviceInfo(config.cudaDeviceId),
+        .dataQueue = std::make_shared<DataQueue>(),
+        .hash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>(),
+        .statusCallback = statusCallback
+    };
 
-    const KeyHunter keyHunter({config, cudaInfo, sharedDataQueue, sharedHash160SearchResultsQueue, statusCallback});
-    const KeyProcessor keyProcessor(sharedDataQueue);
+    const KeyHunter keyHunter(context);
+    const ResultsProcessor keyProcessor(context);
 
     keyHunter.findPublicHashWithPrivateDefinedXRandomY();
-    // keyHunter.startWithRandomPrivateKeys();
-    // keyProcessor.start();
+     keyProcessor.startHash160ResultsQueueProcessing();
 
     // Giving some time to process, otherwise main thread will force stop the processing
-    while (!keyHunter.isDone() && sharedDataQueue->empty())
+    while (!keyHunter.isDone())
     {
-        // fmt::print("Remain data to process: {}\n", sharedDataQueue->empty());
         std::this_thread::yield(); // If the queue is full, yield to avoid busy-wait
     }
 
     keyHunter.stop();
-    // keyProcessor.stop();
+    keyProcessor.stop();
 
     return 0;
 }

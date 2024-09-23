@@ -57,8 +57,8 @@ set(MAIN_SRC
     main.cpp
     key_hunter.cpp
     key_hunter.h
-    key_processor.cpp
-    key_processor.h
+    results_processor.cpp
+    results_processor.h
 )
 add_executable(${PROJECT_NAME} ${MAIN_SRC})
 target_link_libraries(${PROJECT_NAME} PRIVATE util)

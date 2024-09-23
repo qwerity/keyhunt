@@ -126,7 +126,7 @@ struct KeyHunter::Impl
 
         BOOST_LOG_TRIVIAL(info) << utils::format("KeyGenerator: generated %s keys\n", results.size());
 
-        // to be deleted in KeyProcessor
+        // to be deleted in ResultsProcessor
         auto* pairs = new Secp256k1KeyPairs;
         for (const auto &[privateKey, publicKey] : results)
         {
@@ -239,7 +239,7 @@ struct KeyHunter::Impl
             {
                 mTimer.start();
                 {
-                    mCuECC->generatePrivateKeysForXPerIteration(mgContext.config.privateXPart, mIteration);
+                    cu::safeCall(mCuECC->generatePrivateKeysForXPerIteration(mgContext.config.privateXPart, mIteration));
 
                     cu::safeCall(mCuECC->calculatePublicKeys());
                 }
