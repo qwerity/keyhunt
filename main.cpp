@@ -21,8 +21,8 @@ void statusCallback(const StatusInfo &info)
         , info.totalIterations
         , speedStr.c_str(), totalStr.c_str(), timeStr.c_str());
 
-    // fprintf(stderr, "\r%s", statusStr.c_str());
-    BOOST_LOG_TRIVIAL(info) << statusStr;
+    fprintf(stderr, "\r%s", statusStr.c_str());
+    //BOOST_LOG_TRIVIAL(info) << statusStr;
 }
 
 int main()
