@@ -2,6 +2,8 @@
 #include "util/utils.h"
 
 #include <thread>
+#include <format>
+
 #include <boost/log/trivial.hpp>
 
 struct ResultsProcessor::Impl
@@ -78,10 +80,15 @@ struct ResultsProcessor::Impl
                     std::this_thread::yield(); // If the queue is empty, yield to avoid busy-wait
                 }
 
-                BOOST_LOG_TRIVIAL(info) << " private key: " << utils::convertToHexString(result.privateKey, 8)
-                                        << ", public X key: " << utils::convertToHexString(result.publicXKey, 8)
-                                        << ", hash: " << utils::convertToHexString(result.digest, 5)
-                                        << ", iteration: " << result.iteration << ", index: " << result.idx << ", compressed: " << result.compressed;
+                const std::string privateStr{utils::convertToHexString(result.privateKey, 8)};
+                const std::string publicXStr{utils::convertToHexString(result.publicXKey, 8)};
+                const std::string hash160Str{utils::convertToHexString(result.digest, 5)};
+
+                const std::string resultsStr = std::format("private: {}, publicX: {}, hash160: {}, iteration: {}, index: {}, compressed: {}",
+                                                           privateStr, publicXStr, hash160Str, result.iteration, result.idx, result.compressed);
+
+                utils::appendToFile("results.txt", resultsStr);
+                // BOOST_LOG_TRIVIAL(info) << resultsStr;
             }
 
             BOOST_LOG_TRIVIAL(info) << "ResultsProcessor: done";

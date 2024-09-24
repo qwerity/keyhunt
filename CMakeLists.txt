@@ -22,7 +22,7 @@ find_package(CUDAToolkit 12 EXACT REQUIRED)
 include_directories(${CUDAToolkit_INCLUDE_DIRS})
 
 ####################################################################################################################################################################################
-if (WIN32)
+if(WIN32)
     set(BOOST_ROOT "C:/boost/boost-1.86.0/")
     set(BOOST_LIBRARYDIR "${BOOST_ROOT}/stage/lib")
 
