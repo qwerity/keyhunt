@@ -15,6 +15,13 @@ struct LogConfig
     std::string logFilePath;
     uint32_t severity{0};
 };
+
+struct ServerConfig
+{
+    std::string url;
+    std::string apiKey;
+};
+
 struct Config
 {
     Config();
@@ -42,5 +49,6 @@ struct Config
 
     [[maybe_unused]] bool selftest{false};
 
+    ServerConfig server;
     LogConfig log;
 };

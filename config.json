@@ -3,11 +3,18 @@
     "small_hash160.txt"
   ],
   "cudaDeviceId": 0,
+
+  "statusCallbackPeriodMs": 1000,
+
   "pointsPerThread": 128,
   "keysNumberToGenerate": 0,
   "privateX": 1,
   "publicKeyCompressionTypeToCheck": 2,
-  "statusCallbackPeriodMs": 1000,
+
+  "server" : {
+    "url": "",
+    "apiKey": ""
+  },
 
   "log" : {
     "type": "console",

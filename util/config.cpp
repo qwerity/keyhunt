@@ -6,6 +6,59 @@
 #include <fstream>
 #include <boost/log/trivial.hpp>
 
+namespace
+{
+    void loadLogConfig(const nlohmann::json& configJson, LogConfig& log)
+    {
+        if (!configJson.contains("log") || !configJson["log"].is_object())
+        {
+            return;
+        }
+
+        const auto& logConfig = configJson["log"];
+
+        if (logConfig.contains("type") && logConfig["type"].is_string())
+        {
+            log.type = (logConfig["type"] == "file") ? LogConfig::LogType::file : LogConfig::LogType::console;
+        }
+
+        if (logConfig.contains("file") && logConfig["file"].is_string() && !logConfig["file"].empty())
+        {
+            log.logFilePath = logConfig["file"];
+        }
+
+        if (logConfig.contains("severity") && logConfig["severity"].is_number())
+        {
+            uint32_t logSeverity = logConfig["severity"];
+            if (logSeverity > 5) // fatal
+            {
+                logSeverity = 5;
+            }
+            log.severity = logSeverity;
+        }
+    }
+    
+    void loadServerConfig(const nlohmann::json& configJson, ServerConfig& server)
+    {
+        if (!configJson.contains("server") || !configJson["server"].is_object())
+        {
+            return;
+        }
+
+        const auto& serverConfig = configJson["server"];
+
+        if (serverConfig.contains("url") && serverConfig["url"].is_string())
+        {
+            server.url = serverConfig["url"];
+        }
+
+        if (serverConfig.contains("apiKey") && serverConfig["apiKey"].is_string() && !serverConfig["apiKey"].empty())
+        {
+            server.apiKey = serverConfig["apiKey"];
+        }
+    }
+}
+
 Config::Config()
 {
     load();
@@ -104,30 +157,8 @@ void Config::load(const std::string &configJsonFileName)
         BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'statusCallbackPeriodMs' must be an unsigned integer, using default value: " << statusCallbackPeriodMs;
     }
 
-    // Validate the JSON structure
-    if (configJson.contains("log") && configJson["log"].is_object())
-    {
-        const auto& logConfig = configJson["log"];
-
-        // Check for required fields and their types
-        if (logConfig.contains("type") && logConfig["type"].is_string())
-        {
-            log.type = (logConfig["type"] == "file") ? LogConfig::LogType::file : LogConfig::LogType::console;
-        }
-        if (logConfig.contains("file") && logConfig["file"].is_string() && !logConfig["file"].empty())
-        {
-            log.logFilePath = logConfig["file"];
-        }
-        if (logConfig.contains("severity") && logConfig["severity"].is_number())
-        {
-            uint32_t logSeverity = logConfig["severity"];
-            if (logSeverity > 5) // fatal
-            {
-                logSeverity = 5;
-            }
-            log.severity = logSeverity;
-        }
-    }
+    loadLogConfig(configJson, log);
+    loadServerConfig(configJson, server);
 }
 
 void Config::print()
