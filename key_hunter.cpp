@@ -2,6 +2,7 @@
 
 #include <thread>
 #include <utility>
+#include <format>
 #include <unordered_set>
 
 #include <boost/log/trivial.hpp>
@@ -51,7 +52,8 @@ struct KeyHunter::Impl
 
     void stop()
     {
-        BOOST_LOG_TRIVIAL(info) << "KeyGenerator stopping" << std::endl;
+        BOOST_LOG_TRIVIAL(trace) << "KeyHunter stopping" << std::endl;
+
         mStopFlag = true;
         // mDone = true;
 
@@ -59,6 +61,8 @@ struct KeyHunter::Impl
         {
             mThread.join();
         }
+
+        BOOST_LOG_TRIVIAL(trace) << "KeyHunter stopping" << std::endl;
     }
 
     void initializeGPoints() const
@@ -124,7 +128,7 @@ struct KeyHunter::Impl
         thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
         // cu::safeCall(mCuECC->getResults(results));
 
-        BOOST_LOG_TRIVIAL(info) << utils::format("KeyGenerator: generated %s keys\n", results.size());
+        BOOST_LOG_TRIVIAL(info) << std::format("KeyHunter: generated {} keys", results.size());
 
         // to be deleted in ResultsProcessor
         auto* pairs = new Secp256k1KeyPairs;
@@ -153,14 +157,14 @@ struct KeyHunter::Impl
 
         mThread = std::thread([&privateKeys, this]()
         {
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator Thread ID: " << std::this_thread::get_id();
+            BOOST_LOG_TRIVIAL(trace) << "KeyHunter Thread ID: " << std::this_thread::get_id();
 
             mTimer.start();
             cu::safeCall(mCuECC->calculatePublicKeys());
 
             signalStatusInfo(privateKeys.size(), 1, 1, mTimer.getTime());
 
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: done, generated " << utils::formatThousands(privateKeys.size()) << "keys";
+            BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", privateKeys.size());
 
             mDone = true;
             pushResultsToQueue();
@@ -218,7 +222,7 @@ struct KeyHunter::Impl
 
         mThread = std::thread([&]()
         {
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator Thread ID: " << std::this_thread::get_id();
+            BOOST_LOG_TRIVIAL(trace) << "KeyHunter Thread ID: " << std::this_thread::get_id();
 
             const uint32_t totalKeysToGenerate = (mgContext.config.keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : mgContext.config.keysNumberToGenerate;
 
@@ -227,12 +231,12 @@ struct KeyHunter::Impl
             const uint32_t remainder = totalKeysToGenerate - (iterationsCount * keysNumberPerIteration);
 
             // todo: to be encrypted
-            BOOST_LOG_TRIVIAL(info) << "privateXPart: " << mgContext.config.privateXPart;
+            BOOST_LOG_TRIVIAL(trace) << "privateXPart: " << mgContext.config.privateXPart;
 
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: totalKeysToGenerate: " << utils::formatThousands(totalKeysToGenerate) << ", keysNumberPerIteration: " << utils::formatThousands(keysNumberPerIteration);
+            BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: totalKeysToGenerate: {:L}, keysNumberPerIteration: {:L}", totalKeysToGenerate, keysNumberPerIteration);
 
             const uint32_t finalIterationsCount = iterationsCount + (remainder > 0 ? 1 : 0);
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: total iterations: " << finalIterationsCount << ", remaining data: " << remainder;
+            BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: total iterations: {:L}, remaining data: {:L}", finalIterationsCount, remainder);
 
             mIteration = 0;
             while (!mStopFlag && mIteration < finalIterationsCount)
@@ -253,7 +257,7 @@ struct KeyHunter::Impl
 
             assert(mIteration == finalIterationsCount);
 
-            BOOST_LOG_TRIVIAL(info) << "KeyGenerator: done, generated " << utils::formatThousands(keysNumberPerIteration * finalIterationsCount) << " keys";
+            BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", keysNumberPerIteration * finalIterationsCount);
             mIteration = 0;
             mDone = true;
         });
@@ -262,7 +266,7 @@ struct KeyHunter::Impl
     /// todo: to be fixed
     void selfTest(const uint32_t keysNumberToGenerate) const
     {
-        // BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest started";
+        // BOOST_LOG_TRIVIAL(info) << "KeyHunter::selfTest started";
         //
         // const thrust::host_vector<secp256k1::uint256> privateKeys = utils::generateRandomPrivateKeys(keysNumberToGenerate);
         //
@@ -272,11 +276,11 @@ struct KeyHunter::Impl
         //
         // if (mCuECC->selfTest(privateKeys))
         // {
-        //     BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest done";
+        //     BOOST_LOG_TRIVIAL(info) << "KeyHunter::selfTest done";
         // }
         // else
         // {
-        //     BOOST_LOG_TRIVIAL(info) << "KeyGenerator::selfTest fails";
+        //     BOOST_LOG_TRIVIAL(info) << "KeyHunter::selfTest fails";
         // }
         //
         // thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;

@@ -15,7 +15,7 @@ void Config::load(const std::string &configJsonFileName)
 {
     if(!std::filesystem::exists(configJsonFileName))
     {
-        BOOST_LOG_TRIVIAL(info) << "Config file config.json is not present in binary directory, using default values";
+        BOOST_LOG_TRIVIAL(warning) << "Config file config.json is not present in binary directory, using default values";
         print();
 
         return;
@@ -28,7 +28,7 @@ void Config::load(const std::string &configJsonFileName)
     // Validate that "targets" is an array and has at least one element
     if (!configJson.contains("targets") || !configJson["targets"].is_array() || configJson["targets"].empty())
     {
-        BOOST_LOG_TRIVIAL(info) << "Targets are not set, running without them";
+        BOOST_LOG_TRIVIAL(warning) << "Targets are not set, running without them";
     }
     else
     {

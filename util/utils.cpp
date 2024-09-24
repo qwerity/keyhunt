@@ -12,6 +12,7 @@
 #include <vector>
 #include <algorithm>
 #include <iomanip>
+#include <format>
 
 #include <boost/log/trivial.hpp>
 #include <boost/log/utility/setup.hpp>
@@ -51,30 +52,6 @@ namespace utils
     uint64_t Timer::getTime() const
     {
         return getSystemTime() - _startTime;
-    }
-
-    std::string formatThousands(const uint64_t x)
-    {
-        std::string s = std::to_string(x);
-
-        const auto len = static_cast<int>(s.length());
-        if (const int numCommas = (len - 1) / 3; numCommas == 0)
-        {
-            return s;
-        }
-
-        std::string result;
-        int count = ((len % 3) == 0) ? 0 : (3 - (len % 3));
-        for (int i = 0; i < len; i++)
-        {
-            result += s[i];
-            if (count++ == 2 && i < len - 1)
-            {
-                result += ",";
-                count = 0;
-            }
-        }
-        return result;
     }
 
     uint32_t parseUInt32(std::string s)
@@ -128,10 +105,10 @@ namespace utils
 
         if (days > 0)
         {
-            return utils::format("%d:%02d:%02d:%02d", days, hours, minutes, sec);
+            return std::format("{}:{:02}:{:02}:{:02}", days, hours, minutes, sec);
         }
 
-        return utils::format("%02d:%02d:%02d", hours, minutes, sec);
+        return std::format("{:02}:{:02}:{:02}", hours, minutes, sec);
     }
 
     long getFileSize(const std::string &fileName)
@@ -279,7 +256,7 @@ namespace utils
             // reserving memory to avoid memory allocation during insertion
             hashSet.reserve(hashSet.size() + fileSize / (hash160StrSize + 1)); // +1 is new line
 
-            BOOST_LOG_TRIVIAL(trace) << "Loading RipeMD-160 hashes from: " << hash160TargetsFile << ", fileSize: " << utils::format("%.02f", static_cast<double>(fileSize) / MB) << " Mb)";
+            BOOST_LOG_TRIVIAL(trace) << std::format("Loading RipeMD-160 hashes from: {}, fileSize: {:.02}Mb", hash160TargetsFile, static_cast<double>(fileSize) / MB);
 
             uint64_t insertedTargetsCount{0};
             // Read the file in fixed-fileSize chunks of 20 bytes
@@ -305,8 +282,9 @@ namespace utils
             file.close();
 
             const auto fileReadTimeS = static_cast<float>(timer.getTime()) / 1000;
-            BOOST_LOG_TRIVIAL(trace) << "Read " << hashSet.size() << " unique hashes, from: " << utils::formatThousands(insertedTargetsCount)
-                                     << ", (" << utils::format("%.02fs | %.02f", fileReadTimeS, static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB) << " Mb)";
+            BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Read {:L} unique hashes, from: {:L}, ({:.03}s | {:02}Mb)",
+                                                    hashSet.size(), insertedTargetsCount,
+                                                    fileReadTimeS, static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB);
         }
         catch(const std::exception& e)
         {
@@ -338,8 +316,8 @@ namespace utils
             }
 
             const auto fileWriteTimeS = static_cast<float>(timer.getTime()) / 1000;
-            BOOST_LOG_TRIVIAL(trace) << "Written " << hashSet.size() << " hashes to " << filename
-                                     << " as a binary, in " << utils::format("%.02fs | %.02f", fileWriteTimeS, static_cast<double>(ofs.tellp()) / MB) << " Mb)";
+            BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Written {:L} hashes to {} as a binary, in {:.03}s | {:.02}Mb",
+                                                    hashSet.size(), filename, fileWriteTimeS, static_cast<double>(ofs.tellp()) / MB);
 
             ofs.close();
         }
@@ -382,7 +360,7 @@ namespace utils
 
             const size_t numEntries = fileSize / sizeof(hash160);
 
-            BOOST_LOG_TRIVIAL(trace) << "Loading RipeMD-160 hashes from: " << filename << ", size: " << utils::format("%.02f", static_cast<double>(fileSize) / MB) << " Mb)";
+            BOOST_LOG_TRIVIAL(trace) << std::format("Loading RipeMD-160 hashes from: {}, size: {:.02}Mb", filename, static_cast<double>(fileSize) / MB);
 
             hashSet.reserve(numEntries);
             for (size_t i = 0; i < numEntries; ++i)
@@ -395,7 +373,7 @@ namespace utils
             file.close();
 
             const auto fileReadTimeS = static_cast<float>(timer.getTime()) / 1000;
-            BOOST_LOG_TRIVIAL(info) << "Read " << hashSet.size() << " hashes from binary file: " << filename << ", in " << utils::format("%.02fs", fileReadTimeS);
+            BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "Read {:L} hashes from {} binary file: {:.03}s", hashSet.size(), filename, fileReadTimeS);
         }
         catch (const std::exception& e)
         {

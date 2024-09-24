@@ -24,7 +24,7 @@ struct ResultsProcessor::Impl
     {
         mThread = std::thread([this]()
         {
-            BOOST_LOG_TRIVIAL(info) << "ResultsProcessor Thread running: " << std::this_thread::get_id();
+            BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor Thread running: " << std::this_thread::get_id();
 
             while (!mStopFlag || !mgContext.dataQueue->empty())
             {
@@ -40,7 +40,7 @@ struct ResultsProcessor::Impl
 
                 if (!keyPairs)
                 {
-                    BOOST_LOG_TRIVIAL(info) << "ResultsProcessor: someone added nullptr item to queue";
+                    BOOST_LOG_TRIVIAL(warning) << "ResultsProcessor: someone added nullptr item to queue";
                     continue;
                 }
 
@@ -50,8 +50,8 @@ struct ResultsProcessor::Impl
                     const secp256k1::ecpoint pCPU = secp256k1::multiplyPoint(keyPair.privateKey, secp256k1::G());
                     if (pCPU != keyPair.publicKey)
                     {
-                        BOOST_LOG_TRIVIAL(info) << "ResultsProcessor: gen key is not correct";
-                        BOOST_LOG_TRIVIAL(info) << keyPair.privateKey.toString(compressed) << " " << keyPair.publicKey.toString(compressed);
+                        BOOST_LOG_TRIVIAL(error) << "ResultsProcessor: gen key is not correct";
+                        BOOST_LOG_TRIVIAL(error) << keyPair.privateKey.toString(compressed) << " " << keyPair.publicKey.toString(compressed);
                     }
                 });
 
@@ -66,7 +66,7 @@ struct ResultsProcessor::Impl
     {
         mThread = std::thread([this]()
         {
-            BOOST_LOG_TRIVIAL(info) << "ResultsProcessor Thread running: " << std::this_thread::get_id();
+            BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor Thread running: " << std::this_thread::get_id();
 
             while (!mStopFlag)
             {

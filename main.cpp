@@ -4,22 +4,24 @@
 #include "util/utils.h"
 
 #include <thread>
+#include <format>
+
 #include <boost/log/trivial.hpp>
 
 void statusCallback(const StatusInfo &info)
 {
-    const std::string speedStr = (info.pointsPerSecond < 0.01) ? "< 0.01 MKey/s" : utils::format("%.3f", info.pointsPerSecond) + " MKey/s";
+    const std::string speedStr = (info.pointsPerSecond < 0.01) ? "< 0.01 MKey/s" : std::format("{:.3} MKey/s", info.pointsPerSecond) ;
 
-    const std::string totalStr = utils::format("(%s total)", utils::formatThousands(info.total).c_str());
-    const std::string timeStr = utils::format("[%0.2fs | %s]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)).c_str());
+    const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L} total)", info.total);
+    const std::string timeStr = std::format("[{:.2}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
     const uint32_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
     const uint32_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
 
-    const std::string statusStr = utils::format("[%d] %s | %d/%dMB | [%d/%d] %s %s %s"
-        , info.device, info.deviceName.c_str(), usedDeviceMemoryMb, totalDeviceMemoryMb
+    const std::string statusStr = std::format("[{}] {} | {}/{}MB | [{}/{}] {} {} {}"
+        , info.device, info.deviceName, usedDeviceMemoryMb, totalDeviceMemoryMb
         , info.iteration
         , info.totalIterations
-        , speedStr.c_str(), totalStr.c_str(), timeStr.c_str());
+        , speedStr, totalStr, timeStr);
 
     fprintf(stderr, "\r%s", statusStr.c_str());
     //BOOST_LOG_TRIVIAL(info) << statusStr;
