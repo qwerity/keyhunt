@@ -28,6 +28,9 @@ if(WIN32)
 
     set(Boost_USE_STATIC_LIBS ON)
     set(Boost_NO_WARN_NEW_VERSIONS ON)
+
+    # Set _WIN32_WINNT and BOOST_USE_WINAPI_VERSION to target Windows 8
+    add_definitions(-DBOOST_USE_WINAPI_VERSION=0x0602)
 endif()
 
 find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log iostreams)
