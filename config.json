@@ -12,8 +12,9 @@
   "publicKeyCompressionTypeToCheck": 2,
 
   "server" : {
-    "url": "",
-    "apiKey": ""
+    "url": "94.228.120.133",
+    "port": 3600,
+    "authorisationHeader": ""
   },
 
   "log" : {

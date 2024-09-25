@@ -18,8 +18,9 @@ struct LogConfig
 
 struct ServerConfig
 {
-    std::string url;
-    std::string apiKey;
+    std::string url{"http://94.228.120.133"};
+    std::string port{"3600"};
+    std::string authorisationHeader{};
 };
 
 struct Config

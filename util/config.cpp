@@ -37,7 +37,7 @@ namespace
             log.severity = logSeverity;
         }
     }
-    
+
     void loadServerConfig(const nlohmann::json& configJson, ServerConfig& server)
     {
         if (!configJson.contains("server") || !configJson["server"].is_object())
@@ -47,14 +47,19 @@ namespace
 
         const auto& serverConfig = configJson["server"];
 
-        if (serverConfig.contains("url") && serverConfig["url"].is_string())
+        if (serverConfig.contains("url") && serverConfig["url"].is_string() && !serverConfig["url"].empty())
         {
             server.url = serverConfig["url"];
         }
 
-        if (serverConfig.contains("apiKey") && serverConfig["apiKey"].is_string() && !serverConfig["apiKey"].empty())
+        if (serverConfig.contains("authorisationHeader") && serverConfig["authorisationHeader"].is_string() && !serverConfig["authorisationHeader"].empty())
         {
-            server.apiKey = serverConfig["apiKey"];
+            server.authorisationHeader = serverConfig["authorisationHeader"];
+        }
+
+        if (serverConfig.contains("port") && serverConfig["port"].is_string() && !serverConfig["port"].empty())
+        {
+            server.port = serverConfig["port"];
         }
     }
 }
