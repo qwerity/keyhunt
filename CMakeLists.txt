@@ -33,7 +33,7 @@ if(WIN32)
     add_definitions(-DBOOST_USE_WINAPI_VERSION=0x0602)
 endif()
 
-find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log iostreams)
+find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log iostreams regex)
 include_directories(${Boost_INCLUDE_DIRS})
 
 ####################################################################################################################################################################################

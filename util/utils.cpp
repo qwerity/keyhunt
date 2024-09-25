@@ -14,6 +14,7 @@
 #include <iomanip>
 #include <format>
 
+#include <boost/regex.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/utility/setup.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
@@ -382,6 +383,19 @@ namespace utils
         }
 
         return true;
+    }
+
+    bool validateUUID(const std::string& uuid)
+    {
+        const boost::regex uuid_regex(R"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})");
+        return boost::regex_match(uuid, uuid_regex);
+    }
+
+    bool validateUrl(const std::string& url)
+    {
+        // Basic check for host and port format
+        const boost::regex url_regex(R"((http://|https://)?([a-zA-Z0-9\.-]+)(:[0-9]+)?)");
+        return boost::regex_match(url, url_regex);
     }
 }
 

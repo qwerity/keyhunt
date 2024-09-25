@@ -33,6 +33,9 @@ set(SRC_FILES
     secp256k1.h
     config.cpp
     config.h
+
+    http_client.cpp
+    http_client.h
 )
 
 # Define the static library target
