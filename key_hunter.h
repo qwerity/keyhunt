@@ -16,13 +16,9 @@ public:
     KeyHunter& operator=(KeyHunter&& rhs) noexcept;
 
     void stop() const;
-    void start(const thrust::host_vector<secp256k1::uint256>& privateKeys) const;
-    void startWithRandomPrivateKeys() const;
     void findPublicHashWithPrivateDefinedXRandomY() const;
 
     [[nodiscard]] bool isDone() const;
-
-    void selfTest(uint32_t keysNumberToGenerate = 5) const;
 
 private:
     struct Impl;
