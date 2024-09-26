@@ -2,11 +2,12 @@
 
 #include "common.h"
 
-#include <boost/lockfree/spsc_queue.hpp>
-
+#include "http_client.h"
 #include "cuda_util.h"
 #include "secp256k1.h"
 #include "config.h"
+
+#include <boost/lockfree/spsc_queue.hpp>
 
 /*################################################################################################################################################################################*/
 struct Secp256k1KeyPair
@@ -25,6 +26,7 @@ struct GlobalContext
 {
     Config config{"config.json"};
     cu::CudaDeviceInfo cudaInfo;
+    std::shared_ptr<HttpClient> httpClient;
     std::shared_ptr<DataQueue> dataQueue;
     std::shared_ptr<Hash160SearchResultsQueue> hash160SearchResultsQueue;
     std::function<void(StatusInfo)> statusCallback;

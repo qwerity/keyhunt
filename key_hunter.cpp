@@ -28,8 +28,6 @@ struct KeyHunter::Impl
 
     mutable utils::Timer mTimer;
 
-    std::shared_ptr<HttpClient> mHttpClient;
-
     std::atomic<bool> mStopFlag{false};
     mutable std::atomic<bool> mDone{false};
 
@@ -44,7 +42,6 @@ struct KeyHunter::Impl
     explicit Impl(const std::shared_ptr<GlobalContext>& context)
         : mgContext(context)
         , mCuECC(std::make_unique<ECC>())
-        , mHttpClient(std::make_shared<HttpClient>(context->config.server()))
     {
         cu::cudaInit(mgContext->config.hunter().cudaDeviceId);
     }

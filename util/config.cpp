@@ -204,7 +204,7 @@ struct Config::Impl
         // Write the modified JSON to the file
         outFile << configJson.dump(2);
 
-        BOOST_LOG_TRIVIAL(trace) << std::format("{} modified and saved to file successfully.", jsonConfigFilepath );
+        //BOOST_LOG_TRIVIAL(trace) << std::format("{} modified and saved to file successfully.", jsonConfigFilepath );
         return true;
     }
 

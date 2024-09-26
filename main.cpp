@@ -32,6 +32,7 @@ int main()
     // Config will initialized here
     std::shared_ptr<GlobalContext> context = std::make_shared<GlobalContext>();
     context->cudaInfo = cu::getDeviceInfo(context->config.hunter().cudaDeviceId);
+    context->httpClient = std::make_shared<HttpClient>(context->config.server());
     context->dataQueue = std::make_shared<DataQueue>();
     context->hash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();
     context->statusCallback = statusCallback;
