@@ -105,12 +105,14 @@ namespace cu
         std::fprintf(stderr, "\n");
     }
 
-    void cudaInit(const int cudaDeviceId)
+    CudaDeviceInfo cudaInit(const int cudaDeviceId)
     {
         safeCall(cudaSetDevice(cudaDeviceId));
         // safeCall(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
 
         // Use a larger portion of shared memory for L1 cache
         safeCall(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
+
+        return getDeviceInfo(cudaDeviceId);
     }
 }

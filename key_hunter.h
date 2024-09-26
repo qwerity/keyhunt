@@ -15,8 +15,8 @@ public:
     KeyHunter(KeyHunter&& rhs) noexcept;
     KeyHunter& operator=(KeyHunter&& rhs) noexcept;
 
+    void startSearchPublicHashThread(int cudaDeviceId) const;
     void stop() const;
-    void findPublicHashWithPrivateDefinedXRandomY() const;
 
     [[nodiscard]] bool isDone() const;
 

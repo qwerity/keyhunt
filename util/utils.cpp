@@ -385,6 +385,24 @@ namespace utils
         return true;
     }
 
+    void readHash160Targets(const std::vector<std::string>& ripemd160TargetsFilePaths, std::unordered_set<hash160>& targets)
+    {
+        if (ripemd160TargetsFilePaths.empty())
+            return;
+
+        for (const auto& hash160TargetsFile : ripemd160TargetsFilePaths)
+        {
+            if (hash160TargetsFile.substr(hash160TargetsFile.size() - 3) == "bin")
+            {
+                readSetFromHash160BinaryFile(hash160TargetsFile, targets);
+            }
+            else
+            {
+                readHash160HexStrFileToSet(hash160TargetsFile, targets);
+            }
+        }
+    }
+
     bool validateUUID(const std::string& uuid)
     {
         const boost::regex uuid_regex(R"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})");

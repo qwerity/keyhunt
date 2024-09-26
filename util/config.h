@@ -27,10 +27,6 @@ struct ServerConfig
 
 struct HunterConfig
 {
-    // GPU device params
-    int cudaDeviceId{0};
-    std::string cudaDeviceName;
-
     // Cuda key generation params
     uint32_t pointsPerThread{128};
 
@@ -40,8 +36,9 @@ struct HunterConfig
     // Input data
     std::vector<std::string> ripemd160TargetsFilePaths;
 
-    int privateXPart{1};
-    int privateYOffset{0};
+    bool forcePrivateXPart{false};
+    uint32_t privateXPart{1};
+    uint32_t privateYOffset{0};
 
     uint32_t publicKeyCompressionTypeToCheck{2};
 
@@ -55,12 +52,12 @@ public:
     ~Config();
 
     bool setPrivateKeyXPart(uint32_t xPart) const;
-    bool calculationIteration(uint32_t iteration) const;
+    bool setCalculationIteration(uint32_t iteration) const;
     [[nodiscard]] bool isLoaded() const;
 
-    HunterConfig&& hunter();
-    ServerConfig&& server();
-    LogConfig&& log();
+    HunterConfig& hunter();
+    ServerConfig& server();
+    LogConfig& log();
 
 private:
     struct Impl;

@@ -3,11 +3,13 @@
 #include "common.h"
 
 #include "http_client.h"
-#include "cuda_util.h"
 #include "secp256k1.h"
 #include "config.h"
+#include "cuda/defines.cuh"
 
 #include <boost/lockfree/spsc_queue.hpp>
+
+#include <unordered_set>
 
 /*################################################################################################################################################################################*/
 struct Secp256k1KeyPair
@@ -25,8 +27,7 @@ using Hash160SearchResultsQueue = boost::lockfree::spsc_queue<Hash160SearchResul
 struct GlobalContext
 {
     Config config{"config.json"};
-    cu::CudaDeviceInfo cudaInfo;
-    std::shared_ptr<HttpClient> httpClient;
+    std::unordered_set<hash160> targets;
     std::shared_ptr<DataQueue> dataQueue;
     std::shared_ptr<Hash160SearchResultsQueue> hash160SearchResultsQueue;
     std::function<void(StatusInfo)> statusCallback;

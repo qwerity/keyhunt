@@ -70,6 +70,7 @@ namespace utils
     bool readHash160HexStrFileToSet(const std::string& hash160TargetsFile, std::unordered_set<hash160>& hashSet);
     bool writeHash160SetToBinaryFile(const std::string& filename, const std::unordered_set<hash160>& hashSet);
     bool readSetFromHash160BinaryFile(const std::string& filename, std::unordered_set<hash160>& set);
+    void readHash160Targets(const std::vector<std::string>& ripemd160TargetsFilePaths, std::unordered_set<hash160>& targets);
 
     bool validateUUID(const std::string& uuid);
     bool validateUrl(const std::string& url);

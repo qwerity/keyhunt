@@ -116,16 +116,6 @@ struct Config::Impl
             }
         }
 
-        // Validate and load other fields
-        if (configJson.contains("cudaDeviceId") && configJson["cudaDeviceId"].is_number_integer())
-        {
-            hunter.cudaDeviceId = configJson["cudaDeviceId"];
-        }
-        else
-        {
-            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'cudaDeviceId' must be an integer, using default value: " << hunter.cudaDeviceId;
-        }
-
         if (configJson.contains("pointsPerThread") && configJson["pointsPerThread"].is_number_unsigned())
         {
             hunter.pointsPerThread = configJson["pointsPerThread"];
@@ -144,13 +134,11 @@ struct Config::Impl
             BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'keysNumberToGenerate' must be an integer, using default value: " << hunter.keysNumberToGenerate;
         }
 
-        if (configJson.contains("privateXPart") && configJson["privateXPart"].is_number_integer())
+        if (configJson.contains("forcePrivateXPart") && configJson["forcePrivateXPart"].is_boolean()
+            && configJson["forcePrivateXPart"] == true && configJson.contains("privateXPart") && configJson["privateXPart"].is_number_integer())
         {
-            hunter.privateXPart = configJson["privateXPart"];
-        }
-        else
-        {
-            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'privateXPart' must be an integer, using default value: " << hunter.privateXPart;
+            hunter.forcePrivateXPart = true;
+            hunter.privateXPart =configJson["privateXPart"];
         }
 
         if (configJson.contains("privateYOffset") && configJson["privateYOffset"].is_number_integer())
@@ -225,19 +213,19 @@ bool Config::isLoaded() const
     return mImpl->loaded;
 }
 
-HunterConfig&& Config::hunter()
+HunterConfig& Config::hunter()
 {
-    return std::forward<HunterConfig>(mImpl->hunter);
+    return mImpl->hunter;
 }
 
-ServerConfig&& Config::server()
+ServerConfig& Config::server()
 {
-    return std::forward<ServerConfig>(mImpl->server);
+    return mImpl->server;
 }
 
-LogConfig&& Config::log()
+LogConfig& Config::log()
 {
-    return std::forward<LogConfig>(mImpl->log);
+    return mImpl->log;
 }
 
 bool Config::setPrivateKeyXPart(const uint32_t xPart) const
@@ -245,7 +233,7 @@ bool Config::setPrivateKeyXPart(const uint32_t xPart) const
     return mImpl->setValue("privateXPart", xPart);
 }
 
-bool Config::calculationIteration(const uint32_t iteration) const
+bool Config::setCalculationIteration(uint32_t iteration) const
 {
-    return mImpl->setValue("calculationIteration", iteration);
+    return mImpl->setValue("iteration", iteration);
 }

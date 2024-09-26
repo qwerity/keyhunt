@@ -64,5 +64,5 @@ namespace cu
     int getDeviceCount();
     void printDeviceInfo(const CudaDeviceInfo& info);
 
-    void cudaInit(int cudaDeviceId);
+    CudaDeviceInfo cudaInit(int cudaDeviceId);
 }

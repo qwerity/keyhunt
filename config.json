@@ -2,12 +2,12 @@
   "targets": [
     "small_hash160.txt"
   ],
-  "cudaDeviceId": 0,
 
   "statusCallbackPeriodMs": 1000,
 
   "pointsPerThread": 128,
   "keysNumberToGenerate": 0,
+  "forcePrivateXPart": false,
   "privateX": 1,
   "publicKeyCompressionTypeToCheck": 2,
 

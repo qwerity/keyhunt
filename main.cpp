@@ -23,41 +23,40 @@ void statusCallback(const StatusInfo &info)
         , info.totalIterations
         , speedStr, totalStr, timeStr);
 
-    fprintf(stderr, "\r%s", statusStr.c_str());
-    //BOOST_LOG_TRIVIAL(info) << statusStr;
+//    fprintf(stderr, "\r%s", statusStr.c_str());
+    BOOST_LOG_TRIVIAL(info) << statusStr;
 }
 
 int main()
 {
     // Config will initialized here
     std::shared_ptr<GlobalContext> context = std::make_shared<GlobalContext>();
-    context->cudaInfo = cu::getDeviceInfo(context->config.hunter().cudaDeviceId);
-    context->httpClient = std::make_shared<HttpClient>(context->config.server());
-    context->dataQueue = std::make_shared<DataQueue>();
-    context->hash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();
-    context->statusCallback = statusCallback;
-
     if (!context->config.isLoaded())
     {
         return -1;
     }
 
+    context->dataQueue = std::make_shared<DataQueue>();
+    context->hash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();
+    context->statusCallback = statusCallback;
+
     utils::initLogging(context->config.log());
 
+    utils::readHash160Targets(context->config.hunter().ripemd160TargetsFilePaths, context->targets);
+
+    // Start generation checking and results processing
     const KeyHunter keyHunter(context);
     const ResultsProcessor resultProcessor(context);
-
-    keyHunter.findPublicHashWithPrivateDefinedXRandomY();
     resultProcessor.startHash160ResultsQueueProcessing();
+
+    constexpr uint32_t cudaDeviceId = 0;
+    keyHunter.startSearchPublicHashThread(cudaDeviceId);
 
     // Giving some time to process, otherwise main thread will force stop the processing
     while (!keyHunter.isDone())
     {
         std::this_thread::yield(); // If the queue is full, yield to avoid busy-wait
     }
-
-    keyHunter.stop();
-    resultProcessor.stop();
 
     return 0;
 }

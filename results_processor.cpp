@@ -84,11 +84,11 @@ struct ResultsProcessor::Impl
                 const std::string publicXStr{utils::convertToHexString(result.publicXKey, 8)};
                 const std::string hash160Str{utils::convertToHexString(result.digest, 5)};
 
-                const std::string resultsStr = std::format("private: {}, publicX: {}, hash160: {}, iteration: {}, index: {}, compressed: {}",
-                                                           privateStr, publicXStr, hash160Str, result.iteration, result.idx, result.compressed);
+                const std::string resultsStr = std::format("[{}] private: {}, publicX: {}, hash160: {}, iteration: {}, index: {}, compressed: {}",
+                                                           result.cudaDeviceId, privateStr, publicXStr, hash160Str, result.iteration, result.idx, result.compressed);
 
                 utils::appendToFile("results.txt", resultsStr);
-                // BOOST_LOG_TRIVIAL(info) << resultsStr;
+                //BOOST_LOG_TRIVIAL(info) << resultsStr;
             }
 
             BOOST_LOG_TRIVIAL(info) << "ResultsProcessor: done";
@@ -97,11 +97,15 @@ struct ResultsProcessor::Impl
 
     void stop()
     {
+        BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor stopping" << std::endl;
+
         mStopFlag = true;
         if (mThread.joinable())
         {
             mThread.join();
         }
+
+        BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor stopped" << std::endl;
     }
 };
 
