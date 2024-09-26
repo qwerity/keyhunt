@@ -14,8 +14,8 @@ void statusCallback(const StatusInfo &info)
 
     const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L} total)", info.total);
     const std::string timeStr = std::format("[{:.2}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
-    const uint32_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
-    const uint32_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
+    const uint64_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
+    const uint64_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
 
     const std::string statusStr = std::format("[{}] {} | {}/{}MB | [{}/{}] {} {} {}"
         , info.device, info.deviceName, usedDeviceMemoryMb, totalDeviceMemoryMb
@@ -29,22 +29,25 @@ void statusCallback(const StatusInfo &info)
 
 int main()
 {
-    const Config config;
-    utils::initLogging(config.log);
+    // Config will initialized here
+    std::shared_ptr<GlobalContext> context = std::make_shared<GlobalContext>();
+    context->cudaInfo = cu::getDeviceInfo(context->config.hunter().cudaDeviceId);
+    context->dataQueue = std::make_shared<DataQueue>();
+    context->hash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();
+    context->statusCallback = statusCallback;
 
-    const GlobalContext context{
-        .config = config,
-        .cudaInfo = cu::getDeviceInfo(config.cudaDeviceId),
-        .dataQueue = std::make_shared<DataQueue>(),
-        .hash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>(),
-        .statusCallback = statusCallback
-    };
+    if (!context->config.isLoaded())
+    {
+        return -1;
+    }
+
+    utils::initLogging(context->config.log());
 
     const KeyHunter keyHunter(context);
-    const ResultsProcessor keyProcessor(context);
+    const ResultsProcessor resultProcessor(context);
 
     keyHunter.findPublicHashWithPrivateDefinedXRandomY();
-     keyProcessor.startHash160ResultsQueueProcessing();
+    resultProcessor.startHash160ResultsQueueProcessing();
 
     // Giving some time to process, otherwise main thread will force stop the processing
     while (!keyHunter.isDone())
@@ -53,7 +56,7 @@ int main()
     }
 
     keyHunter.stop();
-    keyProcessor.stop();
+    resultProcessor.stop();
 
     return 0;
 }

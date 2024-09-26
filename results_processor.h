@@ -7,7 +7,7 @@
 class ResultsProcessor
 {
 public:
-    explicit ResultsProcessor(const GlobalContext& context);
+    explicit ResultsProcessor(const std::shared_ptr<GlobalContext>& context);
     ~ResultsProcessor();
 
     ResultsProcessor(const ResultsProcessor&) = delete;

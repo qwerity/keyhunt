@@ -6,7 +6,7 @@
 class KeyHunter
 {
 public:
-    explicit KeyHunter(const GlobalContext& context);
+    explicit KeyHunter(const std::shared_ptr<GlobalContext>& context);
     ~KeyHunter();
 
     KeyHunter(KeyHunter& rhs) = delete;

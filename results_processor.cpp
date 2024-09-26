@@ -8,13 +8,13 @@
 
 struct ResultsProcessor::Impl
 {
-    GlobalContext mgContext;
+    std::shared_ptr<GlobalContext> mgContext;
 
     std::atomic<bool> mStopFlag{false};
 
     std::thread mThread;
 
-    explicit Impl(GlobalContext context) : mgContext(std::move(context)) {}
+    explicit Impl(const std::shared_ptr<GlobalContext>& context) : mgContext(context) {}
     ~Impl()
     {
         stop();
@@ -26,11 +26,11 @@ struct ResultsProcessor::Impl
         {
             BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor Thread running: " << std::this_thread::get_id();
 
-            while (!mStopFlag || !mgContext.dataQueue->empty())
+            while (!mStopFlag || !mgContext->dataQueue->empty())
             {
                 Secp256k1KeyPairs* keyPairs{nullptr};
 
-                while (!mgContext.dataQueue->pop(keyPairs))
+                while (!mgContext->dataQueue->pop(keyPairs))
                 {
                     if (mStopFlag)
                         return;
@@ -72,7 +72,7 @@ struct ResultsProcessor::Impl
             {
                 Hash160SearchResult result;
 
-                while (!mgContext.hash160SearchResultsQueue->pop(result))
+                while (!mgContext->hash160SearchResultsQueue->pop(result))
                 {
                     if (mStopFlag)
                         return;
@@ -105,7 +105,7 @@ struct ResultsProcessor::Impl
     }
 };
 
-ResultsProcessor::ResultsProcessor(const GlobalContext& context) : mImpl(std::make_unique<Impl>(context)) {}
+ResultsProcessor::ResultsProcessor(const std::shared_ptr<GlobalContext>& context) : mImpl(std::make_unique<Impl>(context)) {}
 ResultsProcessor::~ResultsProcessor() = default;
 
 void ResultsProcessor::start() const

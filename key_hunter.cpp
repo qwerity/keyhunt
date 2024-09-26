@@ -15,17 +15,20 @@
 
 #include "util/cuda_util.h"
 #include "util/utils.h"
+#include "util/http_client.h"
 
 
 struct KeyHunter::Impl
 {
-    GlobalContext mgContext;
+    std::shared_ptr<GlobalContext> mgContext;
 
     std::thread mThread;
 
     std::unique_ptr<ECC> mCuECC;
 
     mutable utils::Timer mTimer;
+
+    std::shared_ptr<HttpClient> mHttpClient;
 
     std::atomic<bool> mStopFlag{false};
     mutable std::atomic<bool> mDone{false};
@@ -38,11 +41,12 @@ struct KeyHunter::Impl
     mutable uint32_t mIteration{0};
 
     // Implementation
-    explicit Impl(const GlobalContext& context)
-    : mgContext(context)
-    , mCuECC(std::make_unique<ECC>())
+    explicit Impl(const std::shared_ptr<GlobalContext>& context)
+        : mgContext(context)
+        , mCuECC(std::make_unique<ECC>())
+        , mHttpClient(std::make_shared<HttpClient>(context->config.server()))
     {
-        cu::cudaInit(context.config.cudaDeviceId);
+        cu::cudaInit(mgContext->config.hunter().cudaDeviceId);
     }
 
     ~Impl()
@@ -100,7 +104,7 @@ struct KeyHunter::Impl
         periodElapsedTimeMS += elapsedTimeMs;
         periodKeysNumber += keysNumberPerIteration;
 
-        if (periodElapsedTimeMS >= mgContext.config.statusCallbackPeriodMs)
+        if (periodElapsedTimeMS >= mgContext->config.hunter().statusCallbackPeriodMs)
         {
             const double periodElapsedTimeS = static_cast<double>(periodElapsedTimeMS) / 1000.0;
 
@@ -109,13 +113,13 @@ struct KeyHunter::Impl
             info.seconds = periodElapsedTimeS;
             info.total = keysNumberPerIteration * iteration;
             info.totalTime = totalTime;
-            info.device = mgContext.cudaInfo.id;
-            info.deviceName = mgContext.cudaInfo.name;
+            info.device = mgContext->cudaInfo.id;
+            info.deviceName = mgContext->cudaInfo.name;
             info.iteration = iteration;
             info.totalIterations = totalIterations;
             cu::safeCall(cudaMemGetInfo(&info.freeDeviceMemory, &info.totalDeviceMemory));
 
-            mgContext.statusCallback(info);
+            mgContext->statusCallback(info);
 
             periodElapsedTimeMS = 0;
             periodKeysNumber = 0;
@@ -146,7 +150,7 @@ struct KeyHunter::Impl
             }
 
             results[i].iteration = iteration;
-            while (!mgContext.hash160SearchResultsQueue->push(results[i]))
+            while (!mgContext->hash160SearchResultsQueue->push(results[i]))
             {
                 if (mStopFlag)
                     return;
@@ -159,24 +163,21 @@ struct KeyHunter::Impl
 
     void findPublicHashWithPrivateDefinedXRandomY()
     {
-        setHash160Targets(mgContext.config.ripemd160TargetsFilePaths);
+        setHash160Targets(mgContext->config.hunter().ripemd160TargetsFilePaths);
         mResultAtomicList.init(sizeof(Hash160SearchResult), 16);
 
         initializeGPoints();
-        mCuECC->initWithPrivateDefinedXRandomY(mgContext.config.pointsPerThread, mgContext.config.publicKeyCompressionTypeToCheck);
+        mCuECC->initWithPrivateDefinedXRandomY(mgContext->config.hunter().pointsPerThread, mgContext->config.hunter().publicKeyCompressionTypeToCheck);
 
         mThread = std::thread([&]()
         {
             BOOST_LOG_TRIVIAL(trace) << "KeyHunter Thread ID: " << std::this_thread::get_id();
 
-            const uint32_t totalKeysToGenerate = (mgContext.config.keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : mgContext.config.keysNumberToGenerate;
+            const uint32_t totalKeysToGenerate = (mgContext->config.hunter().keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : mgContext->config.hunter().keysNumberToGenerate;
 
             const uint32_t keysNumberPerIteration = mCuECC->getKeysNumberPerIteration();
             const uint32_t iterationsCount = totalKeysToGenerate / keysNumberPerIteration;
             const uint32_t remainder = totalKeysToGenerate - (iterationsCount * keysNumberPerIteration);
-
-            // todo: to be encrypted
-            BOOST_LOG_TRIVIAL(trace) << "privateXPart: " << mgContext.config.privateXPart;
 
             BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: totalKeysToGenerate: {:L}, keysNumberPerIteration: {:L}", totalKeysToGenerate, keysNumberPerIteration);
 
@@ -188,10 +189,12 @@ struct KeyHunter::Impl
             {
                 mTimer.start();
                 {
-                    cu::safeCall(mCuECC->generatePrivateKeysForXPerIteration(mgContext.config.privateXPart, mIteration));
+                    cu::safeCall(mCuECC->generatePrivateKeysForXPerIteration(mgContext->config.hunter().privateXPart, mIteration));
 
                     cu::safeCall(mCuECC->calculatePublicKeys());
                 }
+                //const uint64_t nextY = mIteration * mCuECC->getKeysNumberPerIteration() + 1;
+                mgContext->config.calculationIteration(mIteration);
 
                 pushResultsToQueue2(mIteration);
 
@@ -213,7 +216,7 @@ struct KeyHunter::Impl
         if (ripemd160TargetsFilePaths.empty())
             return;
 
-        for (const auto& hash160TargetsFile : mgContext.config.ripemd160TargetsFilePaths)
+        for (const auto& hash160TargetsFile : mgContext->config.hunter().ripemd160TargetsFilePaths)
         {
             if (hash160TargetsFile.substr(hash160TargetsFile.size() - 3) == "bin")
             {
@@ -229,8 +232,7 @@ struct KeyHunter::Impl
     }
 };
 
-KeyHunter::KeyHunter(const GlobalContext& context) : mImpl(std::make_unique<Impl>(context)) {}
-
+KeyHunter::KeyHunter(const std::shared_ptr<GlobalContext>& context) : mImpl(std::make_unique<Impl>(context)) {}
 KeyHunter::~KeyHunter() = default;
 
 KeyHunter::KeyHunter(KeyHunter &&rhs) noexcept = default;

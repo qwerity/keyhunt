@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 struct LogConfig
 {
     enum class LogType
@@ -18,17 +20,13 @@ struct LogConfig
 
 struct ServerConfig
 {
-    std::string url{"http://94.228.120.133"};
-    std::string port{"3600"};
-    std::string authorisationHeader{};
+    std::string url;
+    std::string port;
+    std::string authorisationHeader;
 };
 
-struct Config
+struct HunterConfig
 {
-    Config();
-    void load(const std::string& configJsonFileName = "config.json");
-    void print();
-
     // GPU device params
     int cudaDeviceId{0};
     std::string cudaDeviceName;
@@ -43,13 +41,28 @@ struct Config
     std::vector<std::string> ripemd160TargetsFilePaths;
 
     int privateXPart{1};
+    int privateYOffset{0};
 
     uint32_t publicKeyCompressionTypeToCheck{2};
 
     uint32_t statusCallbackPeriodMs{1000};
+};
 
-    [[maybe_unused]] bool selftest{false};
+class Config
+{
+public:
+    explicit Config(const std::string& jsonConfigFilepath);
+    ~Config();
 
-    ServerConfig server;
-    LogConfig log;
+    bool setPrivateKeyXPart(uint32_t xPart) const;
+    bool calculationIteration(uint32_t iteration) const;
+    [[nodiscard]] bool isLoaded() const;
+
+    HunterConfig&& hunter();
+    ServerConfig&& server();
+    LogConfig&& log();
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> mImpl;
 };

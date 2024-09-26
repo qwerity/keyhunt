@@ -23,7 +23,7 @@ using Hash160SearchResultsQueue = boost::lockfree::spsc_queue<Hash160SearchResul
 /*################################################################################################################################################################################*/
 struct GlobalContext
 {
-    Config config;
+    Config config{"config.json"};
     cu::CudaDeviceInfo cudaInfo;
     std::shared_ptr<DataQueue> dataQueue;
     std::shared_ptr<Hash160SearchResultsQueue> hash160SearchResultsQueue;

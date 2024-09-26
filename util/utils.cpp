@@ -162,7 +162,7 @@ namespace utils
         return ss.str();
     }
 
-    void initLogging([[maybe_unused]] const LogConfig& log)
+    void initLogging(const LogConfig& log)
     {
         if (log.type == LogConfig::LogType::console)
         {

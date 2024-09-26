@@ -1,14 +1,26 @@
 #include "config.h"
-
-#include <nlohmann/json.hpp>
+#include "utils.h"
 
 #include <filesystem>
 #include <fstream>
 #include <boost/log/trivial.hpp>
 
-namespace
+struct Config::Impl
 {
-    void loadLogConfig(const nlohmann::json& configJson, LogConfig& log)
+    nlohmann::json configJson;
+    std::string jsonConfigFilepath;
+    bool loaded{false};
+
+    HunterConfig hunter;
+    ServerConfig server;
+    LogConfig log;
+
+    explicit Impl(std::string configFilepath) : jsonConfigFilepath{std::move(configFilepath)}
+    {
+        load(jsonConfigFilepath);
+    }
+
+    void loadLogConfig()
     {
         if (!configJson.contains("log") || !configJson["log"].is_object())
         {
@@ -38,7 +50,7 @@ namespace
         }
     }
 
-    void loadServerConfig(const nlohmann::json& configJson, ServerConfig& server)
+    void loadServerConfig()
     {
         if (!configJson.contains("server") || !configJson["server"].is_object())
         {
@@ -62,111 +74,178 @@ namespace
             server.port = serverConfig["port"];
         }
     }
-}
 
-Config::Config()
-{
-    load();
-}
-
-void Config::load(const std::string &configJsonFileName)
-{
-    if(!std::filesystem::exists(configJsonFileName))
+    void load(const std::string &configFilepath)
     {
-        BOOST_LOG_TRIVIAL(warning) << "Config file config.json is not present in binary directory, using default values";
-        print();
+        loaded = false;
 
-        return;
-    }
-
-    std::ifstream configFile(configJsonFileName);
-    nlohmann::json configJson;
-    configFile >> configJson;
-
-    // Validate that "targets" is an array and has at least one element
-    if (!configJson.contains("targets") || !configJson["targets"].is_array() || configJson["targets"].empty())
-    {
-        BOOST_LOG_TRIVIAL(warning) << "Targets are not set, running without them";
-    }
-    else
-    {
-        for (const auto &target: configJson["targets"])
+        if (!std::filesystem::exists(configFilepath))
         {
-            if (!target.is_string())
-            {
-                BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: each target must be a string (file path), ignored targets list: " << target;
-            }
-            ripemd160TargetsFilePaths.push_back(target);
+            BOOST_LOG_TRIVIAL(error) << "Config file config.json is not present in binary directory, using default values";
+            return;
         }
-    }
 
-    // Validate and load other fields
-    if (configJson.contains("cudaDeviceId") && configJson["cudaDeviceId"].is_number_integer())
-    {
-        cudaDeviceId = configJson["cudaDeviceId"];
-    }
-    else
-    {
-        BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'cudaDeviceId' must be an integer, using default value: " << cudaDeviceId;
-    }
+        std::ifstream configFile(configFilepath);
+        utils::ScopeOutRunner outRunner([&configFile](){ configFile.close(); });
 
-    if (configJson.contains("pointsPerThread") && configJson["pointsPerThread"].is_number_unsigned())
-    {
-        pointsPerThread = configJson["pointsPerThread"];
-    }
-    else
-    {
-        BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'cudaDeviceId' must be an integer, using default value: " << pointsPerThread;
-    }
-
-    if (configJson.contains("keysNumberToGenerate") && configJson["keysNumberToGenerate"].is_number_unsigned())
-    {
-        keysNumberToGenerate = configJson["keysNumberToGenerate"];
-    }
-    else
-    {
-        BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'cudaDeviceId' must be an integer, using default value: " << keysNumberToGenerate;
-    }
-
-    if (configJson.contains("privateX") && configJson["privateX"].is_number_integer())
-    {
-        privateXPart = configJson["privateX"];
-    }
-    else
-    {
-        BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'cudaDeviceId' must be an integer, using default value: " << privateXPart;
-    }
-
-    if (configJson.contains("publicKeyCompressionTypeToCheck") && configJson["publicKeyCompressionTypeToCheck"].is_number_integer())
-    {
-        if (int compressionType = configJson["publicKeyCompressionTypeToCheck"]; compressionType >= 0 && compressionType <= 2)
+        try
         {
-            publicKeyCompressionTypeToCheck = compressionType;
+            // Attempt to parse the JSON file
+            configFile >> configJson;
+        }
+        catch (const nlohmann::json::parse_error& e)
+        {
+            BOOST_LOG_TRIVIAL(error) << "JSON parsing error: " << e.what();
+            return;
+        }
+
+        // Validate that "targets" is an array and has at least one element
+        if (!configJson.contains("targets") || !configJson["targets"].is_array() || configJson["targets"].empty())
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Targets are not set, running without them";
         }
         else
         {
-            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'publicKeyCompressionTypeToCheck' must be 0 (UNCOMPRESSED), 1 (COMPRESSED), or 2 (BOTH), using default value: " << publicKeyCompressionTypeToCheck;
+            for (const auto &target: configJson["targets"])
+            {
+                if (!target.is_string())
+                {
+                    BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: each target must be a string (file path), ignored targets list: " << target;
+                }
+                hunter.ripemd160TargetsFilePaths.push_back(target);
+            }
         }
-    }
-    else
-    {
-        BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'publicKeyCompressionTypeToCheck' must be an integer, using default value: " << publicKeyCompressionTypeToCheck;
+
+        // Validate and load other fields
+        if (configJson.contains("cudaDeviceId") && configJson["cudaDeviceId"].is_number_integer())
+        {
+            hunter.cudaDeviceId = configJson["cudaDeviceId"];
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'cudaDeviceId' must be an integer, using default value: " << hunter.cudaDeviceId;
+        }
+
+        if (configJson.contains("pointsPerThread") && configJson["pointsPerThread"].is_number_unsigned())
+        {
+            hunter.pointsPerThread = configJson["pointsPerThread"];
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'pointsPerThread' must be an integer, using default value: " << hunter.pointsPerThread;
+        }
+
+        if (configJson.contains("keysNumberToGenerate") && configJson["keysNumberToGenerate"].is_number_unsigned())
+        {
+            hunter.keysNumberToGenerate = configJson["keysNumberToGenerate"];
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'keysNumberToGenerate' must be an integer, using default value: " << hunter.keysNumberToGenerate;
+        }
+
+        if (configJson.contains("privateXPart") && configJson["privateXPart"].is_number_integer())
+        {
+            hunter.privateXPart = configJson["privateXPart"];
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'privateXPart' must be an integer, using default value: " << hunter.privateXPart;
+        }
+
+        if (configJson.contains("privateYOffset") && configJson["privateYOffset"].is_number_integer())
+        {
+            hunter.privateYOffset = configJson["privateYOffset"];
+        }
+
+        if (configJson.contains("publicKeyCompressionTypeToCheck") && configJson["publicKeyCompressionTypeToCheck"].is_number_integer())
+        {
+            if (int compressionType = configJson["publicKeyCompressionTypeToCheck"]; compressionType >= 0 && compressionType <= 2)
+            {
+                hunter.publicKeyCompressionTypeToCheck = compressionType;
+            }
+            else
+            {
+                BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'publicKeyCompressionTypeToCheck' must be 0 (UNCOMPRESSED), 1 (COMPRESSED), or 2 (BOTH), using default value: " << hunter.publicKeyCompressionTypeToCheck;
+            }
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'publicKeyCompressionTypeToCheck' must be an integer, using default value: " << hunter.publicKeyCompressionTypeToCheck;
+        }
+
+        if (configJson.contains("statusCallbackPeriodMs") && configJson["statusCallbackPeriodMs"].is_number_unsigned())
+        {
+            hunter.statusCallbackPeriodMs = configJson["statusCallbackPeriodMs"];
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'statusCallbackPeriodMs' must be an unsigned integer, using default value: " << hunter.statusCallbackPeriodMs;
+        }
+
+        loadLogConfig();
+        loadServerConfig();
+
+        loaded = true;
     }
 
-    if (configJson.contains("statusCallbackPeriodMs") && configJson["statusCallbackPeriodMs"].is_number_unsigned())
+    bool save()
     {
-        statusCallbackPeriodMs = configJson["statusCallbackPeriodMs"];
-    }
-    else
-    {
-        BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'statusCallbackPeriodMs' must be an unsigned integer, using default value: " << statusCallbackPeriodMs;
+        // Open the file for writing (this will overwrite the file)
+        std::ofstream outFile(jsonConfigFilepath);
+        utils::ScopeOutRunner outRunner([&outFile](){ outFile.close(); });
+
+        if (!outFile.is_open())
+        {
+            BOOST_LOG_TRIVIAL(error) << "Error: Could not open file for writing: " << jsonConfigFilepath;
+            return false;
+        }
+
+        // Write the modified JSON to the file
+        outFile << configJson.dump(2);
+
+        BOOST_LOG_TRIVIAL(trace) << std::format("{} modified and saved to file successfully.", jsonConfigFilepath );
+        return true;
     }
 
-    loadLogConfig(configJson, log);
-    loadServerConfig(configJson, server);
+    template <typename T>
+    bool setValue(const std::string& key, T value)
+    {
+        configJson[key] = value;
+
+        return save();
+    }
+};
+
+Config::Config(const std::string& configFilepath) : mImpl(std::make_unique<Impl>(configFilepath)) {}
+Config::~Config() = default;
+
+bool Config::isLoaded() const
+{
+    return mImpl->loaded;
 }
 
-void Config::print()
+HunterConfig&& Config::hunter()
 {
+    return std::forward<HunterConfig>(mImpl->hunter);
+}
 
+ServerConfig&& Config::server()
+{
+    return std::forward<ServerConfig>(mImpl->server);
+}
+
+LogConfig&& Config::log()
+{
+    return std::forward<LogConfig>(mImpl->log);
+}
+
+bool Config::setPrivateKeyXPart(const uint32_t xPart) const
+{
+    return mImpl->setValue("privateXPart", xPart);
+}
+
+bool Config::calculationIteration(const uint32_t iteration) const
+{
+    return mImpl->setValue("calculationIteration", iteration);
 }
