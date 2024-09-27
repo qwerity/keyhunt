@@ -132,6 +132,7 @@ struct KeyHunter::Impl
         mResultAtomicList.read(results.data(), count);
         mResultAtomicList.clear();
 
+        uint32_t falsePositiveCount{0};
         for (uint32_t i = 0; i < count; ++i)
         {
             results[i].cudaDeviceId = cudaInfo.id;
@@ -139,6 +140,7 @@ struct KeyHunter::Impl
             // recheck the false-positive
             if (!mgContext->hash160Targets.contains(hash160(results[i].digest)))
             {
+                ++falsePositiveCount;
                 continue;
             }
 
@@ -159,6 +161,11 @@ struct KeyHunter::Impl
                 // If the queue is full, yield to avoid busy-wait
                 std::this_thread::yield();
             }
+        }
+
+        if (falsePositiveCount)
+        {
+            BOOST_LOG_TRIVIAL(info) << "False positives count: " << falsePositiveCount;
         }
     }
 
