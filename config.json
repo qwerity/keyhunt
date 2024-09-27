@@ -1,6 +1,6 @@
 {
-  "targets": [
-    "small_hash160.txt"
+  "hash160_targets": [
+    "hash160_addresses.txt.bin"
   ],
 
   "statusCallbackPeriodMs": 1000,

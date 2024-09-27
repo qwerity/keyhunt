@@ -42,7 +42,7 @@ int main()
 
     utils::initLogging(context->config.log());
 
-    utils::readHash160Targets(context->config.hunter().ripemd160TargetsFilePaths, context->targets);
+    utils::readHash160Targets(context->config.hunter().ripemd160TargetsFilePaths, context->hash160Targets);
 
     // Start generation checking and results processing
     const KeyHunter keyHunter(context);

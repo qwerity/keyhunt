@@ -99,14 +99,14 @@ struct Config::Impl
             return;
         }
 
-        // Validate that "targets" is an array and has at least one element
-        if (!configJson.contains("targets") || !configJson["targets"].is_array() || configJson["targets"].empty())
+        // Validate that "hash160_targets" is an array and has at least one element
+        if (!configJson.contains("hash160_targets") || !configJson["hash160_targets"].is_array() || configJson["hash160_targets"].empty())
         {
             BOOST_LOG_TRIVIAL(warning) << "Targets are not set, running without them";
         }
         else
         {
-            for (const auto &target: configJson["targets"])
+            for (const auto &target: configJson["hash160_targets"])
             {
                 if (!target.is_string())
                 {

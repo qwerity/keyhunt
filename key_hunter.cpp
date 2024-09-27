@@ -137,7 +137,7 @@ struct KeyHunter::Impl
             results[i].cudaDeviceId = cudaInfo.id;
 
             // recheck the false-positive
-            if (!mgContext->targets.contains(hash160(results[i].digest)))
+            if (!mgContext->hash160Targets.contains(hash160(results[i].digest)))
             {
                 continue;
             }
@@ -207,7 +207,7 @@ struct KeyHunter::Impl
             cudaInfo = cu::cudaInit(cudaDeviceId);
 
             // Preparing Public, Private, Results buffers
-            mHash160Lookup.setTargets(mgContext->targets);
+            mHash160Lookup.setTargets(mgContext->hash160Targets);
             mResultAtomicList.init(sizeof(Hash160SearchResult), 16);
 
             initializeGPoints();
