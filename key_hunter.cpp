@@ -37,8 +37,6 @@ struct KeyHunter::Impl
 
     CudaAtomicList mResultAtomicList;
 
-    mutable uint32_t mIteration{0};
-
     // Implementation
     explicit Impl(const std::shared_ptr<GlobalContext>& context)
         : mgContext(context)
@@ -184,7 +182,7 @@ struct KeyHunter::Impl
 
                 cu::safeCall(mCuECC->calculatePublicKeys());
             }
-            //const uint64_t nextY = mIteration * mCuECC->getKeysNumberPerIteration() + 1;
+            //const uint64_t nextY = iteration * mCuECC->getKeysNumberPerIteration() + 1;
             mgContext->config.setCalculationIteration(iteration);
 
             pushResultsToQueue2(iteration);
@@ -194,7 +192,7 @@ struct KeyHunter::Impl
             signalStatusInfo(keysNumberPerIteration, iteration, finalIterationsCount, mTimer.getTime());
         }
 
-        assert(mIteration == finalIterationsCount);
+        assert(iteration == finalIterationsCount);
 
         BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", keysNumberPerIteration * finalIterationsCount);
     }
