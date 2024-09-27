@@ -189,7 +189,7 @@ struct KeyHunter::Impl
 
             ++iteration;
 
-            signalStatusInfo(keysNumberPerIteration, iteration, finalIterationsCount, mTimer.getTime());
+            signalStatusInfo(keysNumberPerIteration, iteration, finalIterationsCount, mTimer.elapsedMs());
         }
 
         assert(iteration == finalIterationsCount);

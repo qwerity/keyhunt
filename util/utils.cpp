@@ -19,40 +19,32 @@
 #include <boost/log/utility/setup.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 
-#ifdef _WIN32
-    #include<windows.h>
-#else
-    #include<unistd.h>
-    #include<sys/stat.h>
-    #include<sys/time.h>
-#endif
-
 namespace utils
 {
-    uint64_t getSystemTime()
+    Timer::Timer() : mStartTime{std::chrono::steady_clock::now()}
     {
-#ifdef _WIN32
-        return GetTickCount64();
-#else
-        timeval t{};
-        gettimeofday(&t, nullptr);
-        return static_cast<uint64_t>(t.tv_sec) * 1000 + t.tv_usec / 1000;
-#endif
-    }
 
-    Timer::Timer()
-    {
-        _startTime = 0;
-    }
+    };
 
     void Timer::start()
     {
-        _startTime = getSystemTime();
+        mStartTime = std::chrono::steady_clock::now();
     }
 
-    uint64_t Timer::getTime() const
+    uint64_t Timer::elapsedMs() const
     {
-        return getSystemTime() - _startTime;
+        const auto now = std::chrono::steady_clock::now();
+        const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - mStartTime);
+
+        return static_cast<uint64_t>(duration.count());
+    }
+
+    float Timer::elapsedS() const
+    {
+        const auto now = std::chrono::steady_clock::now();
+        const std::chrono::duration<float> duration = now - mStartTime;  // Calculate duration in seconds (as float)
+
+        return duration.count();  // Returns the time in seconds as float
     }
 
     uint32_t parseUInt32(std::string s)
@@ -282,10 +274,8 @@ namespace utils
 
             file.close();
 
-            const auto fileReadTimeS = static_cast<float>(timer.getTime()) / 1000;
             BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Read {:L} unique hashes, from: {:L}, ({:.03}s | {:02}Mb)",
-                                                    hashSet.size(), insertedTargetsCount,
-                                                    fileReadTimeS, static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB);
+                                                    hashSet.size(), insertedTargetsCount, timer.elapsedS(), static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB);
         }
         catch(const std::exception& e)
         {
@@ -316,9 +306,8 @@ namespace utils
                 ofs.write(reinterpret_cast<const char *>(&h), sizeof(hash160));
             }
 
-            const auto fileWriteTimeS = static_cast<float>(timer.getTime()) / 1000;
             BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Written {:L} hashes to {} as a binary, in {:.03}s | {:.02}Mb",
-                                                    hashSet.size(), filename, fileWriteTimeS, static_cast<double>(ofs.tellp()) / MB);
+                                                    hashSet.size(), filename, timer.elapsedS(), static_cast<double>(ofs.tellp()) / MB);
 
             ofs.close();
         }
@@ -373,8 +362,7 @@ namespace utils
 
             file.close();
 
-            const auto fileReadTimeS = static_cast<float>(timer.getTime()) / 1000;
-            BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "Read {:L} hashes from {} binary file: {:.03}s", hashSet.size(), filename, fileReadTimeS);
+            BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "Read {:L} hashes from {} binary file: {:.03}s", hashSet.size(), filename, timer.elapsedS());
         }
         catch (const std::exception& e)
         {

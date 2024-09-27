@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <chrono>
 #include <vector>
 #include <cstdint>
 #include <functional>
@@ -22,10 +23,11 @@ namespace utils
         Timer();
 
         void start();
-        [[nodiscard]] uint64_t getTime() const;
+        [[nodiscard]] uint64_t elapsedMs() const;
+        [[nodiscard]] float elapsedS() const;
 
     private:
-        uint64_t _startTime{0};
+        std::chrono::steady_clock::time_point mStartTime;
     };
 
     class ScopeOutRunner
