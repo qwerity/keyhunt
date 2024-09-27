@@ -68,7 +68,8 @@ number of hash functions
 */
 uint32_t Hash160Lookup::getOptimalBloomFilterBits(const double p, const size_t n)
 {
-    const double m = 3.6 * ceil((n * log(p)) / log(1 / pow(2, log(2))));
+    constexpr double optimalCoefficient{3.6};
+    const double m = optimalCoefficient * ceil((n * log(p)) / log(1 / pow(2, log(2))));
     return static_cast<uint32_t>(ceil(log(m) / log(2)));
 }
 
@@ -79,7 +80,7 @@ void Hash160Lookup::initializeBloomFilter(const std::unordered_set<hash160> &tar
     {
         uint32_t h[5];
         undoRMD160FinalRound(target.h, h);
-        for (int j = 0; j < 5; j++)
+        for (uint32_t j = 0; j < 5; ++j)
         {
             const uint32_t idx = h[j] & mask;
             filter[idx / 32] |= (0x01 << (idx % 32));
@@ -101,7 +102,7 @@ void Hash160Lookup::initializeBloomFilter64(const std::unordered_set<hash160> & 
         idx[3] = (static_cast<uint64_t>(hash[2] ^ hash[3]) << 32 | (hash[3] ^ hash[4])) & mask;
         idx[4] = (static_cast<uint64_t>(hash[0] ^ hash[3]) << 32 | (hash[1] ^ hash[3])) & mask;
 
-        for (int i = 0; i < 5; ++i)
+        for (uint32_t i = 0; i < 5; ++i)
         {
             filter[idx[i] / 32] |= (0x01 << (idx[i] % 32));
         }
@@ -113,11 +114,13 @@ Populates the bloom filter with the target hashes
 */
 cudaError_t Hash160Lookup::setTargetBloomFilter(const std::unordered_set<hash160> &targets)
 {
-    const uint32_t bloomFilterBits = getOptimalBloomFilterBits(1.0e-9, targets.size());
+    constexpr double requiredProbability{1.0e-9};
+    const uint32_t bloomFilterBits = getOptimalBloomFilterBits(requiredProbability, targets.size());
+
     const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
     const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
     const uint64_t bloomFilterMask = (1ULL << bloomFilterBits) - 1;
-    fprintf(stderr, "Allocating bloom filter (%d bits): %fMB\n", bloomFilterBits, static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
+    fprintf(stderr, "Allocating bloom filter (%d bits): %fMb\n", bloomFilterBits, static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
 
     cudaError_t err{cudaSuccess};
     try
@@ -161,7 +164,7 @@ cudaError_t Hash160Lookup::setTargetBloomFilter(const std::unordered_set<hash160
 *Copies the target hashes to either constant memory, or the bloom filter depending
 on how many targets there are
 */
-cudaError_t Hash160Lookup::setTargets(const std::unordered_set<hash160> &hash160Targets)
+cudaError_t Hash160Lookup::setTargets(const std::unordered_set<hash160>& hash160Targets)
 {
     thrust::release(d_bloomFilter);
 

@@ -80,12 +80,14 @@ struct ResultsProcessor::Impl
                     std::this_thread::yield(); // If the queue is empty, yield to avoid busy-wait
                 }
 
+                /// TODO(ksh): commented as it is not needed, only useful for debugging purposes
+                //const std::string publicXStr{utils::convertToHexString(result.publicXKey, 8)};
                 const std::string privateStr{utils::convertToHexString(result.privateKey, 8)};
-                const std::string publicXStr{utils::convertToHexString(result.publicXKey, 8)};
                 const std::string hash160Str{utils::convertToHexString(result.digest, 5)};
 
-                const std::string resultsStr = std::format("[{}] private: {}, publicX: {}, hash160: {}, iteration: {}, index: {}, compressed: {}",
-                                                           result.cudaDeviceId, privateStr, publicXStr, hash160Str, result.iteration, result.idx, result.compressed);
+                const std::string resultsStr = std::format("[{}][({:>10}, {:>10}) | {:<12}] private: {}, hash160: {}",
+                                                           result.cudaDeviceId, result.privateXPart, result.privateYPart, (result.compressed ? "compressed" : "uncompressed"),
+                                                           privateStr, hash160Str);
 
                 utils::appendToFile("results.txt", resultsStr);
                 //BOOST_LOG_TRIVIAL(info) << resultsStr;

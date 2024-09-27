@@ -344,7 +344,7 @@ namespace utils
             // Make sure the file size is a multiple of sizeof(hash160)
             if (fileSize % sizeof(hash160) != 0)
             {
-                BOOST_LOG_TRIVIAL(error) << "File size is not aligned with hash160 structure!";
+                BOOST_LOG_TRIVIAL(error) << "INVALID Binary! File size is not aligned with hash160 structure!";
                 return false;
             }
 

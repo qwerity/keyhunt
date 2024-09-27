@@ -122,7 +122,7 @@ struct KeyHunter::Impl
         }
     }
 
-    void pushResultsToQueue2(const uint32_t iteration) const
+    void pushResultsToQueue2(const uint32_t privateXPart, const uint32_t keysNumberPerIteration, const uint32_t iteration) const
     {
         const uint32_t count = mResultAtomicList.size();
 
@@ -148,6 +148,9 @@ struct KeyHunter::Impl
             }
 
             results[i].iteration = iteration;
+            results[i].privateXPart = privateXPart;
+            results[i].privateYPart = (iteration * keysNumberPerIteration) + results[i].idx;
+
             while (!mgContext->hash160SearchResultsQueue->push(results[i]))
             {
                 if (mStopFlag)
@@ -185,7 +188,7 @@ struct KeyHunter::Impl
             //const uint64_t nextY = iteration * mCuECC->getKeysNumberPerIteration() + 1;
             mgContext->config.setCalculationIteration(iteration);
 
-            pushResultsToQueue2(iteration);
+            pushResultsToQueue2(privateXPart, keysNumberPerIteration, iteration);
 
             ++iteration;
 
