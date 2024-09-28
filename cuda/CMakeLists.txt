@@ -3,7 +3,7 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 ####################################################################################################################################################################################
 if (NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    set(CMAKE_CUDA_ARCHITECTURES "52;61;70;86") # lowest CUDA 12 standard + lowest for integer intrinsics
+    set(CMAKE_CUDA_ARCHITECTURES all)
 endif()
 message(STATUS "Using CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 

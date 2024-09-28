@@ -2,6 +2,7 @@
 #include "results_processor.h"
 
 #include "util/utils.h"
+#include "util/cuda_util.h"
 
 #include <thread>
 #include <format>
@@ -45,15 +46,26 @@ int main()
     utils::readHash160Targets(context->config.hunter().ripemd160TargetsFilePaths, context->hash160Targets);
 
     // Start generation checking and results processing
-    const KeyHunter keyHunter(context);
     const ResultsProcessor resultProcessor(context);
     resultProcessor.startHash160ResultsQueueProcessing();
 
-    constexpr uint32_t cudaDeviceId = 0;
-    keyHunter.startSearchPublicHashThread(cudaDeviceId);
+    std::vector<KeyHunter> hunters;
+    for (int cudaDeviceId = 0; cudaDeviceId < cu::getDeviceCount(); ++cudaDeviceId)
+    {
+        hunters.emplace_back(context);
+        hunters.back().startSearchPublicHashThread(cudaDeviceId);
+    }
+
+    auto huntersIsDone = [&hunters]()
+    {
+        return std::all_of(hunters.begin(), hunters.end(), [](const KeyHunter& hunter)
+        {
+            return hunter.isDone();
+        });
+    };
 
     // Giving some time to process, otherwise main thread will force stop the processing
-    while (!keyHunter.isDone())
+    while (!huntersIsDone())
     {
         std::this_thread::yield(); // If the queue is full, yield to avoid busy-wait
     }
