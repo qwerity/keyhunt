@@ -109,7 +109,7 @@ namespace cu
     CudaDeviceInfo cudaInit(const int cudaDeviceId)
     {
         cudaCheckError(cudaSetDevice(cudaDeviceId));
-        // safeCall(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
+        // cudaCheckError(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
 
         // Use a larger portion of shared memory for L1 cache
         cudaCheckError(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));

@@ -2,30 +2,32 @@
 #include "results_processor.h"
 
 #include "util/utils.h"
-#include "util/cuda_util.h"
 
 #include <thread>
 #include <format>
+#include <future>
 
 #include <boost/log/trivial.hpp>
 
-void statusCallback(const StatusInfo &info)
+namespace
 {
-    const std::string speedStr = (info.pointsPerSecond < 0.01) ? "< 0.01 MKey/s" : std::format("{:.3} MKey/s", info.pointsPerSecond) ;
+    void statusCallback(const StatusInfo& info)
+    {
+        const std::string speedStr = (info.pointsPerSecond < 0.01) ? "< 0.01 MKey/s" : std::format("{:.3f} MKey/s", info.pointsPerSecond);
 
-    const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L} total)", info.total);
-    const std::string timeStr = std::format("[{:.2}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
-    const uint64_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
-    const uint64_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
+        const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L} total)", info.total);
+        const std::string timeStr = std::format("[{:.2f}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
+        const uint64_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
+        const uint64_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
 
-    const std::string statusStr = std::format("[{} | {} | {}/{}MB] [{}/{}] {} {} {}"
-        , info.device, info.deviceName, usedDeviceMemoryMb, totalDeviceMemoryMb
-        , info.iteration
-        , info.totalIterations
-        , speedStr, totalStr, timeStr);
+        const std::string statusStr = std::format("[{} | {} | {}/{}MB] [{}/{}] {} {} {}"
+            , info.device, info.deviceName, usedDeviceMemoryMb, totalDeviceMemoryMb
+            , info.iteration, info.totalIterations
+            , speedStr, totalStr, timeStr);
 
-//    fprintf(stderr, "\r%s", statusStr.c_str());
-    BOOST_LOG_TRIVIAL(info) << statusStr;
+        // fprintf(stderr, "\r%s", statusStr.c_str());
+        BOOST_LOG_TRIVIAL(info) << statusStr;
+    }
 }
 
 int main()
@@ -48,25 +50,43 @@ int main()
     const ResultsProcessor resultProcessor(context);
     resultProcessor.startHash160ResultsQueueProcessing();
 
-    std::vector<KeyHunter> hunters;
-    for (int cudaDeviceId = 0; cudaDeviceId < cu::getDeviceCount(); ++cudaDeviceId)
+    const int gpuDevicesCount = cu::getDeviceCount();
+    std::vector<std::thread> threads;
+    std::vector<std::future<void>> futures;
+
+    threads.reserve(gpuDevicesCount);
+    futures.reserve(gpuDevicesCount);
+
+    for (int cudaDeviceId = 0; cudaDeviceId < gpuDevicesCount; ++cudaDeviceId)
     {
-        hunters.emplace_back(context);
-        hunters.back().startSearchPublicHashThread(cudaDeviceId);
+        std::promise<void> promise;
+        futures.push_back(promise.get_future());
+
+        threads.emplace_back([&context, cudaDeviceId, promise = std::move(promise)]() mutable
+        {
+            // For using concrete CUDA device
+            auto cudaInfo = cu::cudaInit(cudaDeviceId);
+            const KeyHunter hunter(context, std::move(cudaInfo));
+            hunter.startSearchPublicHash();
+
+            // Signal that the thread has finished
+            promise.set_value();
+        });
     }
 
-    const auto huntersIsDone = [&hunters]()
+    // Wait for all threads to finish
+    for (auto& future: futures)
     {
-        return std::all_of(hunters.begin(), hunters.end(), [](const KeyHunter& hunter)
-        {
-            return hunter.isDone();
-        });
-    };
+        future.wait();// Wait for the promise to be fulfilled
+    }
 
-    // Giving some time to process, otherwise main thread will force stop the processing
-    while (!huntersIsDone())
+    // Join all the threads manually
+    for (auto& thread: threads)
     {
-        std::this_thread::yield(); // If the queue is full, yield to avoid busy-wait
+        if (thread.joinable())
+        {
+            thread.join();
+        }
     }
 
     return 0;

@@ -1,12 +1,13 @@
 #pragma once
 
 #include <thrust/host_vector.h>
+#include "util/cuda_util.h"
 #include "util/common_host.h"
 
 class KeyHunter
 {
 public:
-    explicit KeyHunter(const std::shared_ptr<GlobalContext>& context);
+    explicit KeyHunter(const std::shared_ptr<GlobalContext>& context, cu::CudaDeviceInfo&& cudaInfo);
     ~KeyHunter();
 
     KeyHunter(KeyHunter& rhs) = delete;
@@ -15,10 +16,8 @@ public:
     KeyHunter(KeyHunter&& rhs) noexcept;
     KeyHunter& operator=(KeyHunter&& rhs) noexcept;
 
-    void startSearchPublicHashThread(int cudaDeviceId) const;
+    void startSearchPublicHash() const;
     void stop() const;
-
-    [[nodiscard]] bool isDone() const;
 
 private:
     struct Impl;

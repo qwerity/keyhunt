@@ -1,19 +1,14 @@
 #include "key_hunter.h"
 
 #include <thread>
-#include <utility>
 #include <format>
 #include <unordered_set>
 
 #include <boost/log/trivial.hpp>
-#include <boost/iostreams/device/mapped_file.hpp>
 
 #include "cuda/atomic_list.cuh"
-//#include "cuda/defines.cuh"
 #include "cuda/ecc.cuh"
 #include "cuda/hash160_lookup.cuh"
-
-#include "util/cuda_util.h"
 #include "util/utils.h"
 #include "util/http_client.h"
 
@@ -23,7 +18,6 @@ struct KeyHunter::Impl
     std::shared_ptr<GlobalContext> mgContext;
     cu::CudaDeviceInfo cudaInfo;
 
-    std::thread mThread;
     std::unique_ptr<HttpClient> httpClient;
 
     std::unique_ptr<ECC> mCuECC;
@@ -31,15 +25,15 @@ struct KeyHunter::Impl
     mutable utils::Timer mTimer;
 
     std::atomic<bool> mStopFlag{false};
-    mutable std::atomic<bool> mDone{false};
 
     Hash160Lookup mHash160Lookup;
 
     CudaAtomicList mResultAtomicList;
 
     // Implementation
-    explicit Impl(const std::shared_ptr<GlobalContext>& context)
+    explicit Impl(const std::shared_ptr<GlobalContext>& context, cu::CudaDeviceInfo&& cudaInfo)
         : mgContext(context)
+        , cudaInfo(std::move(cudaInfo))
         , httpClient{std::make_unique<HttpClient>(context->config.server())}
         , mCuECC(std::make_unique<ECC>())
     {
@@ -52,17 +46,9 @@ struct KeyHunter::Impl
 
     void stop()
     {
-        BOOST_LOG_TRIVIAL(trace) << "KeyHunter stopping" << std::endl;
-
         mStopFlag = true;
-        // mDone = true;
 
-        if (mThread.joinable())
-        {
-            mThread.join();
-        }
-
-        BOOST_LOG_TRIVIAL(trace) << "KeyHunter stopped" << std::endl;
+        BOOST_LOG_TRIVIAL(trace) << "KeyHunter stopped";
     }
 
     void initializeGPoints() const
@@ -208,69 +194,56 @@ struct KeyHunter::Impl
         BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", keysNumberPerIteration * finalIterationsCount);
     }
 
-    void startSearchPublicHashThread(const int cudaDeviceId)
+    void startSearchPublicHash()
     {
-        mDone = false;
-        mThread = std::thread([&, cudaDeviceId]()
-        {   BOOST_LOG_TRIVIAL(trace) << std::format("[{}] KeyHunter Thread ID: ", cudaDeviceId) << std::this_thread::get_id();
+        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] KeyHunter Thread ID: ", cudaInfo.id) << std::this_thread::get_id();
 
-            // For using concrete CUDA device
-            cudaInfo = cu::cudaInit(cudaDeviceId);
+        // Preparing Public, Private, Results buffers
+        mHash160Lookup.setTargets(mgContext->hash160Targets);
+        mResultAtomicList.init(sizeof(Hash160SearchResult), 256);
 
-            // Preparing Public, Private, Results buffers
-            mHash160Lookup.setTargets(mgContext->hash160Targets);
-            mResultAtomicList.init(sizeof(Hash160SearchResult), 256);
+        initializeGPoints();
+        mCuECC->initWithPrivateDefinedXRandomY(mgContext->config.hunter().pointsPerThread, mgContext->config.hunter().publicKeyCompressionTypeToCheck);
 
-            initializeGPoints();
-            mCuECC->initWithPrivateDefinedXRandomY(mgContext->config.hunter().pointsPerThread, mgContext->config.hunter().publicKeyCompressionTypeToCheck);
+        // Getting from http service the next private key x part, generating public and checking targets hashes
+        uint32_t privateXPart{0};
 
-            // Getting from http service the next private key x part, generating public and checking targets hashes
-            uint32_t privateXPart{0};
-
-            http::status responseCode{http::status::unknown};
-            do
+        http::status responseCode{http::status::unknown};
+        do
+        {
+            if (!mgContext->config.hunter().forcePrivateXPart)
             {
-                if (!mgContext->config.hunter().forcePrivateXPart)
+                responseCode = httpClient->getNumber(privateXPart);
+                if (responseCode != http::status::ok)
                 {
-                    responseCode = httpClient->getNumber(privateXPart);
-                    if (responseCode != http::status::ok)
-                    {
-                        break;
-                    }
+                    break;
                 }
-                else
-                {
-                    privateXPart = mgContext->config.hunter().privateXPart;
-                }
-
-                BOOST_LOG_TRIVIAL(trace) << std::format("\n[{} | {}] Generating for privateXPart: {}", cudaInfo.id, cudaInfo.name, privateXPart);
-                startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
             }
-            while (!mStopFlag && responseCode == http::status::ok);
+            else
+            {
+                privateXPart = mgContext->config.hunter().privateXPart;
+            }
 
-            mDone = true;
-        });
+            BOOST_LOG_TRIVIAL(trace) << std::format("\n[{} | {}] Generating for privateXPart: {}", cudaInfo.id, cudaInfo.name, privateXPart);
+            startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
+        }
+        while (!mStopFlag && responseCode == http::status::ok);
     }
 };
 
-KeyHunter::KeyHunter(const std::shared_ptr<GlobalContext>& context) : mImpl(std::make_unique<Impl>(context)) {}
+KeyHunter::KeyHunter(const std::shared_ptr<GlobalContext>& context, cu::CudaDeviceInfo&& cudaInfo) : mImpl(std::make_unique<Impl>(context, std::move(cudaInfo))) {}
 KeyHunter::~KeyHunter() = default;
 
 KeyHunter::KeyHunter(KeyHunter &&rhs) noexcept = default;
 
 KeyHunter& KeyHunter::operator=(KeyHunter &&rhs) noexcept = default;
 
-void KeyHunter::startSearchPublicHashThread(const int cudaDeviceId) const
+void KeyHunter::startSearchPublicHash() const
 {
-    mImpl->startSearchPublicHashThread(cudaDeviceId);
+    mImpl->startSearchPublicHash();
 }
 
 void KeyHunter::stop() const
 {
     mImpl->stop();
-}
-
-bool KeyHunter::isDone() const
-{
-    return mImpl->mDone;
 }
