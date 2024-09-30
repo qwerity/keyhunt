@@ -141,6 +141,14 @@ namespace utils
 
     std::string convertToHexString(const uint32_t* arr, const uint32_t size)
     {
+//        std::string s;
+//        for (uint32_t i = 0; i < size; ++i)
+//        {
+//            char hex[9]{};
+//            snprintf(hex, 9, "%.8x", utils::endian(arr[i]));
+//            s += std::string(hex);
+//        }
+
         std::stringstream ss;
         // Iterate through each byte of the array
         for (uint32_t i = 0; i < size; ++i)
@@ -197,7 +205,7 @@ namespace utils
             return hash;
         }
 
-        for (int i = 0; i < 5; ++i)
+        for (uint32_t i = 0; i < 5; ++i)
         {
             std::stringstream ss;
             ss << std::hex << hexString.substr(i * 8, 8);
@@ -211,7 +219,7 @@ namespace utils
     hash160 hexToHash160(const char *data)
     {
         hash160 hash;
-        for (size_t i = 0; i < 5; ++i)
+        for (uint32_t i = 0; i < 5; ++i)
         {
             std::string hex_str(data + i * 8, 8);  // Create a string from 8 characters
             hash.h[i] = std::stoul(hex_str, nullptr, 16);
@@ -249,7 +257,7 @@ namespace utils
             // reserving memory to avoid memory allocation during insertion
             hashSet.reserve(hashSet.size() + fileSize / (hash160StrSize + 1)); // +1 is new line
 
-            BOOST_LOG_TRIVIAL(trace) << std::format("Loading RipeMD-160 hashes from: {}, fileSize: {:.02}Mb", hash160TargetsFile, static_cast<double>(fileSize) / MB);
+            BOOST_LOG_TRIVIAL(trace) << std::format("Loading RipeMD-160 hashes from: {}, fileSize: {:.2f}Mb", hash160TargetsFile, static_cast<double>(fileSize) / MB);
 
             uint64_t insertedTargetsCount{0};
             // Read the file in fixed-fileSize chunks of 20 bytes
@@ -274,7 +282,7 @@ namespace utils
 
             file.close();
 
-            BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Read {:L} unique hashes, from: {:L}, ({:.03}s | {:02}Mb)",
+            BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Read {:L} unique hashes, from: {:L}, ({:.03f}s | {:02}Mb)",
                                                     hashSet.size(), insertedTargetsCount, timer.elapsedS(), static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB);
         }
         catch(const std::exception& e)
@@ -306,7 +314,7 @@ namespace utils
                 ofs.write(reinterpret_cast<const char *>(&h), sizeof(hash160));
             }
 
-            BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Written {:L} hashes to {} as a binary, in {:.03}s | {:.02}Mb",
+            BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Written {:L} hashes to {} as a binary, in {:.03f}s | {:.02}Mb",
                                                     hashSet.size(), filename, timer.elapsedS(), static_cast<double>(ofs.tellp()) / MB);
 
             ofs.close();
@@ -350,7 +358,7 @@ namespace utils
 
             const size_t numEntries = fileSize / sizeof(hash160);
 
-            BOOST_LOG_TRIVIAL(trace) << std::format("Loading RipeMD-160 hashes from: {}, size: {:.02}Mb", filename, static_cast<double>(fileSize) / MB);
+            BOOST_LOG_TRIVIAL(trace) << std::format("Loading RipeMD-160 hashes from: {}, size: {:.2f}Mb", filename, static_cast<double>(fileSize) / MB);
 
             hashSet.reserve(numEntries);
             for (size_t i = 0; i < numEntries; ++i)
@@ -362,7 +370,7 @@ namespace utils
 
             file.close();
 
-            BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "Read {:L} hashes from {} binary file: {:.03}s", hashSet.size(), filename, timer.elapsedS());
+            BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "Read {:L} hashes from {} binary file: {:.03f}s", hashSet.size(), filename, timer.elapsedS());
         }
         catch (const std::exception& e)
         {

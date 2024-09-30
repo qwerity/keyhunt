@@ -18,7 +18,7 @@ void statusCallback(const StatusInfo &info)
     const uint64_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
     const uint64_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
 
-    const std::string statusStr = std::format("[{}] {} | {}/{}MB | [{}/{}] {} {} {}"
+    const std::string statusStr = std::format("[{} | {} | {}/{}MB] [{}/{}] {} {} {}"
         , info.device, info.deviceName, usedDeviceMemoryMb, totalDeviceMemoryMb
         , info.iteration
         , info.totalIterations
@@ -56,7 +56,7 @@ int main()
         hunters.back().startSearchPublicHashThread(cudaDeviceId);
     }
 
-    auto huntersIsDone = [&hunters]()
+    const auto huntersIsDone = [&hunters]()
     {
         return std::all_of(hunters.begin(), hunters.end(), [](const KeyHunter& hunter)
         {

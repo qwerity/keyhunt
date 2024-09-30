@@ -23,8 +23,8 @@ public:
 
     cudaError_t getResults(thrust::host_vector<std::pair<uint256_t, ecpoint_t>>& results) const;
 
-    [[nodiscard]] cudaError_t calculatePublicKeys() const;
-    cudaError_t generatePrivateKeysForXPerIteration(uint32_t privateXPart, uint32_t iteration) const;
+    void calculatePublicKeys() const;
+    void generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration) const;
 
     void getPrivateKeys(thrust::host_vector<uint256_t>& h_privateKeys) const;
 

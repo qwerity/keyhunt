@@ -113,7 +113,7 @@ struct KeyHunter::Impl
             info.deviceName = cudaInfo.name;
             info.iteration = iteration;
             info.totalIterations = totalIterations;
-            cu::safeCall(cudaMemGetInfo(&info.freeDeviceMemory, &info.totalDeviceMemory));
+            cudaCheckError(cudaMemGetInfo(&info.freeDeviceMemory, &info.totalDeviceMemory));
 
             mgContext->statusCallback(info);
 
@@ -165,11 +165,11 @@ struct KeyHunter::Impl
 
         if (falsePositiveCount)
         {
-            BOOST_LOG_TRIVIAL(info) << "False positives count: " << falsePositiveCount;
+            BOOST_LOG_TRIVIAL(trace) << "False positives count: " << falsePositiveCount;
         }
     }
 
-    void startSearchPublicHashWithPrivateDefinedXRandomYThread(const uint32_t privateXPart)
+    void startSearchPublicHashWithPrivateDefinedXRandomY(const uint32_t privateXPart)
     {
         const uint32_t keysNumberToGenerate = mgContext->config.hunter().keysNumberToGenerate;
         const uint32_t totalKeysToGenerate = (keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : keysNumberToGenerate;
@@ -188,12 +188,13 @@ struct KeyHunter::Impl
         {
             mTimer.start();
             {
-                cu::safeCall(mCuECC->generatePrivateKeysForXPerIteration(privateXPart, iteration));
+                mCuECC->generatePrivateKeysForXPerIteration(privateXPart, iteration);
 
-                cu::safeCall(mCuECC->calculatePublicKeys());
+                mCuECC->calculatePublicKeys();
             }
             //const uint64_t nextY = iteration * mCuECC->getKeysNumberPerIteration() + 1;
-            mgContext->config.setCalculationIteration(iteration);
+            /// TODO(ksh): to be used later
+            // mgContext->config.setCalculationIteration(iteration);
 
             pushResultsToQueue2(privateXPart, keysNumberPerIteration, iteration);
 
@@ -211,14 +212,14 @@ struct KeyHunter::Impl
     {
         mDone = false;
         mThread = std::thread([&, cudaDeviceId]()
-        {   BOOST_LOG_TRIVIAL(trace) << "KeyHunter Thread ID: " << std::this_thread::get_id();
+        {   BOOST_LOG_TRIVIAL(trace) << std::format("[{}] KeyHunter Thread ID: ", cudaDeviceId) << std::this_thread::get_id();
 
             // For using concrete CUDA device
             cudaInfo = cu::cudaInit(cudaDeviceId);
 
             // Preparing Public, Private, Results buffers
             mHash160Lookup.setTargets(mgContext->hash160Targets);
-            mResultAtomicList.init(sizeof(Hash160SearchResult), 16);
+            mResultAtomicList.init(sizeof(Hash160SearchResult), 256);
 
             initializeGPoints();
             mCuECC->initWithPrivateDefinedXRandomY(mgContext->config.hunter().pointsPerThread, mgContext->config.hunter().publicKeyCompressionTypeToCheck);
@@ -234,7 +235,6 @@ struct KeyHunter::Impl
                     responseCode = httpClient->getNumber(privateXPart);
                     if (responseCode != http::status::ok)
                     {
-                        BOOST_LOG_TRIVIAL(error) << responseCode;
                         break;
                     }
                 }
@@ -243,8 +243,8 @@ struct KeyHunter::Impl
                     privateXPart = mgContext->config.hunter().privateXPart;
                 }
 
-                BOOST_LOG_TRIVIAL(trace) << std::format("\n[{}] Generating for privateXPart: {}", cudaInfo.id, privateXPart);
-                startSearchPublicHashWithPrivateDefinedXRandomYThread(privateXPart);
+                BOOST_LOG_TRIVIAL(trace) << std::format("\n[{} | {}] Generating for privateXPart: {}", cudaInfo.id, cudaInfo.name, privateXPart);
+                startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
             }
             while (!mStopFlag && responseCode == http::status::ok);
 

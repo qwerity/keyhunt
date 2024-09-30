@@ -6,8 +6,8 @@ namespace cu
     CudaDeviceInfo getDeviceInfo(int device)
     {
         cudaDeviceProp properties{};
-        safeCall(cudaSetDevice(device));
-        safeCall(cudaGetDeviceProperties(&properties, device));
+        cudaCheckError(cudaSetDevice(device));
+        cudaCheckError(cudaGetDeviceProperties(&properties, device));
 
         CudaDeviceInfo devInfo;
         devInfo.id = device;
@@ -17,6 +17,7 @@ namespace cu
 
         devInfo.multiProcessorCount = properties.multiProcessorCount;
         devInfo.maxThreadsPerMultiProcessor = properties.maxThreadsPerMultiProcessor;
+        devInfo.totalConstMem = properties.totalConstMem;
         devInfo.warpSize = properties.warpSize;
         devInfo.maxThreadsPerBlock = properties.maxThreadsPerBlock;
         devInfo.persistingL2CacheMaxSize = properties.persistingL2CacheMaxSize;
@@ -71,9 +72,10 @@ namespace cu
     {
         const int count = getDeviceCount();
         std::vector<CudaDeviceInfo> devList;
+        devList.reserve(count);
         for (int device = 0; device < count; device++)
         {
-            devList.push_back(getDeviceInfo(device));
+            devList.emplace_back(getDeviceInfo(device));
         }
         return devList;
     }
@@ -81,10 +83,8 @@ namespace cu
     int getDeviceCount()
     {
         int count = 0;
-        if (const cudaError_t err = cudaGetDeviceCount(&count))
-        {
-            throw CudaException(err);
-        }
+        cudaCheckError(cudaGetDeviceCount(&count));
+
         return count;
     }
 
@@ -96,6 +96,7 @@ namespace cu
         std::fprintf(stderr, "Capability: %d%d\n", info.major, info.minor);
         std::fprintf(stderr, "warpSize: %d\n", info.warpSize);
         std::fprintf(stderr, "Memory: %I64u\n", info.mem / MB);
+        std::fprintf(stderr, "totalConstMem: %zd\n", info.totalConstMem);
         std::fprintf(stderr, "multiProcessorCount: %d\n", info.multiProcessorCount);
         std::fprintf(stderr, "maxThreadsPerMultiProcessor: %d\n", info.maxThreadsPerMultiProcessor);
         std::fprintf(stderr, "globalL1CacheSupported: %d\n", info.globalL1CacheSupported);
@@ -107,11 +108,11 @@ namespace cu
 
     CudaDeviceInfo cudaInit(const int cudaDeviceId)
     {
-        safeCall(cudaSetDevice(cudaDeviceId));
+        cudaCheckError(cudaSetDevice(cudaDeviceId));
         // safeCall(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
 
         // Use a larger portion of shared memory for L1 cache
-        safeCall(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
+        cudaCheckError(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
 
         return getDeviceInfo(cudaDeviceId);
     }

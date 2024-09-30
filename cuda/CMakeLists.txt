@@ -13,6 +13,7 @@ set(CUDA_PROFILING_OUTPUT "--ptxas-options=-v")
 #set(CUDA_SUPPRESS_WARNINGS "-diag-suppress 20091")
 #set(CUDA_SUPPRESS_WARNINGS "-diag-suppress 20012")
 set(NVCC_COMPILATION_FLAGS "--split-compile=0 --threads=0")
+
 set(CMAKE_CUDA_FLAGS "-rdc=true --default-stream per-thread ${CUDA_PROFILING_OUTPUT} ${CUDA_SUPPRESS_WARNINGS} ${NVCC_COMPILATION_FLAGS}")
 set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -g -lineinfo") # -G enables device-side debugging but significantly slows down the compilation
 set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -DNDEBUG")

@@ -5,7 +5,7 @@ int main()
     const auto deviceInfoList = cu::getDevices();
     for (const auto& deviceInfo : deviceInfoList)
     {
-        cu:printDeviceInfo(deviceInfo);
+        printDeviceInfo(deviceInfo);
     }
 
     return 0;

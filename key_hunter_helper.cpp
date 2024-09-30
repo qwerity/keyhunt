@@ -176,7 +176,7 @@ struct KeyHunter::Impl
     void pushResultsToQueue() const
     {
         thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
-        // cu::safeCall(mCuECC->getResults(results));
+        // cudaCheckError(mCuECC->getResults(results));
 
         BOOST_LOG_TRIVIAL(info) << std::format("KeyHunter: generated {} keys", results.size());
 
@@ -210,7 +210,7 @@ struct KeyHunter::Impl
                                   BOOST_LOG_TRIVIAL(trace) << "KeyHunter Thread ID: " << std::this_thread::get_id();
 
                                   mTimer.start();
-                                  cu::safeCall(mCuECC->calculatePublicKeys());
+                                  cudaCheckError(mCuECC->calculatePublicKeys());
 
                                   signalStatusInfo(privateKeys.size(), 1, 1, mTimer.getTime());
 
@@ -236,7 +236,7 @@ struct KeyHunter::Impl
         //
         // mCuECC->init(32, privateKeys);
         //
-        // cu::safeCall(mCuECC->calculatePublicKeys());
+        // cudaCheckError(mCuECC->calculatePublicKeys());
         //
         // if (mCuECC->selfTest(privateKeys))
         // {
@@ -248,6 +248,6 @@ struct KeyHunter::Impl
         // }
         //
         // thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
-        // cu::safeCall(mCuECC->getResults(results));
+        // cudaCheckError(mCuECC->getResults(results));
     }
 };

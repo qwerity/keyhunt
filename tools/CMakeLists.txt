@@ -6,6 +6,7 @@ target_link_libraries(gpu_info PRIVATE CUDA::cudart_static)
 ####################################################################################################################################################################################
 add_executable(convert_hash160_to_binary convert_hash160_to_binary.cpp)
 target_link_libraries(convert_hash160_to_binary PRIVATE util)
+target_link_libraries(convert_hash160_to_binary PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(convert_hash160_to_binary PRIVATE ${Boost_LIBRARIES})
 
 ####################################################################################################################################################################################

@@ -9,15 +9,12 @@
 
 namespace secp256k1
 {
-    // TODO(ksh): rename
-    constexpr int uint256vSize{8};
-
     struct alignas(32) uint256
     {
         static constexpr int BigEndian = 1;
         static constexpr int LittleEndian = 2;
 
-        uint32_t v[uint256vSize]{};
+        uint32_t v[8]{};
 
         ~uint256() = default;
 
@@ -61,11 +58,11 @@ namespace secp256k1
             }
 
             const auto len = static_cast<int>(t.length());
-            memset(v, 0, sizeof(uint32_t) * uint256vSize);
+            memset(v, 0, sizeof(uint32_t) * 8);
             int j = 0;
-            for (int i = len - uint256vSize; i >= 0; i -= uint256vSize)
+            for (int i = len - 8; i >= 0; i -= 8)
             {
-                std::string sub = t.substr(i, uint256vSize);
+                std::string sub = t.substr(i, 8);
                 uint32_t val;
                 if (sscanf(sub.c_str(), "%x", &val) != 1)
                 {
@@ -95,18 +92,18 @@ namespace secp256k1
             v[0] = static_cast<uint32_t>(x);
         }
 
-        uint256(const uint32_t x[uint256vSize], const int endian = LittleEndian)
+        uint256(const uint32_t x[8], const int endian = LittleEndian)
         {
             if (endian == LittleEndian)
             {
-                for (int i = 0; i < uint256vSize; i++)
+                for (uint32_t i = 0; i < 8; ++i)
                 {
                     v[i] = x[i];
                 }
             }
             else // BigEndian
             {
-                for (int i = 0; i < uint256vSize; i++)
+                for (uint32_t i = 0; i < 8; ++i)
                 {
                     v[i] = x[7 - i];
                 }
@@ -299,14 +296,14 @@ namespace secp256k1
         }
     };
 
-    constexpr uint32_t _POINT_AT_INFINITY_WORDS[uint256vSize] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
-    constexpr uint32_t _P_WORDS[uint256vSize] = {0xFFFFFC2F, 0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
-    constexpr uint32_t _N_WORDS[uint256vSize] = {0xD0364141, 0xBFD25E8C, 0xAF48A03B, 0xBAAEDCE6, 0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
-    constexpr uint32_t _GX_WORDS[uint256vSize] = {0x16F81798, 0x59F2815B, 0x2DCE28D9, 0x029BFCDB, 0xCE870B07, 0x55A06295, 0xF9DCBBAC, 0x79BE667E};
-    constexpr uint32_t _GY_WORDS[uint256vSize] = {0xFB10D4B8, 0x9C47D08F, 0xA6855419, 0xFD17B448, 0x0E1108A8, 0x5DA4FBFC, 0x26A3C465, 0x483ADA77};
+    constexpr uint32_t _POINT_AT_INFINITY_WORDS[8] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+    constexpr uint32_t _P_WORDS[8] = {0xFFFFFC2F, 0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+    constexpr uint32_t _N_WORDS[8] = {0xD0364141, 0xBFD25E8C, 0xAF48A03B, 0xBAAEDCE6, 0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+    constexpr uint32_t _GX_WORDS[8] = {0x16F81798, 0x59F2815B, 0x2DCE28D9, 0x029BFCDB, 0xCE870B07, 0x55A06295, 0xF9DCBBAC, 0x79BE667E};
+    constexpr uint32_t _GY_WORDS[8] = {0xFB10D4B8, 0x9C47D08F, 0xA6855419, 0xFD17B448, 0x0E1108A8, 0x5DA4FBFC, 0x26A3C465, 0x483ADA77};
     // TODO(ksh): not used
-    // constexpr uint32_t _BETA_WORDS[uint256vSize] = {0x719501EE, 0xC1396C28, 0x12F58995, 0x9CF04975, 0xAC3434E9, 0x6E64479E, 0x657C0710, 0x7AE96A2B};
-    // constexpr uint32_t _LAMBDA_WORDS[uint256vSize] = {0x1B23BD72, 0xDF02967C, 0x20816678, 0x122E22EA, 0x8812645A, 0xA5261C02, 0xC05C30E0, 0x5363AD4C};
+    // constexpr uint32_t _BETA_WORDS[8] = {0x719501EE, 0xC1396C28, 0x12F58995, 0x9CF04975, 0xAC3434E9, 0x6E64479E, 0x657C0710, 0x7AE96A2B};
+    // constexpr uint32_t _LAMBDA_WORDS[8] = {0x1B23BD72, 0xDF02967C, 0x20816678, 0x122E22EA, 0x8812645A, 0xA5261C02, 0xC05C30E0, 0x5363AD4C};
 
     struct alignas(64) ecpoint
     {

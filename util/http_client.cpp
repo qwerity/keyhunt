@@ -79,7 +79,7 @@ struct HttpClient::Impl
         }
         catch (const std::exception& e)
         {
-            BOOST_LOG_TRIVIAL(error) << "Error: " << e.what();
+            BOOST_LOG_TRIVIAL(error) << "Http client failed: " << e.what();
         }
 
         return responseCode;

@@ -60,14 +60,14 @@ struct ECC::Impl
     void setPointsPerThread(const uint32_t value)
     {
         mPointsPerThread = value;
-        cu::safeCall(cudaMemcpyToSymbol(d_pointsPerThread, &mPointsPerThread, sizeof(uint32_t)));
+        cudaCheckError(cudaMemcpyToSymbol(d_pointsPerThread, &mPointsPerThread, sizeof(uint32_t)));
     }
 
     void computeResolutionForMaxOccupancy(const uint32_t pointsPerThread, const uint32_t blockSize = 0)
     {
         int minGridSize{};
         int recommendedBlockSize{};
-        cudaOccupancyMaxPotentialBlockSize(&minGridSize, &recommendedBlockSize, multiplyStepKernel);
+        cudaCheckError(cudaOccupancyMaxPotentialBlockSize(&minGridSize, &recommendedBlockSize, multiplyStepKernel));
 
         mBlockSize = (blockSize != 0) ? blockSize : recommendedBlockSize;
         std::fprintf(stderr, "minGridSize: %d, recommendedBlockSize: %d, set blockSize; %u\n", minGridSize, recommendedBlockSize, mBlockSize);
@@ -101,7 +101,7 @@ struct ECC::Impl
 
         d_gPoints = h_gPoints;
         const auto* d_gPointsRawPtr = thrust::raw_pointer_cast(d_gPoints.data());
-        cu::safeCall(cudaMemcpyToSymbol(d_gPointsPtr, &d_gPointsRawPtr, sizeof(ecpoint_t*)));
+        cudaCheckError(cudaMemcpyToSymbol(d_gPointsPtr, &d_gPointsRawPtr, sizeof(ecpoint_t*)));
     }
 
     void allocatePublicKeysDeviceMemory()
@@ -111,12 +111,12 @@ struct ECC::Impl
         d_publicKeysX.resize(keysNumber);
 
         const uint256_t* d_publicKeysXRawPtr = thrust::raw_pointer_cast(d_publicKeysX.data());
-        cu::safeCall(cudaMemcpyToSymbol(d_publicKeyXPtr, &d_publicKeysXRawPtr, sizeof(uint256_t *)));
+        cudaCheckError(cudaMemcpyToSymbol(d_publicKeyXPtr, &d_publicKeysXRawPtr, sizeof(uint256_t *)));
 
         d_publicKeysY.resize(keysNumber);
 
         const uint256_t* d_publicKeysYRawPtr = thrust::raw_pointer_cast(d_publicKeysY.data());
-        cu::safeCall(cudaMemcpyToSymbol(d_publicKeyYPtr, &d_publicKeysYRawPtr, sizeof(uint256_t *)));
+        cudaCheckError(cudaMemcpyToSymbol(d_publicKeyYPtr, &d_publicKeysYRawPtr, sizeof(uint256_t *)));
     }
 
     void allocateMultChainDeviceMemory()
@@ -124,7 +124,7 @@ struct ECC::Impl
         d_multChain.resize(getKeysNumberPerIteration());
 
         const uint256_t* d_multChainRawPtr = thrust::raw_pointer_cast(d_multChain.data());
-        cu::safeCall(cudaMemcpyToSymbol(d_multChainPtr, &d_multChainRawPtr, sizeof(uint256_t*)));
+        cudaCheckError(cudaMemcpyToSymbol(d_multChainPtr, &d_multChainRawPtr, sizeof(uint256_t*)));
     }
 
     void allocatePrivateKeysDeviceMemory()
@@ -138,7 +138,7 @@ struct ECC::Impl
         h_privateKeys = d_privateKeys;
     }
 
-    cudaError_t generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration)
+    void generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration)
     {
         const uint32_t keysNumberPerIteration = getKeysNumberPerIteration();
 
@@ -151,7 +151,7 @@ struct ECC::Impl
         const uint32_t increment = iteration * keysNumberPerIteration;
 
         // {x, 0}, {x, 1}, ... , {x, keysNumberPerIteration - 1}
-        return cudaKernelSyncLaunch(mInitStream, [&]()
+        cudaCheckError(cudaKernelSyncLaunch(mInitStream, [&]()
         {
             thrust::transform(thrust::cuda::par.on(mInitStream),
                               thrust::counting_iterator<uint32_t>(0u),
@@ -159,14 +159,14 @@ struct ECC::Impl
                               d_privateKeys.begin(),
                               PrivateKeyForXWithRandomYFunctor(privateXPart, increment)
             );
-        }, "generatePrivateKeysForXPerIteration");
+        }, "generatePrivateKeysForXPerIteration"));
     }
 
     void initWithPrivateDefinedXRandomY(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t blockSize)
     {
         computeResolutionForMaxOccupancy(pointsPerThread, blockSize);
 
-        cu::safeCall(cudaMemcpyToSymbol(d_publicKeyCompressionTypeToCheck, &publicKeyCompressionTypeToCheck, sizeof(uint32_t)));
+        cudaCheckError(cudaMemcpyToSymbol(d_publicKeyCompressionTypeToCheck, &publicKeyCompressionTypeToCheck, sizeof(uint32_t)));
 
         // Allocate space for private keys on device
         allocatePrivateKeysDeviceMemory();
@@ -178,34 +178,26 @@ struct ECC::Impl
         allocateMultChainDeviceMemory();
     }
 
-    cudaError_t calculatePublicKeys()
+    void calculatePublicKeys()
     {
-        cudaError_t err = cudaKernelSyncLaunch(mGeneratorStream, [&]()
+        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
         {
             constexpr uint256_t infinite{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
             thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), infinite);
             thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), infinite);
-        }, "Initialize public keys");
+        }, "Initialize public keys"));
 
         constexpr uint32_t mSharedMemSize{0};
         const uint256_t *privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys.data());
-        err = cudaKernelSyncLaunch(mGeneratorStream, [&]()
+        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
         {
             multiplyStepKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
-        }, "multiplyStepKernel");
+        }, "multiplyStepKernel"));
 
-        if (err == cudaSuccess)
+        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
         {
-            err = cudaKernelSyncLaunch(mGeneratorStream, [&]()
-            {
-                checkHashKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
-            }, "checkHashKernel");
-        }
-
-        fflush(stderr);
-        fflush(stdout);
-
-        return err;
+            checkHashKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+        }, "checkHashKernel"));
     }
 
     cudaError_t getResults(const thrust::host_vector<std::pair<uint256_t, ecpoint_t>> & pairs)
@@ -240,14 +232,14 @@ cudaError_t ECC::getResults(thrust::host_vector<std::pair<uint256_t, ecpoint_t>>
     return mImpl->getResults(results);
 }
 
-cudaError_t ECC::calculatePublicKeys() const
+void ECC::calculatePublicKeys() const
 {
-    return mImpl->calculatePublicKeys();
+    mImpl->calculatePublicKeys();
 }
 
-cudaError_t ECC::generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration) const
+void ECC::generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration) const
 {
-    return mImpl->generatePrivateKeysForXPerIteration(privateXPart, iteration);
+    mImpl->generatePrivateKeysForXPerIteration(privateXPart, iteration);
 }
 
 void ECC::getPrivateKeys(thrust::host_vector<uint256_t> &h_privateKeys) const

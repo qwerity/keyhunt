@@ -18,7 +18,7 @@ public:
         cleanup();
     }
 
-    cudaError_t init(uint32_t itemSize, uint32_t maxItems);
+    void init(uint32_t itemSize, uint32_t maxItems);
 
     uint32_t read(void *dest, uint32_t count) const;
     [[nodiscard]] uint32_t size() const;
@@ -26,12 +26,12 @@ public:
     void cleanup() const;
 
 private:
-    void *_devPtr{nullptr};
-    void *_hostPtr{nullptr};
+    void *d_devPtr{nullptr};
+    void *h_hostPtr{nullptr};
 
-    uint32_t *_countHostPtr{nullptr};
-    uint32_t *_countDevPtr{nullptr};
+    uint32_t *h_countHostPtr{nullptr};
+    uint32_t *d_countDevPtr{nullptr};
 
-    uint32_t _maxSize{0};
-    uint32_t _itemSize{0};
+    uint32_t h_maxSize{0};
+    uint32_t h_itemSize{0};
 };

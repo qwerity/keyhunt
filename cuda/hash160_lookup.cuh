@@ -14,14 +14,14 @@ public:
     Hash160Lookup() = default;
     ~Hash160Lookup() = default;
 
-    cudaError_t setTargets(const std::unordered_set<hash160> &hash160Targets);
+    void setTargets(const std::unordered_set<hash160> &hash160Targets);
 
 private:
     thrust::udevice_vector<uint32_t> d_bloomFilter;
 
-    cudaError_t setTargetBloomFilter(const std::unordered_set<hash160> &targets);
+    void setTargetBloomFilter(const std::unordered_set<hash160> &targets);
 
-    static cudaError_t setTargetConstantMemory(const std::unordered_set<hash160> &targets);
+    static void setTargetConstantMemory(const std::unordered_set<hash160> &targets);
 
     // todo btree
 

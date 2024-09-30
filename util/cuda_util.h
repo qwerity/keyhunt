@@ -16,6 +16,7 @@ namespace cu
         int minor{};
         int multiProcessorCount{};
         int maxThreadsPerMultiProcessor{};
+        size_t totalConstMem{};
         int warpSize{};
         int cores{};
         uint64_t mem{};
@@ -26,38 +27,6 @@ namespace cu
         int persistingL2CacheMaxSize{};
         int globalL1CacheSupported{};
     };
-
-    class CudaException final : std::exception
-    {
-    public:
-        explicit CudaException(const cudaError_t err) : error(err)
-        {
-            msg_ = std::string(cudaGetErrorString(err));
-        }
-
-        [[nodiscard]] cudaError_t getCudaError() const
-        {
-            return error;
-        }
-
-        [[nodiscard]] const char* what() const noexcept override
-        {
-            return msg_.c_str();
-        }
-
-    private:
-        cudaError_t error{cudaSuccess};
-        std::string msg_;
-    };
-
-    inline void safeCall(const cudaError_t err) noexcept(false)
-    {
-        if (err)
-        {
-            printf("%s\n", cudaGetErrorString(err));
-            throw CudaException(err);
-        }
-    }
 
     CudaDeviceInfo getDeviceInfo(int device);
     std::vector<CudaDeviceInfo> getDevices();

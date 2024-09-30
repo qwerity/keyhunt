@@ -131,7 +131,7 @@ struct hash160
     __host__ __device__
     explicit hash160(const uint32_t hash[5])
     {
-        for (int i = 0; i < 5; ++i)
+        for (uint32_t i = 0; i < 5; ++i)
         {
             h[i] = hash[i];
         }
@@ -140,7 +140,7 @@ struct hash160
     __host__ __device__
     bool operator<(const hash160& other) const
     {
-        for (int i = 0; i < 5; ++i)
+        for (uint32_t i = 0; i < 5; ++i)
         {
             if (h[i] < other.h[i])
             {
