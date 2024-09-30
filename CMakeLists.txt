@@ -26,7 +26,7 @@ option(BUILD_TESTS "Build test_bitcoin executable." OFF)
 
 ####################################################################################################################################################################################
 find_package(CUDAToolkit 12 EXACT REQUIRED)
-include_directories(${CUDAToolkit_INCLUDE_DIRS})
+include_directories(SYSTEM ${CUDAToolkit_INCLUDE_DIRS})
 
 ####################################################################################################################################################################################
 if(WIN32)
@@ -41,7 +41,7 @@ if(WIN32)
 endif()
 
 find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log iostreams regex)
-include_directories(${Boost_INCLUDE_DIRS})
+include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
 ####################################################################################################################################################################################
 # Set compiler options
