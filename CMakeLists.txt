@@ -50,6 +50,10 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g -Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -Wall")
 
+if(WIN32)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /fsanitize=address")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /fsanitize=address")
+endif()
 ####################################################################################################################################################################################
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR}/bin)
