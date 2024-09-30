@@ -30,14 +30,13 @@ void statusCallback(const StatusInfo &info)
 
 int main()
 {
-    // Config will initialized here
-    std::shared_ptr<GlobalContext> context = std::make_shared<GlobalContext>();
+    // Config will initialize here
+    auto context = std::make_shared<GlobalContext>();
     if (!context->config.isLoaded())
     {
         return -1;
     }
 
-    context->dataQueue = std::make_shared<DataQueue>();
     context->hash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();
     context->statusCallback = statusCallback;
 

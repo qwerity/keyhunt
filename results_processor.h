@@ -13,7 +13,6 @@ public:
     ResultsProcessor(const ResultsProcessor&) = delete;
     ResultsProcessor& operator=(const ResultsProcessor&) = delete;
 
-    void start() const;
     void startHash160ResultsQueueProcessing() const;
     void stop() const;
 

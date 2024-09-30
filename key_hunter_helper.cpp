@@ -251,3 +251,48 @@ struct KeyHunter::Impl
         // cudaCheckError(mCuECC->getResults(results));
     }
 };
+
+
+
+/// Results_processor
+void start()
+{
+    mThread = std::thread([this]()
+    {
+      BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor Thread running: " << std::this_thread::get_id();
+
+      while (!mStopFlag || !mgContext->dataQueue->empty())
+      {
+          Secp256k1KeyPairs* keyPairs{nullptr};
+
+          while (!mgContext->dataQueue->pop(keyPairs))
+          {
+              if (mStopFlag)
+                  return;
+
+              std::this_thread::yield(); // If the queue is empty, yield to avoid busy-wait
+          }
+
+          if (!keyPairs)
+          {
+              BOOST_LOG_TRIVIAL(warning) << "ResultsProcessor: someone added nullptr item to queue";
+              continue;
+          }
+
+          std::ranges::for_each(*keyPairs, [&](const Secp256k1KeyPair& keyPair)
+          {
+              constexpr bool compressed{false};
+              const secp256k1::ecpoint pCPU = secp256k1::multiplyPoint(keyPair.privateKey, secp256k1::G());
+              if (pCPU != keyPair.publicKey)
+              {
+                  BOOST_LOG_TRIVIAL(error) << "ResultsProcessor: gen key is not correct";
+                  BOOST_LOG_TRIVIAL(error) << keyPair.privateKey.toString(compressed) << " " << keyPair.publicKey.toString(compressed);
+              }
+          });
+
+          delete keyPairs;
+      }
+
+      BOOST_LOG_TRIVIAL(info) << "ResultsProcessor: done";
+    });
+}
