@@ -238,6 +238,7 @@ struct HttpClient::Impl
             return false;
         }
 
+        BOOST_LOG_TRIVIAL(trace) << std::format("markDone for {}", number);
         return true;
     }
 
@@ -271,6 +272,7 @@ struct HttpClient::Impl
             return false;
         }
 
+        BOOST_LOG_TRIVIAL(trace) << std::format("setFound for {}", number);
         return true;
     }
 };

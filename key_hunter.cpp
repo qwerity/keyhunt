@@ -226,6 +226,12 @@ struct KeyHunter::Impl
 
             BOOST_LOG_TRIVIAL(trace) << std::format("\n[{} | {}] Generating for privateXPart: {}", cudaInfo.id, cudaInfo.name, privateXPart);
             startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
+
+            // if it is not test we are setting search over privateXPart done
+            if (!mgContext->config.hunter().forcePrivateXPart && mgContext->config.hunter().keysNumberToGenerate == 0)
+            {
+                httpClient->markDone(privateXPart);
+            }
         }
         while (!mStopFlag && responseCode == http::status::ok);
     }
