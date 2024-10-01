@@ -14,8 +14,10 @@ public:
     explicit HttpClient(const ServerConfig& config);
     ~HttpClient();
 
-    // Function to make the HTTP GET request
+    http::status generateToken(std::string& token);
     http::status getNumber(uint32_t& number);
+    bool markDone(uint32_t number);
+    bool setFound(uint32_t number, const std::string& privateKeyHex);
 
 private:
     struct Impl;

@@ -8,6 +8,12 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(catch2)
 
+link_libraries(Catch2::Catch2WithMain)
+
+####################################################################################################################################################################################
+link_libraries(nlohmann_json::nlohmann_json)
+link_libraries(util)
+
 ####################################################################################################################################################################################
 if(UNIX)
     find_package(TBB REQUIRED)
@@ -17,11 +23,8 @@ find_package(OpenSSL 3 REQUIRED)
 ####################################################################################################################################################################################
 add_executable(hash_test
     hash_test.cpp
-    private_key_generation_tests.cpp
 )
-target_link_libraries(hash_test PRIVATE util)
 target_link_libraries(hash_test PRIVATE cuda_keys)
-target_link_libraries(hash_test PRIVATE Catch2::Catch2WithMain)
 target_link_libraries(hash_test PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 if(UNIX)
     target_link_libraries(hash_test PRIVATE TBB::tbb)
@@ -31,12 +34,15 @@ endif()
 add_executable(private_key_generation_tests
     private_key_generation_tests.cpp
 )
-target_link_libraries(private_key_generation_tests PRIVATE util cuda_keys)
-target_link_libraries(private_key_generation_tests PRIVATE Catch2::Catch2WithMain)
+target_link_libraries(private_key_generation_tests PRIVATE cuda_keys)
 target_link_libraries(private_key_generation_tests PRIVATE ${Boost_LIBRARIES})
+
+####################################################################################################################################################################################
+add_executable(http_client_test http_client_test.cpp)
 
 ####################################################################################################################################################################################
 add_test(NAME hash_test COMMAND hash_test)
 add_test(NAME private_key_generation_tests COMMAND private_key_generation_tests)
+add_test(NAME http_client_test COMMAND http_client_test)
 
 ####################################################################################################################################################################################

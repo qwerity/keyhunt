@@ -9,19 +9,19 @@
 
 TEST_CASE("check private key generation", "")
 {
-    std::unique_ptr mCuECC(std::make_unique<ECC>());
-    mCuECC->initWithPrivateDefinedXRandomY(32, PointCompressionType::COMPRESSED, 2);
+    std::unique_ptr cuEcc(std::make_unique<ECC>());
+    cuEcc->initWithPrivateDefinedXRandomY(32, PointCompressionType::COMPRESSED, 2);
 
-    const uint32_t keysNumberPerIteration = mCuECC->getKeysNumberPerIteration();
+    const uint32_t keysNumberPerIteration = cuEcc->getKeysNumberPerIteration();
     const uint32_t privateXPart{1};
     const uint32_t iterationsNumber{2};
 
     for (uint32_t iteration = 0; iteration < iterationsNumber; ++iteration)
     {
-        mCuECC->generatePrivateKeysForXPerIteration(privateXPart, iteration);
+        cuEcc->generatePrivateKeysForXPerIteration(privateXPart, iteration);
 
         thrust::host_vector<uint256_t> h_privateKeys;
-        mCuECC->getPrivateKeys(h_privateKeys);
+        cuEcc->getPrivateKeys(h_privateKeys);
         for (uint32_t i = 0; i < h_privateKeys.size(); ++i)
         {
             uint32_t msg[16]{};

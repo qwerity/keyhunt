@@ -15,6 +15,11 @@
 
 using tcp = net::ip::tcp;
 
+namespace
+{
+    constexpr uint32_t http11Version{11}; // HTTP1.1 version
+}
+
 struct HttpClient::Impl
 {
     ServerConfig config;
@@ -23,7 +28,7 @@ struct HttpClient::Impl
 
     explicit Impl(const ServerConfig& config) : config(config), ioc(), tcpStream(ioc)
     {
-        if (!utils::validateUrl(config.url))
+        if (!utils::validateUrl(config.host))
         {
             BOOST_LOG_TRIVIAL(error) << "Error: Invalid URL or host.";
             return;
@@ -38,21 +43,19 @@ struct HttpClient::Impl
 
     http::status get(const std::string& target, http::response<http::dynamic_body>& response)
     {
-        constexpr uint32_t httpVersion{11}; // HTTP1.1 version
-
         http::status responseCode{http::status::not_found};
         try
         {
             // Resolve the host
             tcp::resolver resolver(ioc);
-            auto const results = resolver.resolve(config.url, config.port);
 
             // Connect to the server
+            auto const results = resolver.resolve(config.host, config.port);
             tcpStream.connect(results);
 
             // Set up the HTTP GET request with the Authorization header
-            http::request<http::string_body> request{http::verb::get, target, httpVersion};
-            request.set(http::field::host, config.url);
+            http::request<http::string_body> request{http::verb::get, target, http11Version};
+            request.set(http::field::host, config.host);
             request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
             request.set(http::field::authorization, config.authorisationHeader);
 
@@ -85,6 +88,92 @@ struct HttpClient::Impl
         return responseCode;
     }
 
+    // Core function to make a POST request
+    http::status postJson(const std::string& target, const std::string& body, http::response<http::dynamic_body>& response)
+    {
+        const std::string& contentType = "application/json";
+
+        http::status responseCode{http::status::not_found};
+        try
+        {
+            // Resolver to translate the host name into an IP address
+            tcp::resolver resolver(ioc);
+
+            // Connect to the server
+            auto const results = resolver.resolve(config.host, config.port);
+            tcpStream.connect(results);
+
+            // Set up an HTTP POST request message
+            http::request<http::string_body> req{http::verb::post, target, http11Version};
+            req.set(http::field::host, config.host);
+            req.set(http::field::content_type, contentType);
+            req.set("Authorization", config.authorisationHeader);
+            req.body() = body;
+            req.prepare_payload();
+
+            // Send the HTTP request to the remote host
+            http::write(tcpStream, req);
+
+            // This buffer is used for reading the response
+            beast::flat_buffer buffer;
+
+            // Receive the HTTP response
+            http::read(tcpStream, buffer, response);
+
+            responseCode = response.result();
+
+            // Gracefully close the socket
+            beast::error_code ec;
+            tcpStream.socket().shutdown(tcp::socket::shutdown_both, ec);
+
+            // Ignore the error if it's because the connection was already closed
+            if (ec && ec != beast::errc::not_connected)
+            {
+                throw beast::system_error{ec};
+            }
+        }
+        catch (const std::exception& e)
+        {
+            BOOST_LOG_TRIVIAL(error) << "Http client failed: " << e.what();
+        }
+
+        return responseCode;
+    }
+
+    http::status generateToken(std::string& token)
+    {
+        const std::string target{"generate_token"};
+
+        // Container to hold the response
+        http::response<http::dynamic_body> response;
+        http::status responseCode = get(target, response);
+        if (http::status::ok != responseCode)
+        {
+            return responseCode;
+        }
+
+        // Convert the response body into a string
+        std::string bodyString = beast::buffers_to_string(response.body().data());
+
+        nlohmann::json json;
+        try
+        {
+            json = nlohmann::json::parse(bodyString);
+        }
+        catch (const nlohmann::json::parse_error& e)
+        {
+            BOOST_LOG_TRIVIAL(error) << std::format("JSON parse failed: {}, parse error at byte {}\nduring paring: {}", e.what(),  e.byte, bodyString);
+            return http::status::not_found;
+        }
+
+        if (json.contains("token") && json["token"].is_string())
+        {
+            token = json["token"];
+        }
+
+        return responseCode;
+    }
+
     http::status getNumber(uint32_t& number)
     {
         const std::string target{"get_number"};
@@ -108,6 +197,7 @@ struct HttpClient::Impl
         catch (const nlohmann::json::parse_error& e)
         {
             BOOST_LOG_TRIVIAL(error) << std::format("JSON parse failed: {}, parse error at byte {}\nduring paring: {}", e.what(),  e.byte, bodyString);
+            return http::status::not_found;
         }
 
         if (json.contains("number") && json["number"].is_number())
@@ -117,13 +207,93 @@ struct HttpClient::Impl
 
         return responseCode;
     }
-};
 
+    bool markDone(uint32_t number)
+    {
+        const std::string body = std::format(R"({{"num": {}}})", number);
+
+        http::response<http::dynamic_body> response;
+        http::status responseCode = postJson("/mark_done", body, response);
+        const std::string resultString = beast::buffers_to_string(response.body().data());
+        if (http::status::ok != responseCode)
+        {
+            BOOST_LOG_TRIVIAL(error) << std::format("setFound failed: {}", resultString);
+            return false;
+        }
+
+        nlohmann::json json;
+        try
+        {
+            json = nlohmann::json::parse(resultString);
+        }
+        catch (const nlohmann::json::parse_error& e)
+        {
+            BOOST_LOG_TRIVIAL(error) << std::format("JSON parse failed: {}, parse error at byte {}\nduring paring: {}", e.what(),  e.byte, resultString);
+            return false;
+        }
+
+        if (!(json.contains("success") && json["success"].is_boolean() && json["success"]))
+        {
+            BOOST_LOG_TRIVIAL(error) << std::format("markDone failed: {}", resultString);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool setFound(uint32_t& number, const std::string& privateKeyHex)
+    {
+        const std::string body = std::format(R"({{"num": {}, "pvk": "{}"}})", number, privateKeyHex);
+
+        http::response<http::dynamic_body> response;
+        http::status responseCode = postJson("/set_found", body, response);
+        const std::string resultString = beast::buffers_to_string(response.body().data());
+        if (http::status::ok != responseCode)
+        {
+            BOOST_LOG_TRIVIAL(error) << std::format("setFound failed: {}", resultString);
+            return false;
+        }
+
+        nlohmann::json json;
+        try
+        {
+            json = nlohmann::json::parse(resultString);
+        }
+        catch (const nlohmann::json::parse_error& e)
+        {
+            BOOST_LOG_TRIVIAL(error) << std::format("JSON parse failed: {}, parse error at byte {}\nduring paring: {}", e.what(),  e.byte, resultString);
+            return false;
+        }
+
+        if (!(json.contains("success") && json["success"].is_boolean() && json["success"]))
+        {
+            BOOST_LOG_TRIVIAL(error) << std::format("setFound failed: {}", resultString);
+            return false;
+        }
+
+        return true;
+    }
+};
 
 HttpClient::HttpClient(const ServerConfig& config) : mImpl(std::make_unique<Impl>(config)) {}
 HttpClient::~HttpClient() = default;
 
+http::status HttpClient::generateToken(std::string& token)
+{
+    return mImpl->generateToken(token);
+}
+
 http::status HttpClient::getNumber(uint32_t& number)
 {
     return mImpl->getNumber(number);
+}
+
+bool HttpClient::markDone(uint32_t number)
+{
+    return mImpl->markDone(number);
+}
+
+bool HttpClient::setFound(uint32_t number, const std::string& privateKeyHex)
+{
+    return mImpl->setFound(number, privateKeyHex);
 }

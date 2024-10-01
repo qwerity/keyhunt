@@ -61,7 +61,7 @@ struct Config::Impl
 
         if (serverConfig.contains("url") && serverConfig["url"].is_string() && !serverConfig["url"].empty())
         {
-            server.url = serverConfig["url"];
+            server.host = serverConfig["url"];
         }
 
         if (serverConfig.contains("authorisationHeader") && serverConfig["authorisationHeader"].is_string() && !serverConfig["authorisationHeader"].empty())

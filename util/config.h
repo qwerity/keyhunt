@@ -20,7 +20,7 @@ struct LogConfig
 
 struct ServerConfig
 {
-    std::string url;
+    std::string host;
     std::string port;
     std::string authorisationHeader;
 };
