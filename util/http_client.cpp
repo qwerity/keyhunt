@@ -217,7 +217,7 @@ struct HttpClient::Impl
         const std::string resultString = beast::buffers_to_string(response.body().data());
         if (http::status::ok != responseCode)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setFound failed: {}", resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("markDone for {} failed: {}", number, resultString);
             return false;
         }
 
@@ -228,13 +228,13 @@ struct HttpClient::Impl
         }
         catch (const nlohmann::json::parse_error& e)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("JSON parse failed: {}, parse error at byte {}\nduring paring: {}", e.what(),  e.byte, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("markDone for {} failed, JSON parse failed: {}, parse error at byte {}\nduring paring: {}", number, e.what(),  e.byte, resultString);
             return false;
         }
 
         if (!(json.contains("success") && json["success"].is_boolean() && json["success"]))
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("markDone failed: {}", resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("markDone for {} failed: {}", number, resultString);
             return false;
         }
 
@@ -251,7 +251,7 @@ struct HttpClient::Impl
         const std::string resultString = beast::buffers_to_string(response.body().data());
         if (http::status::ok != responseCode)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setFound failed: {}", resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setFound for {} failed: {}", number, resultString);
             return false;
         }
 
@@ -262,17 +262,17 @@ struct HttpClient::Impl
         }
         catch (const nlohmann::json::parse_error& e)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("JSON parse failed: {}, parse error at byte {}\nduring paring: {}", e.what(),  e.byte, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setFound for {} failed, JSON parse failed: {}, parse error at byte {}\nduring paring: {}", number, e.what(),  e.byte, resultString);
             return false;
         }
 
         if (!(json.contains("success") && json["success"].is_boolean() && json["success"]))
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setFound failed: {}", resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setFound for {} failed: {}", number, resultString);
             return false;
         }
 
-        BOOST_LOG_TRIVIAL(trace) << std::format("setFound for {}", number);
+        BOOST_LOG_TRIVIAL(trace) << std::format("setFound for {} done", number);
         return true;
     }
 };

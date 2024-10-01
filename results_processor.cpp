@@ -9,12 +9,13 @@
 struct ResultsProcessor::Impl
 {
     std::shared_ptr<GlobalContext> mgContext;
+    std::unique_ptr<HttpClient> httpClient;
 
     std::atomic<bool> mStopFlag{false};
 
     std::thread mThread;
 
-    explicit Impl(const std::shared_ptr<GlobalContext>& context) : mgContext(context) {}
+    explicit Impl(const std::shared_ptr<GlobalContext>& context) : mgContext(context), httpClient{std::make_unique<HttpClient>(context->config.server())} {}
     ~Impl()
     {
         stop();
@@ -33,7 +34,9 @@ struct ResultsProcessor::Impl
                 while (!mgContext->hash160SearchResultsQueue->pop(result))
                 {
                     if (mStopFlag)
+                    {
                         return;
+                    }
 
                     std::this_thread::yield(); // If the queue is empty, yield to avoid busy-wait
                 }
@@ -42,6 +45,12 @@ struct ResultsProcessor::Impl
                 //const std::string publicXStr{utils::convertToHexString(result.publicXKey, 8)};
                 const std::string privateStr{utils::convertToHexString(result.privateKey, 8)};
                 const std::string hash160Str{utils::convertToHexString(result.digest, 5)};
+
+                // if it is not test: set_found for privateXPart
+                if (!mgContext->config.hunter().forcePrivateXPart && mgContext->config.hunter().keysNumberToGenerate == 0)
+                {
+                    httpClient->setFound(result.privateXPart, privateStr);
+                }
 
                 const std::string resultsStr = std::format("[{}][({:>10}, {:>10}) | {:<12}] private: {}, hash160: {}",
                                                            result.cudaDeviceId, result.privateXPart, result.privateYPart, (result.compressed ? "compressed" : "uncompressed"),
