@@ -203,6 +203,11 @@ struct Config::Impl
 
         return save();
     }
+
+    [[nodiscard]] bool devMode() const
+    {
+        return hunter.forcePrivateXPart || (hunter.keysNumberToGenerate != 0);
+    }
 };
 
 Config::Config(const std::string& configFilepath) : mImpl(std::make_unique<Impl>(configFilepath)) {}
@@ -211,6 +216,11 @@ Config::~Config() = default;
 bool Config::isLoaded() const
 {
     return mImpl->loaded;
+}
+
+bool Config::devMode() const
+{
+    return mImpl->devMode();
 }
 
 HunterConfig& Config::hunter()

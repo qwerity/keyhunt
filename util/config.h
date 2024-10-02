@@ -51,9 +51,10 @@ public:
     explicit Config(const std::string& jsonConfigFilepath);
     ~Config();
 
-    bool setPrivateKeyXPart(uint32_t xPart) const;
-    bool setCalculationIteration(uint32_t iteration) const;
+    [[nodiscard]] bool setPrivateKeyXPart(uint32_t xPart) const;
+    [[nodiscard]] bool setCalculationIteration(uint32_t iteration) const;
     [[nodiscard]] bool isLoaded() const;
+    [[nodiscard]] bool devMode() const;
 
     HunterConfig& hunter();
     ServerConfig& server();

@@ -224,7 +224,7 @@ struct KeyHunter::Impl
             startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
 
             // if it is not test we are setting search over privateXPart done
-            if (!gContext->config.hunter().forcePrivateXPart && gContext->config.hunter().keysNumberToGenerate == 0)
+            if (!gContext->config.devMode())
             {
                 gContext->httpClient->markDone(privateXPart);
             }

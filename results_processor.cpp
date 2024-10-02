@@ -46,7 +46,7 @@ struct ResultsProcessor::Impl
                 const std::string hash160Str{utils::convertToHexString(result.digest, 5)};
 
                 // if it is not test: set_found for privateXPart
-                if (!gContext->config.hunter().forcePrivateXPart && gContext->config.hunter().keysNumberToGenerate == 0)
+                if (!gContext->config.devMode())
                 {
                     gContext->httpClient->setFound(result.privateXPart, privateStr);
                 }
