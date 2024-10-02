@@ -29,17 +29,6 @@ struct HttpClient::Impl
 
     explicit Impl(const ServerConfig& config) : config(config), ioc(), tcpStream(ioc)
     {
-        if (!utils::validateUrl(config.host))
-        {
-            BOOST_LOG_TRIVIAL(error) << "Error: Invalid URL or host.";
-            return;
-        }
-
-        if (!utils::validateUUID(config.authorisationHeader))
-        {
-            BOOST_LOG_TRIVIAL(error) << "Error: Invalid Authorization token.";
-            return;
-        }
     }
 
     http::status get(const std::string& target, http::response<http::dynamic_body>& response)
