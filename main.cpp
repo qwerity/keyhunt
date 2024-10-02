@@ -47,6 +47,12 @@ int main()
 
     utils::readHash160Targets(context->config.hunter().ripemd160TargetsFilePaths, context->hash160Targets);
 
+    if (context->hash160Targets.empty())
+    {
+        BOOST_LOG_TRIVIAL(info) << "Stopping application as hash160 targets are not set";
+        return 3;
+    }
+
     // Start generation checking and results processing
     const ResultsProcessor resultProcessor(context);
     resultProcessor.startHash160ResultsQueueProcessing();
