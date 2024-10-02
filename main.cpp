@@ -36,7 +36,7 @@ int main()
     auto context = std::make_shared<GlobalContext>();
     if (!context->config.isLoaded())
     {
-        return -1;
+        return 1;
     }
 
     context->httpClient = std::make_shared<HttpClient>(context->config.server());
@@ -45,6 +45,23 @@ int main()
 
     utils::initLogging(context->config.log());
 
+    const bool devMode = context->config.devMode();
+    if (devMode)
+    {
+        BOOST_LOG_TRIVIAL(info) << "Dev Mode ON";
+    }
+
+    if (context->httpClient->hostAlive())
+    {
+        BOOST_LOG_TRIVIAL(info) << std::format("Http Server ({}) is alive", context->httpClient->hostConfig());
+    }
+    else if(!devMode)
+    {
+        BOOST_LOG_TRIVIAL(info) << std::format("Http Server ({}) is NOT alive and in production", context->httpClient->hostConfig());
+        return 2;
+    }
+
+    // load hash160 targets to memory
     utils::readHash160Targets(context->config.hunter().ripemd160TargetsFilePaths, context->hash160Targets);
 
     if (context->hash160Targets.empty())
