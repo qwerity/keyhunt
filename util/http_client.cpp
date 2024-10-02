@@ -31,6 +31,12 @@ struct HttpClient::Impl
     {
     }
 
+    [[nodiscard]] std::string hostConfig() const
+    {
+        const std::string maskedToken = std::format("{:*>{}}", config.authorisationHeader.substr(config.authorisationHeader.size() - 4), config.authorisationHeader.size());
+        return std::format("{}:{} | {}", config.host, config.port, maskedToken);
+    }
+
     http::status get(const std::string& target, http::response<http::dynamic_body>& response)
     {
         std::lock_guard<std::mutex> lock(connectionMutex);
@@ -168,6 +174,21 @@ struct HttpClient::Impl
         return responseCode;
     }
 
+    bool hostAlive()
+    {
+        const std::string target{"status"};
+
+        // Container to hold the response
+        http::response<http::dynamic_body> response;
+        http::status responseCode = get(target, response);
+        if (http::status::ok != responseCode)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
     http::status getNumber(uint32_t& number)
     {
         const std::string target{"get_number"};
@@ -274,9 +295,19 @@ struct HttpClient::Impl
 HttpClient::HttpClient(const ServerConfig& config) : mImpl(std::make_unique<Impl>(config)) {}
 HttpClient::~HttpClient() = default;
 
+std::string HttpClient::hostConfig() const
+{
+    return mImpl->hostConfig();
+}
+
 http::status HttpClient::generateToken(std::string& token)
 {
     return mImpl->generateToken(token);
+}
+
+bool HttpClient::hostAlive()
+{
+    return mImpl->hostAlive();
 }
 
 http::status HttpClient::getNumber(uint32_t& number)

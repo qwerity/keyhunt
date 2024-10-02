@@ -14,7 +14,10 @@ public:
     explicit HttpClient(const ServerConfig& config);
     ~HttpClient();
 
+    [[nodiscard]]  std::string hostConfig() const;
+
     http::status generateToken(std::string& token);
+    bool hostAlive();
     http::status getNumber(uint32_t& number);
     bool markDone(uint32_t number);
     bool setFound(uint32_t number, const std::string& privateKeyHex);
