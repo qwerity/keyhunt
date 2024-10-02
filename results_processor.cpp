@@ -9,13 +9,12 @@
 struct ResultsProcessor::Impl
 {
     std::shared_ptr<GlobalContext> mgContext;
-    std::unique_ptr<HttpClient> httpClient;
 
     std::atomic<bool> mStopFlag{false};
 
     std::thread mThread;
 
-    explicit Impl(const std::shared_ptr<GlobalContext>& context) : mgContext(context), httpClient{std::make_unique<HttpClient>(context->config.server())} {}
+    explicit Impl(const std::shared_ptr<GlobalContext>& context) : mgContext(context) {}
     ~Impl()
     {
         stop();
@@ -49,7 +48,7 @@ struct ResultsProcessor::Impl
                 // if it is not test: set_found for privateXPart
                 if (!mgContext->config.hunter().forcePrivateXPart && mgContext->config.hunter().keysNumberToGenerate == 0)
                 {
-                    httpClient->setFound(result.privateXPart, privateStr);
+                    mgContext->httpClient->setFound(result.privateXPart, privateStr);
                 }
 
                 const std::string resultsStr = std::format("[{}][({:>10}, {:>10}) | {:<12}] private: {}, hash160: {}",
@@ -57,7 +56,7 @@ struct ResultsProcessor::Impl
                                                            privateStr, hash160Str);
 
                 utils::appendToFile("results.txt", resultsStr);
-                //BOOST_LOG_TRIVIAL(info) << resultsStr;
+                //BOOST_LOG_TRIVIAL(trace) << resultsStr;
             }
 
             BOOST_LOG_TRIVIAL(info) << "ResultsProcessor: done";

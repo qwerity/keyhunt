@@ -26,6 +26,7 @@ using Hash160SearchResultsQueue = boost::lockfree::queue<Hash160SearchResult, bo
 struct GlobalContext
 {
     Config config{"config.json"};
+    std::shared_ptr<HttpClient> httpClient;
     std::unordered_set<hash160> hash160Targets;
     std::shared_ptr<Hash160SearchResultsQueue> hash160SearchResultsQueue;
     std::function<void(StatusInfo)> statusCallback;

@@ -178,7 +178,7 @@ struct KeyHunter::Impl
         thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
         // cudaCheckError(mCuECC->getResults(results));
 
-        BOOST_LOG_TRIVIAL(info) << std::format("KeyHunter: generated {} keys", results.size());
+        BOOST_LOG_TRIVIAL(trace) << std::format("KeyHunter: generated {} keys", results.size());
 
         // to be deleted in ResultsProcessor
         auto* pairs = new Secp256k1KeyPairs;
@@ -214,7 +214,7 @@ struct KeyHunter::Impl
 
                                   signalStatusInfo(privateKeys.size(), 1, 1, mTimer.getTime());
 
-                                  BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", privateKeys.size());
+                                  BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", privateKeys.size());
 
                                   mDone = true;
                                   pushResultsToQueue();
@@ -230,25 +230,25 @@ struct KeyHunter::Impl
     /// todo: to be fixed
     void selfTest(const uint32_t keysNumberToGenerate) const
     {
-        // BOOST_LOG_TRIVIAL(info) << "KeyHunter::selfTest started";
-        //
-        // const thrust::host_vector<secp256k1::uint256> privateKeys = utils::generateRandomPrivateKeys(keysNumberToGenerate);
-        //
-        // mCuECC->init(32, privateKeys);
-        //
-        // cudaCheckError(mCuECC->calculatePublicKeys());
-        //
-        // if (mCuECC->selfTest(privateKeys))
-        // {
-        //     BOOST_LOG_TRIVIAL(info) << "KeyHunter::selfTest done";
-        // }
-        // else
-        // {
-        //     BOOST_LOG_TRIVIAL(info) << "KeyHunter::selfTest fails";
-        // }
-        //
-        // thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
-        // cudaCheckError(mCuECC->getResults(results));
+         BOOST_LOG_TRIVIAL(trace) << "KeyHunter::selfTest started";
+
+         const thrust::host_vector<secp256k1::uint256> privateKeys = utils::generateRandomPrivateKeys(keysNumberToGenerate);
+
+         mCuECC->init(32, privateKeys);
+
+         cudaCheckError(mCuECC->calculatePublicKeys());
+
+         if (mCuECC->selfTest(privateKeys))
+         {
+             BOOST_LOG_TRIVIAL(trace) << "KeyHunter::selfTest done";
+         }
+         else
+         {
+             BOOST_LOG_TRIVIAL(trace) << "KeyHunter::selfTest fails";
+         }
+
+         thrust::host_vector<std::pair<uint256_t, secp256k1::ecpoint>> results;
+         cudaCheckError(mCuECC->getResults(results));
     }
 };
 

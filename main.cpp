@@ -39,6 +39,7 @@ int main()
         return -1;
     }
 
+    context->httpClient = std::make_shared<HttpClient>(context->config.server());
     context->hash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();
     context->statusCallback = statusCallback;
 

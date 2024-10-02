@@ -25,6 +25,7 @@ struct HttpClient::Impl
     ServerConfig config;
     net::io_context ioc;
     beast::tcp_stream tcpStream;
+    std::mutex connectionMutex;
 
     explicit Impl(const ServerConfig& config) : config(config), ioc(), tcpStream(ioc)
     {
@@ -43,6 +44,8 @@ struct HttpClient::Impl
 
     http::status get(const std::string& target, http::response<http::dynamic_body>& response)
     {
+        std::lock_guard<std::mutex> lock(connectionMutex);
+
         http::status responseCode{http::status::not_found};
         try
         {
@@ -91,11 +94,13 @@ struct HttpClient::Impl
     // Core function to make a POST request
     http::status postJson(const std::string& target, const std::string& body, http::response<http::dynamic_body>& response)
     {
-        const std::string& contentType = "application/json";
+        std::lock_guard<std::mutex> lock(connectionMutex);
 
         http::status responseCode{http::status::not_found};
         try
         {
+            const std::string& contentType = "application/json";
+
             // Resolver to translate the host name into an IP address
             tcp::resolver resolver(ioc);
 

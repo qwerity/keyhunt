@@ -18,8 +18,6 @@ struct KeyHunter::Impl
     std::shared_ptr<GlobalContext> mgContext;
     cu::CudaDeviceInfo cudaInfo;
 
-    std::unique_ptr<HttpClient> httpClient;
-
     std::unique_ptr<ECC> mCuECC;
 
     mutable utils::Timer mTimer;
@@ -34,7 +32,6 @@ struct KeyHunter::Impl
     explicit Impl(const std::shared_ptr<GlobalContext>& context, cu::CudaDeviceInfo&& cudaInfo)
         : mgContext(context)
         , cudaInfo(std::move(cudaInfo))
-        , httpClient{std::make_unique<HttpClient>(context->config.server())}
         , mCuECC(std::make_unique<ECC>())
     {
     }
@@ -163,11 +160,10 @@ struct KeyHunter::Impl
         const uint32_t keysNumberPerIteration = mCuECC->getKeysNumberPerIteration();
         const uint32_t iterationsCount = totalKeysToGenerate / keysNumberPerIteration;
         const uint32_t remainder = totalKeysToGenerate - (iterationsCount * keysNumberPerIteration);
-
-        BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: totalKeysToGenerate: {:L}, keysNumberPerIteration: {:L}", totalKeysToGenerate, keysNumberPerIteration);
-
         const uint32_t finalIterationsCount = iterationsCount + (remainder > 0 ? 1 : 0);
-        BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: total iterations: {:L}, remaining data: {:L}", finalIterationsCount, remainder);
+
+        BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: total iterations: {:L} totalKeysToGenerate: {:L}, keysNumberPerIteration: {:L}",
+                                               finalIterationsCount, totalKeysToGenerate, keysNumberPerIteration);
 
         uint32_t iteration{0};
         while (!mStopFlag && iteration < finalIterationsCount)
@@ -191,7 +187,7 @@ struct KeyHunter::Impl
 
         assert(iteration == finalIterationsCount);
 
-        BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", keysNumberPerIteration * finalIterationsCount);
+        BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", keysNumberPerIteration * finalIterationsCount);
     }
 
     void startSearchPublicHash()
@@ -213,7 +209,7 @@ struct KeyHunter::Impl
         {
             if (!mgContext->config.hunter().forcePrivateXPart)
             {
-                responseCode = httpClient->getNumber(privateXPart);
+                responseCode = mgContext->httpClient->getNumber(privateXPart);
                 if (responseCode != http::status::ok)
                 {
                     break;
@@ -230,7 +226,7 @@ struct KeyHunter::Impl
             // if it is not test we are setting search over privateXPart done
             if (!mgContext->config.hunter().forcePrivateXPart && mgContext->config.hunter().keysNumberToGenerate == 0)
             {
-                httpClient->markDone(privateXPart);
+                mgContext->httpClient->markDone(privateXPart);
             }
         }
         while (!mStopFlag && responseCode == http::status::ok);

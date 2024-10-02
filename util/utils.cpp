@@ -370,7 +370,7 @@ namespace utils
 
             file.close();
 
-            BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "Read {:L} hashes from {} binary file: {:.03f}s", hashSet.size(), filename, timer.elapsedS());
+            BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Read {:L} hashes from {} binary file: {:.03f}s", hashSet.size(), filename, timer.elapsedS());
         }
         catch (const std::exception& e)
         {
