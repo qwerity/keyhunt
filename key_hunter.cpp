@@ -15,24 +15,24 @@
 
 struct KeyHunter::Impl
 {
-    std::shared_ptr<GlobalContext> mgContext;
+    std::shared_ptr<GlobalContext> gContext;
     cu::CudaDeviceInfo cudaInfo;
 
-    std::unique_ptr<ECC> mCuECC;
+    std::unique_ptr<ECC> cuECC;
 
-    mutable utils::Timer mTimer;
+    mutable utils::Timer timer;
 
-    std::atomic<bool> mStopFlag{false};
+    std::atomic<bool> stopFlag{false};
 
-    Hash160Lookup mHash160Lookup;
+    Hash160Lookup hash160Lookup;
 
-    CudaAtomicList mResultAtomicList;
+    CudaAtomicList resultAtomicList;
 
     // Implementation
     explicit Impl(const std::shared_ptr<GlobalContext>& context, cu::CudaDeviceInfo&& cudaInfo)
-        : mgContext(context)
+        : gContext(context)
         , cudaInfo(std::move(cudaInfo))
-        , mCuECC(std::make_unique<ECC>())
+        , cuECC(std::make_unique<ECC>())
     {
     }
 
@@ -43,7 +43,7 @@ struct KeyHunter::Impl
 
     void stop()
     {
-        mStopFlag = true;
+        stopFlag = true;
 
         BOOST_LOG_TRIVIAL(trace) << "KeyHunter stopped";
     }
@@ -70,7 +70,7 @@ struct KeyHunter::Impl
             p = secp256k1::doublePoint(p);
         }
 
-        mCuECC->setGPoints(h_gPointsTmp);
+        cuECC->setGPoints(h_gPointsTmp);
     }
 
     void signalStatusInfo(const uint64_t keysNumberPerIteration, const uint32_t iteration, const uint32_t totalIterations, const uint64_t elapsedTimeMs) const
@@ -83,7 +83,7 @@ struct KeyHunter::Impl
         periodElapsedTimeMS += elapsedTimeMs;
         periodKeysNumber += keysNumberPerIteration;
 
-        if (periodElapsedTimeMS >= mgContext->config.hunter().statusCallbackPeriodMs)
+        if (periodElapsedTimeMS >= gContext->config.hunter().statusCallbackPeriodMs)
         {
             const double periodElapsedTimeS = static_cast<double>(periodElapsedTimeMS) / 1000.0;
 
@@ -98,7 +98,7 @@ struct KeyHunter::Impl
             info.totalIterations = totalIterations;
             cudaCheckError(cudaMemGetInfo(&info.freeDeviceMemory, &info.totalDeviceMemory));
 
-            mgContext->statusCallback(info);
+            gContext->statusCallback(info);
 
             periodElapsedTimeMS = 0;
             periodKeysNumber = 0;
@@ -107,13 +107,13 @@ struct KeyHunter::Impl
 
     void pushResultsToQueue2(const uint32_t privateXPart, const uint32_t keysNumberPerIteration, const uint32_t iteration) const
     {
-        const uint32_t count = mResultAtomicList.size();
+        const uint32_t count = resultAtomicList.size();
 
         std::vector<Hash160SearchResult> results;
         results.resize(count);
 
-        mResultAtomicList.read(results.data(), count);
-        mResultAtomicList.clear();
+        resultAtomicList.read(results.data(), count);
+        resultAtomicList.clear();
 
         uint32_t falsePositiveCount{0};
         for (uint32_t i = 0; i < count; ++i)
@@ -121,7 +121,7 @@ struct KeyHunter::Impl
             results[i].cudaDeviceId = cudaInfo.id;
 
             // recheck the false-positive
-            if (!mgContext->hash160Targets.contains(hash160(results[i].digest)))
+            if (!gContext->hash160Targets.contains(hash160(results[i].digest)))
             {
                 ++falsePositiveCount;
                 continue;
@@ -136,9 +136,9 @@ struct KeyHunter::Impl
             results[i].privateXPart = privateXPart;
             results[i].privateYPart = (iteration * keysNumberPerIteration) + results[i].idx;
 
-            while (!mgContext->hash160SearchResultsQueue->push(results[i]))
+            while (!gContext->hash160SearchResultsQueue->push(results[i]))
             {
-                if (mStopFlag)
+                if (stopFlag)
                     return;
 
                 // If the queue is full, yield to avoid busy-wait
@@ -154,10 +154,10 @@ struct KeyHunter::Impl
 
     void startSearchPublicHashWithPrivateDefinedXRandomY(const uint32_t privateXPart)
     {
-        const uint32_t keysNumberToGenerate = mgContext->config.hunter().keysNumberToGenerate;
+        const uint32_t keysNumberToGenerate = gContext->config.hunter().keysNumberToGenerate;
         const uint32_t totalKeysToGenerate = (keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : keysNumberToGenerate;
 
-        const uint32_t keysNumberPerIteration = mCuECC->getKeysNumberPerIteration();
+        const uint32_t keysNumberPerIteration = cuECC->getKeysNumberPerIteration();
         const uint32_t iterationsCount = totalKeysToGenerate / keysNumberPerIteration;
         const uint32_t remainder = totalKeysToGenerate - (iterationsCount * keysNumberPerIteration);
         const uint32_t finalIterationsCount = iterationsCount + (remainder > 0 ? 1 : 0);
@@ -166,23 +166,23 @@ struct KeyHunter::Impl
                                                finalIterationsCount, totalKeysToGenerate, keysNumberPerIteration);
 
         uint32_t iteration{0};
-        while (!mStopFlag && iteration < finalIterationsCount)
+        while (!stopFlag && iteration < finalIterationsCount)
         {
-            mTimer.start();
+            timer.start();
             {
-                mCuECC->generatePrivateKeysForXPerIteration(privateXPart, iteration);
+                cuECC->generatePrivateKeysForXPerIteration(privateXPart, iteration);
 
-                mCuECC->calculatePublicKeys();
+                cuECC->calculatePublicKeys();
             }
-            //const uint64_t nextY = iteration * mCuECC->getKeysNumberPerIteration() + 1;
+            //const uint64_t nextY = iteration * cuECC->getKeysNumberPerIteration() + 1;
             /// TODO(ksh): to be used later
-            // mgContext->config.setCalculationIteration(iteration);
+            // gContext->config.setCalculationIteration(iteration);
 
             pushResultsToQueue2(privateXPart, keysNumberPerIteration, iteration);
 
             ++iteration;
 
-            signalStatusInfo(keysNumberPerIteration, iteration, finalIterationsCount, mTimer.elapsedMs());
+            signalStatusInfo(keysNumberPerIteration, iteration, finalIterationsCount, timer.elapsedMs());
         }
 
         assert(iteration == finalIterationsCount);
@@ -195,11 +195,11 @@ struct KeyHunter::Impl
         BOOST_LOG_TRIVIAL(trace) << std::format("[{}] KeyHunter Thread ID: ", cudaInfo.id) << std::this_thread::get_id();
 
         // Preparing Public, Private, Results buffers
-        mHash160Lookup.setTargets(mgContext->hash160Targets);
-        mResultAtomicList.init(sizeof(Hash160SearchResult), 256);
+        hash160Lookup.setTargets(gContext->hash160Targets);
+        resultAtomicList.init(sizeof(Hash160SearchResult), 256);
 
         initializeGPoints();
-        mCuECC->initWithPrivateDefinedXRandomY(mgContext->config.hunter().pointsPerThread, mgContext->config.hunter().publicKeyCompressionTypeToCheck);
+        cuECC->initWithPrivateDefinedXRandomY(gContext->config.hunter().pointsPerThread, gContext->config.hunter().publicKeyCompressionTypeToCheck);
 
         // Getting from http service the next private key x part, generating public and checking targets hashes
         uint32_t privateXPart{0};
@@ -207,9 +207,9 @@ struct KeyHunter::Impl
         http::status responseCode{http::status::unknown};
         do
         {
-            if (!mgContext->config.hunter().forcePrivateXPart)
+            if (!gContext->config.hunter().forcePrivateXPart)
             {
-                responseCode = mgContext->httpClient->getNumber(privateXPart);
+                responseCode = gContext->httpClient->getNumber(privateXPart);
                 if (responseCode != http::status::ok)
                 {
                     break;
@@ -217,19 +217,19 @@ struct KeyHunter::Impl
             }
             else
             {
-                privateXPart = mgContext->config.hunter().privateXPart;
+                privateXPart = gContext->config.hunter().privateXPart;
             }
 
             BOOST_LOG_TRIVIAL(trace) << std::format("\n[{} | {}] Generating for privateXPart: {}", cudaInfo.id, cudaInfo.name, privateXPart);
             startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
 
             // if it is not test we are setting search over privateXPart done
-            if (!mgContext->config.hunter().forcePrivateXPart && mgContext->config.hunter().keysNumberToGenerate == 0)
+            if (!gContext->config.hunter().forcePrivateXPart && gContext->config.hunter().keysNumberToGenerate == 0)
             {
-                mgContext->httpClient->markDone(privateXPart);
+                gContext->httpClient->markDone(privateXPart);
             }
         }
-        while (!mStopFlag && responseCode == http::status::ok);
+        while (!stopFlag && responseCode == http::status::ok);
     }
 };
 

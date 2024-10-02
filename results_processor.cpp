@@ -8,13 +8,13 @@
 
 struct ResultsProcessor::Impl
 {
-    std::shared_ptr<GlobalContext> mgContext;
+    std::shared_ptr<GlobalContext> gContext;
 
-    std::atomic<bool> mStopFlag{false};
+    std::atomic<bool> stopFlag{false};
 
-    std::thread mThread;
+    std::thread thread;
 
-    explicit Impl(const std::shared_ptr<GlobalContext>& context) : mgContext(context) {}
+    explicit Impl(const std::shared_ptr<GlobalContext>& context) : gContext(context) {}
     ~Impl()
     {
         stop();
@@ -22,17 +22,17 @@ struct ResultsProcessor::Impl
 
     void startHash160ResultsQueueProcessing()
     {
-        mThread = std::thread([this]()
+        thread = std::thread([this]()
         {
             BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor Thread running: " << std::this_thread::get_id();
 
-            while (!mStopFlag)
+            while (!stopFlag)
             {
                 Hash160SearchResult result;
 
-                while (!mgContext->hash160SearchResultsQueue->pop(result))
+                while (!gContext->hash160SearchResultsQueue->pop(result))
                 {
-                    if (mStopFlag)
+                    if (stopFlag)
                     {
                         return;
                     }
@@ -46,9 +46,9 @@ struct ResultsProcessor::Impl
                 const std::string hash160Str{utils::convertToHexString(result.digest, 5)};
 
                 // if it is not test: set_found for privateXPart
-                if (!mgContext->config.hunter().forcePrivateXPart && mgContext->config.hunter().keysNumberToGenerate == 0)
+                if (!gContext->config.hunter().forcePrivateXPart && gContext->config.hunter().keysNumberToGenerate == 0)
                 {
-                    mgContext->httpClient->setFound(result.privateXPart, privateStr);
+                    gContext->httpClient->setFound(result.privateXPart, privateStr);
                 }
 
                 const std::string resultsStr = std::format("[{}][({:>10}, {:>10}) | {:<12}] private: {}, hash160: {}",
@@ -67,10 +67,10 @@ struct ResultsProcessor::Impl
     {
         BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor stopping";
 
-        mStopFlag = true;
-        if (mThread.joinable())
+        stopFlag = true;
+        if (thread.joinable())
         {
-            mThread.join();
+            thread.join();
         }
 
         BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor stopped";
