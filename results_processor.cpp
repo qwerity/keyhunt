@@ -45,15 +45,16 @@ struct ResultsProcessor::Impl
                 const std::string privateStr{utils::convertToHexString(result.privateKey, 8)};
                 const std::string hash160Str{utils::convertToHexString(result.digest, 5)};
 
+                const std::string resultsStr = std::format("[{}][({:>10}, {:>10}) | {:<12}] private: {}, hash160: {}",
+                                                           result.cudaDeviceId, result.privateXPart, result.privateYPart, (result.compressed ? "compressed" : "uncompressed"),
+                                                           privateStr, hash160Str);
+
                 // if it is not test: set_found for privateXPart
                 if (!gContext->config.devMode())
                 {
                     gContext->httpClient->setFound(result.privateXPart, privateStr);
+                    utils::backupToTGAsync(resultsStr);
                 }
-
-                const std::string resultsStr = std::format("[{}][({:>10}, {:>10}) | {:<12}] private: {}, hash160: {}",
-                                                           result.cudaDeviceId, result.privateXPart, result.privateYPart, (result.compressed ? "compressed" : "uncompressed"),
-                                                           privateStr, hash160Str);
 
                 utils::appendToFile("results.txt", resultsStr);
                 //BOOST_LOG_TRIVIAL(trace) << resultsStr;
