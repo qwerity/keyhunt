@@ -30,6 +30,33 @@ namespace
     }
 }
 
+void setupPrivateXPart(const std::shared_ptr<GlobalContext>& context)
+{
+    const bool devMode = context->config.devMode();
+    BOOST_LOG_TRIVIAL(info) << (devMode ? "Dev" : "Prod") << " Mode ON";
+
+    if (devMode && context->config.hunter().forcePrivateXPart)
+    {
+        BOOST_LOG_TRIVIAL(info) << "Using private X part: " << context->config.hunter().privateXPart;
+        return;
+    }
+
+    BOOST_LOG_TRIVIAL(info) <<  std::format("Checking connection with the host ({})...", context->httpClient->hostConfig());
+    const bool hostIsAlive = context->httpClient->hostAlive();
+
+    if (devMode && !context->config.hunter().forcePrivateXPart && hostIsAlive)
+    {
+        BOOST_LOG_TRIVIAL(info) << "Host is alive, will get private x from http service";
+        return;
+    }
+
+    if (!hostIsAlive)
+    {
+        BOOST_LOG_TRIVIAL(info) << "Host is NOT alive, continue with random private X part";
+        context->config.setPrivateXPartRandom();
+    }
+}
+
 int main()
 {
     // Config will initialize here
@@ -45,29 +72,14 @@ int main()
 
     utils::initLogging(context->config.log());
 
-    const bool devMode = context->config.devMode();
-    if (devMode)
-    {
-        BOOST_LOG_TRIVIAL(info) << "Dev Mode ON";
-    }
-
-    if (context->httpClient->hostAlive())
-    {
-        BOOST_LOG_TRIVIAL(info) << std::format("Http Server ({}) is alive", context->httpClient->hostConfig());
-    }
-    else if(!devMode)
-    {
-        BOOST_LOG_TRIVIAL(info) << std::format("Http Server ({}) is NOT alive and in production", context->httpClient->hostConfig());
-        return 2;
-    }
+    setupPrivateXPart(context);
 
     // load hash160 targets to memory
     utils::readHash160Targets(context->config.hunter().ripemd160TargetsFilePaths, context->hash160Targets);
-
     if (context->hash160Targets.empty())
     {
         BOOST_LOG_TRIVIAL(info) << "Stopping application as hash160 targets are not set";
-        return 3;
+        return 2;
     }
 
     // Start generation checking and results processing

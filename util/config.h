@@ -55,6 +55,8 @@ public:
     [[nodiscard]] bool setCalculationIteration(uint32_t iteration) const;
     [[nodiscard]] bool isLoaded() const;
     [[nodiscard]] bool devMode() const;
+    bool isPrivateXPartRandom() const;
+    void setPrivateXPartRandom() const;
 
     HunterConfig& hunter();
     ServerConfig& server();

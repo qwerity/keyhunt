@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <format>
+#include <random>
 
 #include <boost/regex.hpp>
 #include <boost/log/trivial.hpp>
@@ -397,6 +398,17 @@ namespace utils
                 readHash160HexStrFileToSet(hash160TargetsFile, targets);
             }
         }
+    }
+
+    uint32_t randomUINT32_t()
+    {
+        std::random_device rd;  // Non-deterministic random number generator
+        std::mt19937 gen(rd());  // Mersenne Twister generator
+
+        // Define the distribution range for uint32_t
+        std::uniform_int_distribution<uint32_t> dis(0, std::numeric_limits<uint32_t>::max());
+
+        return dis(gen);
     }
 }
 

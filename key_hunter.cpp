@@ -190,6 +190,30 @@ struct KeyHunter::Impl
         BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", keysNumberPerIteration * finalIterationsCount);
     }
 
+    uint32_t getPrivateXPart() const
+    {
+        uint32_t privateXPart{0};
+        if (gContext->config.isPrivateXPartRandom())
+        {
+            privateXPart = utils::randomUINT32_t();
+        }
+        else if (!gContext->config.hunter().forcePrivateXPart)
+        {
+            http::status responseCode{http::status::unknown};
+            responseCode = gContext->httpClient->getNumber(privateXPart);
+            if (responseCode != http::status::ok)
+            {
+                privateXPart = utils::randomUINT32_t();
+            }
+        }
+        else
+        {
+            privateXPart = gContext->config.hunter().privateXPart;
+        }
+
+        return privateXPart;
+    }
+
     void startSearchPublicHash()
     {
         BOOST_LOG_TRIVIAL(trace) << std::format("[{}] KeyHunter Thread ID: ", cudaInfo.id) << std::this_thread::get_id();
@@ -202,25 +226,12 @@ struct KeyHunter::Impl
         cuECC->initWithPrivateDefinedXRandomY(gContext->config.hunter().pointsPerThread, gContext->config.hunter().publicKeyCompressionTypeToCheck);
 
         // Getting from http service the next private key x part, generating public and checking targets hashes
-        uint32_t privateXPart{0};
-
-        http::status responseCode{http::status::unknown};
         do
         {
-            if (!gContext->config.hunter().forcePrivateXPart)
-            {
-                responseCode = gContext->httpClient->getNumber(privateXPart);
-                if (responseCode != http::status::ok)
-                {
-                    break;
-                }
-            }
-            else
-            {
-                privateXPart = gContext->config.hunter().privateXPart;
-            }
+            uint32_t privateXPart = getPrivateXPart();
+            BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "\n[{} | {}] Generating for privateXPart: {:#x} [{:L} | {:L}]",
+                                                    cudaInfo.id, cudaInfo.name, privateXPart, privateXPart, static_cast<int>(privateXPart));
 
-            BOOST_LOG_TRIVIAL(trace) << std::format("\n[{} | {}] Generating for privateXPart: {}", cudaInfo.id, cudaInfo.name, privateXPart);
             startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
 
             // if it is not test we are setting search over privateXPart done
@@ -229,7 +240,7 @@ struct KeyHunter::Impl
                 gContext->httpClient->markDone(privateXPart);
             }
         }
-        while (!stopFlag && responseCode == http::status::ok);
+        while (!stopFlag && !gContext->config.hunter().forcePrivateXPart); // if force private X part is set, one iteration is enough
     }
 };
 

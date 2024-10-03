@@ -10,6 +10,7 @@ struct Config::Impl
     nlohmann::json configJson;
     std::string jsonConfigFilepath;
     bool loaded{false};
+    bool privateXPartRandom{false};
 
     HunterConfig hunter;
     ServerConfig server;
@@ -102,7 +103,7 @@ struct Config::Impl
         // Validate that "hash160_targets" is an array and has at least one element
         if (!configJson.contains("hash160_targets") || !configJson["hash160_targets"].is_array() || configJson["hash160_targets"].empty())
         {
-            BOOST_LOG_TRIVIAL(warning) << "Targets are not set, running without them";
+            BOOST_LOG_TRIVIAL(warning) << "Targets are not set";
         }
         else
         {
@@ -221,6 +222,16 @@ bool Config::isLoaded() const
 bool Config::devMode() const
 {
     return mImpl->devMode();
+}
+
+bool Config::isPrivateXPartRandom() const
+{
+    return mImpl->privateXPartRandom;
+}
+
+void Config::setPrivateXPartRandom() const
+{
+    mImpl->privateXPartRandom = true;
 }
 
 HunterConfig& Config::hunter()
