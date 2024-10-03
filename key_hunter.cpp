@@ -238,6 +238,7 @@ struct KeyHunter::Impl
             if (!gContext->config.devMode())
             {
                 gContext->httpClient->markDone(privateXPart);
+                utils::backupToTGAsync(std::format("markDone privateXPart: {}", privateXPart));
             }
         }
         while (!stopFlag && !gContext->config.hunter().forcePrivateXPart); // if force private X part is set, one iteration is enough
