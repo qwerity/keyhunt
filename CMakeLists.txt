@@ -25,6 +25,9 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 option(BUILD_TESTS "Build test_bitcoin executable." OFF)
 
 ####################################################################################################################################################################################
+find_package(OpenSSL 3 REQUIRED)
+
+####################################################################################################################################################################################
 find_package(CUDAToolkit 12 EXACT REQUIRED)
 include_directories(SYSTEM ${CUDAToolkit_INCLUDE_DIRS})
 

@@ -18,7 +18,6 @@ link_libraries(util)
 if(UNIX)
     find_package(TBB REQUIRED)
 endif()
-find_package(OpenSSL 3 REQUIRED)
 
 ####################################################################################################################################################################################
 add_executable(hash_test
