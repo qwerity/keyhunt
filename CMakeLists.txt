@@ -25,6 +25,9 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 option(BUILD_TESTS "Build test_bitcoin executable." OFF)
 
 ####################################################################################################################################################################################
+set(OPENSSL_ROOT_DIR "${CMAKE_SOURCE_DIR}/external/openssl")
+
+set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL 3 REQUIRED)
 
 ####################################################################################################################################################################################
