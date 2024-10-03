@@ -58,6 +58,8 @@ public:
     bool isPrivateXPartRandom() const;
     void setPrivateXPartRandom() const;
 
+    std::string jsonStr();
+
     HunterConfig& hunter();
     ServerConfig& server();
     LogConfig& log();

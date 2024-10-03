@@ -258,3 +258,8 @@ bool Config::setCalculationIteration(uint32_t iteration) const
 {
     return mImpl->setValue("iteration", iteration);
 }
+
+std::string Config::jsonStr()
+{
+    return mImpl->configJson.dump();
+}
