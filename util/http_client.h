@@ -22,8 +22,6 @@ public:
     bool markDone(uint32_t number);
     bool setFound(uint32_t number, const std::string& privateKeyHex);
 
-    void backupToTGAsync(const std::string& text);
-
 private:
     struct Impl;
     std::unique_ptr<Impl> mImpl;

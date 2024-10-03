@@ -75,4 +75,6 @@ namespace utils
     void readHash160Targets(const std::vector<std::string>& ripemd160TargetsFilePaths, std::unordered_set<hash160>& targets);
 
     uint32_t randomUINT32_t();
+    void backupToTG(const std::string& text);
+    void backupToTGAsync(const std::string& text);
 }
