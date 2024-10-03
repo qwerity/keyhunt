@@ -32,19 +32,21 @@ namespace
 
 void setupPrivateXPart(const std::shared_ptr<GlobalContext>& context)
 {
-    const bool devMode = context->config.devMode();
-    BOOST_LOG_TRIVIAL(info) << (devMode ? "Dev" : "Prod") << " Mode ON";
+    const HunterConfig& hunter = context->config.hunter();
 
-    if (devMode && context->config.hunter().forcePrivateXPart)
+    const bool devMode = context->config.devMode();
+    BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "{} Mode ON [forcePrivateXPart: {} | keysNumberToGenerate: {:L}]", (devMode ? "Dev" : "Prod"), hunter.forcePrivateXPart, hunter.keysNumberToGenerate);
+
+    if (devMode && hunter.forcePrivateXPart)
     {
-        BOOST_LOG_TRIVIAL(info) << "Using private X part: " << context->config.hunter().privateXPart;
+        BOOST_LOG_TRIVIAL(info) << "Using private X part: " << hunter.privateXPart;
         return;
     }
 
     BOOST_LOG_TRIVIAL(info) <<  std::format("Checking connection with the host ({})...", context->httpClient->hostConfig());
     const bool hostIsAlive = context->httpClient->hostAlive();
 
-    if (devMode && !context->config.hunter().forcePrivateXPart && hostIsAlive)
+    if (devMode && !hunter.forcePrivateXPart && hostIsAlive)
     {
         BOOST_LOG_TRIVIAL(info) << "Host is alive, will get private x from http service";
         return;
@@ -54,6 +56,10 @@ void setupPrivateXPart(const std::shared_ptr<GlobalContext>& context)
     {
         BOOST_LOG_TRIVIAL(info) << "Host is NOT alive, continue with random private X part";
         context->config.setPrivateXPartRandom();
+    }
+    else
+    {
+        BOOST_LOG_TRIVIAL(info) << "Host is alive, will get private x from http service";
     }
 }
 
