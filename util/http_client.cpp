@@ -38,7 +38,11 @@ struct HttpClient::Impl
 
     [[nodiscard]] std::string hostConfig() const
     {
-        const std::string maskedToken = std::format("{:*>{}}", config.authorisationHeader.substr(config.authorisationHeader.size() - 4), config.authorisationHeader.size());
+        std::string maskedToken;
+        if (config.authorisationHeader.size() > 4)
+        {
+            maskedToken = std::format("{:*>{}}", config.authorisationHeader.substr(config.authorisationHeader.size() - 4), config.authorisationHeader.size());
+        }
         return std::format("{}:{} | {}", config.host, config.port, maskedToken);
     }
 
