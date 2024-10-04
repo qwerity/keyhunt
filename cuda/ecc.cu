@@ -199,11 +199,6 @@ struct ECC::Impl
             checkHashKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
         }, "checkHashKernel"));
     }
-
-    cudaError_t getResults(const thrust::host_vector<std::pair<uint256_t, ecpoint_t>> & pairs)
-    {
-       return cudaSuccess;
-    }
 };
 
 ECC::ECC() : mImpl(std::make_unique<Impl>()) {}
@@ -227,11 +222,6 @@ uint32_t ECC::getKeysNumberPerIteration() const
     return mImpl->getKeysNumberPerIteration();
 }
 
-cudaError_t ECC::getResults(thrust::host_vector<std::pair<uint256_t, ecpoint_t>> &results) const
-{
-    return mImpl->getResults(results);
-}
-
 void ECC::calculatePublicKeys() const
 {
     mImpl->calculatePublicKeys();
@@ -242,7 +232,7 @@ void ECC::generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const
     mImpl->generatePrivateKeysForXPerIteration(privateXPart, iteration);
 }
 
-void ECC::getPrivateKeys(thrust::host_vector<uint256_t> &h_privateKeys) const
+void ECC::getPrivateKeys(thrust::host_vector<uint256_t>& h_privateKeys) const
 {
     mImpl->getPrivateKeys(h_privateKeys);
 }
