@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cassert>
+#include <cstdio>
 
 #include <cuda_runtime.h>
 
@@ -196,7 +197,7 @@ cudaError_t cudaKernelSyncLaunch(const cudaStream_t& stream, LambdaFunc&& kernel
     cudaError_t err = cudaStreamSynchronize(stream);
     if (err != cudaSuccess)
     {
-        std::fprintf(stderr, "%s: CUDA error: %s\n", origin, cudaGetErrorString(err));
+        fprintf(stderr, "%s: CUDA error: %s\n", origin, cudaGetErrorString(err));
     }
 
     return err;
@@ -218,7 +219,7 @@ cudaError_t cudaKernelSyncLaunchWithTiming(const cudaStream_t& stream, LambdaFun
     // Calculate and print elapsed time
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, startEvent, stopEvent);
-    std::fprintf(stderr, "%s: kernel took %f ms.\n", origin, milliseconds);
+    fprintf(stderr, "%s: kernel took %f ms.\n", origin, milliseconds);
 
     // Clean up events
     cudaEventDestroy(startEvent);
