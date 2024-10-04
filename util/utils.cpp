@@ -2,6 +2,7 @@
 #include "common.h"
 #include "secp256k1.h"
 #include "config.h"
+#include "http_client.h"
 
 #include "cuda/defines.cuh"
 
@@ -70,33 +71,37 @@ namespace utils
 
     uint64_t parseUInt64(std::string s)
     {
-        uint64_t val = 0;
-        bool isHex = false;
+        int base = 10;
         if (s[0] == '0' && s[1] == 'x')
         {
-            isHex = true;
+            base = 16;
             s = s.substr(2);
         }
         if (s[s.length() - 1] == 'h')
         {
-            isHex = true;
+            base = 16;
             s = s.substr(0, s.length() - 1);
         }
 
-        if (isHex)
+        char* endptr = nullptr;
+        errno = 0;  // Reset errno before calling strtoul
+
+        const uint64_t val = strtoul(s.c_str(), &endptr, base);
+
+        // Check for conversion errors
+        if (errno == ERANGE || val > UINT64_MAX)
         {
-            if (sscanf(s.c_str(), "%I64ux", &val) != 1)
-            {
-                throw std::runtime_error("Expected an integer");
-            }
+            throw std::runtime_error("Integer overflow or underflow occurred");
         }
-        else
+        else if (endptr == s.c_str())
         {
-            if (sscanf(s.c_str(), "%I64ud", &val) != 1)
-            {
-                throw std::runtime_error("Expected an integer");
-            }
+            throw std::runtime_error("No digits were found in the input");
         }
+        else if (*endptr != '\0')
+        {
+            throw std::runtime_error("Invalid characters found after the number");
+        }
+
         return val;
     }
 
@@ -460,7 +465,7 @@ namespace utils
             stream.handshake(ssl::stream_base::client);
 
             // Create the HTTP request (GET)
-            http::request<http::string_body> req(http::verb::get, target, 11);
+            http::request<http::string_body> req(http::verb::get, target, http11Version);
             req.set(http::field::host, tgAPIHost);
             req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 

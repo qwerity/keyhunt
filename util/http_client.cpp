@@ -12,13 +12,10 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/beast/http.hpp>
 
+#include <utility>
+
 using tcp = net::ip::tcp;
 namespace ssl = net::ssl;
-
-namespace
-{
-    constexpr uint32_t http11Version{11}; // HTTP1.1 version
-}
 
 struct HttpClient::Impl
 {
@@ -27,7 +24,7 @@ struct HttpClient::Impl
     beast::tcp_stream tcpStream;
     std::mutex connectionMutex;
 
-    explicit Impl(const ServerConfig& config) : config(config), ioc(), tcpStream(ioc)
+    explicit Impl(ServerConfig config) : config(std::move(config)), ioc(), tcpStream(ioc)
     {
     }
 
@@ -271,7 +268,7 @@ struct HttpClient::Impl
         const std::string body = std::format(R"({{"num": {}, "pvk": "{}"}})", number, privateKeyHex);
 
         http::response<http::dynamic_body> response;
-        http::status responseCode = postJson("/set_found", body, response);
+        const http::status responseCode = postJson("/set_found", body, response);
         const std::string resultString = beast::buffers_to_string(response.body().data());
         if (http::status::ok != responseCode)
         {
@@ -309,27 +306,27 @@ std::string HttpClient::hostConfig() const
     return mImpl->hostConfig();
 }
 
-http::status HttpClient::generateToken(std::string& token)
+http::status HttpClient::generateToken(std::string& token) const
 {
     return mImpl->generateToken(token);
 }
 
-bool HttpClient::hostAlive()
+bool HttpClient::hostAlive() const
 {
     return mImpl->hostAlive();
 }
 
-http::status HttpClient::getNumber(uint32_t& number)
+http::status HttpClient::getNumber(uint32_t& number) const
 {
     return mImpl->getNumber(number);
 }
 
-bool HttpClient::markDone(uint32_t number)
+auto HttpClient::markDone(uint32_t number) -> bool
 {
     return mImpl->markDone(number);
 }
 
-bool HttpClient::setFound(uint32_t number, const std::string& privateKeyHex)
+bool HttpClient::setFound(uint32_t number, const std::string& privateKeyHex) const
 {
     return mImpl->setFound(number, privateKeyHex);
 }

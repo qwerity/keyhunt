@@ -8,6 +8,8 @@ namespace beast = boost::beast;
 namespace http = beast::http;
 namespace net = boost::asio;
 
+constexpr uint32_t http11Version{11}; // HTTP1.1 version
+
 class HttpClient
 {
 public:
@@ -19,11 +21,11 @@ public:
 
     [[nodiscard]]  std::string hostConfig() const;
 
-    http::status generateToken(std::string& token);
-    bool hostAlive();
-    http::status getNumber(uint32_t& number);
+    http::status generateToken(std::string& token) const;
+    bool hostAlive() const;
+    http::status getNumber(uint32_t& number) const;
     bool markDone(uint32_t number);
-    bool setFound(uint32_t number, const std::string& privateKeyHex);
+    bool setFound(uint32_t number, const std::string& privateKeyHex) const;
 
 private:
     struct Impl;

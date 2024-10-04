@@ -21,8 +21,6 @@ struct KeyHunter::Impl
 
     std::unique_ptr<ECC> cuECC;
 
-    mutable utils::Timer timer;
-
     std::atomic<bool> stopFlag{false};
 
     Hash160Lookup hash160Lookup;
@@ -153,7 +151,7 @@ struct KeyHunter::Impl
         }
     }
 
-    void startSearchPublicHashWithPrivateDefinedXRandomY(const uint32_t privateXPart)
+    void startSearchPublicHashWithPrivateDefinedXRandomY(const uint32_t privateXPart) const
     {
         const uint32_t keysNumberToGenerate = gContext->config.hunter().keysNumberToGenerate;
         const uint32_t totalKeysToGenerate = (keysNumberToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : keysNumberToGenerate;
@@ -166,6 +164,7 @@ struct KeyHunter::Impl
         BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: total iterations: {:L} totalKeysToGenerate: {:L}, keysNumberPerIteration: {:L}",
                                                finalIterationsCount, totalKeysToGenerate, keysNumberPerIteration);
 
+        utils::Timer timer;
         uint32_t iteration{0};
         while (!stopFlag && iteration < finalIterationsCount)
         {

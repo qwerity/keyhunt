@@ -54,9 +54,9 @@ struct Hash160SearchResult
 {
     int cudaDeviceId{0};
 
-    int thread{0};
-    int block{0};
-    int idx{0};
+    uint32_t thread{0};
+    uint32_t block{0};
+    uint32_t idx{0};
 
     uint32_t iteration{0};
 

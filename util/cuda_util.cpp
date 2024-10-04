@@ -1,4 +1,7 @@
 #include "cuda_util.h"
+
+#include <cinttypes>
+
 #include "common.h"
 
 namespace cu
@@ -95,7 +98,7 @@ namespace cu
         std::fprintf(stderr, "Minor: %d, Major: %d\n", info.major, info.minor);
         std::fprintf(stderr, "Capability: %d%d\n", info.major, info.minor);
         std::fprintf(stderr, "warpSize: %d\n", info.warpSize);
-        std::fprintf(stderr, "Memory: %I64u\n", info.mem / MB);
+        std::fprintf(stderr, "Memory: %" PRIu64 "MB\n", info.mem / MB);
         std::fprintf(stderr, "totalConstMem: %zd\n", info.totalConstMem);
         std::fprintf(stderr, "multiProcessorCount: %d\n", info.multiProcessorCount);
         std::fprintf(stderr, "maxThreadsPerMultiProcessor: %d\n", info.maxThreadsPerMultiProcessor);
