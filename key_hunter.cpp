@@ -10,6 +10,7 @@
 #include "cuda/ecc.cuh"
 #include "cuda/hash160_lookup.cuh"
 #include "util/utils.h"
+#include "util/secp256k1.h"
 #include "util/http_client.h"
 
 

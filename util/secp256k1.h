@@ -7,6 +7,10 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+    #define sscanf sscanf_s
+#endif
+
 namespace secp256k1
 {
     struct alignas(32) uint256
@@ -62,7 +66,7 @@ namespace secp256k1
             int j = 0;
             for (int i = len - 8; i >= 0; i -= 8)
             {
-                std::string sub = t.substr(i, 8);
+                std::string sub = t.substr(static_cast<size_t>(i), 8);
                 uint32_t val;
                 if (sscanf(sub.c_str(), "%x", &val) != 1)
                 {

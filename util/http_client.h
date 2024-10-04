@@ -14,6 +14,9 @@ public:
     explicit HttpClient(const ServerConfig& config);
     ~HttpClient();
 
+    HttpClient(const HttpClient& other) = delete;
+    HttpClient& operator=(const HttpClient& other) = delete;
+
     [[nodiscard]]  std::string hostConfig() const;
 
     http::status generateToken(std::string& token);

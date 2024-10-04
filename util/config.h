@@ -51,6 +51,9 @@ public:
     explicit Config(const std::string& jsonConfigFilepath);
     ~Config();
 
+    Config(const Config& other) = delete;
+    Config& operator=(const Config& other) = delete;
+
     [[nodiscard]] bool setPrivateKeyXPart(uint32_t xPart) const;
     [[nodiscard]] bool setCalculationIteration(uint32_t iteration) const;
     [[nodiscard]] bool isLoaded() const;

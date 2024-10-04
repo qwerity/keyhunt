@@ -3,6 +3,7 @@ project(cuda-keyhunt-pvk CXX CUDA)
 
 ####################################################################################################################################################################################
 include(FetchContent)
+include(cmake/utils.cmake)
 
 ####################################################################################################################################################################################
 FetchContent_Declare(
@@ -10,6 +11,8 @@ FetchContent_Declare(
     URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
 )
 FetchContent_MakeAvailable(json)
+
+include_directories(SYSTEM ${json_SOURCE_DIR}/include)
 
 ####################################################################################################################################################################################
 # Set the C++ standard
@@ -52,9 +55,9 @@ include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 ####################################################################################################################################################################################
 # Set compiler options
 # Set the C++ compiler flags for Debug and Release configurations
-set(CMAKE_CXX_FLAGS_DEBUG "-g -Wall")
+set(CMAKE_CXX_FLAGS_DEBUG "-Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -Wall")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-Wall")
 
 if(WIN32)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /fsanitize=address")
@@ -81,6 +84,8 @@ set(MAIN_SRC
     results_processor.h
 )
 add_executable(${PROJECT_NAME} ${MAIN_SRC})
+suppress_msvc_warnings(${PROJECT_NAME})
+
 target_link_libraries(${PROJECT_NAME} PRIVATE util)
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(${PROJECT_NAME} PRIVATE cuda_keys)

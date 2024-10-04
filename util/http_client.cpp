@@ -31,6 +31,11 @@ struct HttpClient::Impl
     {
     }
 
+    Impl(const Impl& other) = delete;
+    Impl(const Impl&& other) = delete;
+    Impl& operator=(const Impl& other) = delete;
+    Impl& operator=(const Impl&& other) = delete;
+
     [[nodiscard]] std::string hostConfig() const
     {
         const std::string maskedToken = std::format("{:*>{}}", config.authorisationHeader.substr(config.authorisationHeader.size() - 4), config.authorisationHeader.size());

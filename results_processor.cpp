@@ -20,6 +20,9 @@ struct ResultsProcessor::Impl
         stop();
     }
 
+    Impl(const Impl& other) = delete;
+    Impl& operator=(const Impl& other) = delete;
+
     void startHash160ResultsQueueProcessing()
     {
         thread = std::thread([this]()

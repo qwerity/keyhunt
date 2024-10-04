@@ -72,8 +72,8 @@ namespace cu
     {
         const int count = getDeviceCount();
         std::vector<CudaDeviceInfo> devList;
-        devList.reserve(count);
-        for (int device = 0; device < count; device++)
+        devList.reserve(static_cast<size_t>(count));
+        for (int device = 0; device < count; ++device)
         {
             devList.emplace_back(getDeviceInfo(device));
         }

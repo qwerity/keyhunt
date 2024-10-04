@@ -85,16 +85,16 @@ namespace utils
 
         if (isHex)
         {
-            if (std::sscanf(s.c_str(), "%I64u", &val) != 1)
+            if (sscanf(s.c_str(), "%I64ux", &val) != 1)
             {
-                throw std::string("Expected an integer");
+                throw std::runtime_error("Expected an integer");
             }
         }
         else
         {
-            if (std::sscanf(s.c_str(), "%I64u", &val) != 1)
+            if (sscanf(s.c_str(), "%I64ud", &val) != 1)
             {
-                throw std::string("Expected an integer");
+                throw std::runtime_error("Expected an integer");
             }
         }
         return val;
@@ -460,7 +460,7 @@ namespace utils
             stream.handshake(ssl::stream_base::client);
 
             // Create the HTTP request (GET)
-            http::request<http::string_body> req{http::verb::get, target, 11};
+            http::request<http::string_body> req(http::verb::get, target, 11);
             req.set(http::field::host, tgAPIHost);
             req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 

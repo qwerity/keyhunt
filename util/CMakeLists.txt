@@ -33,6 +33,8 @@ set(SRC_FILES
 
 # Define the static library target
 add_library(util STATIC ${SRC_FILES})
+suppress_msvc_warnings(util)
+
 target_link_libraries(util PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(util PRIVATE ${Boost_LIBRARIES})
 target_link_libraries(util PRIVATE OpenSSL::SSL OpenSSL::Crypto)
