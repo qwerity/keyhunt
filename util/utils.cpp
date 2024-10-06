@@ -202,14 +202,18 @@ namespace utils
         }
         else
         {
-            boost::log::add_file_log(log.logFilePath, boost::log::keywords::auto_flush = true);
+            boost::log::add_file_log(boost::log::keywords::file_name = log.logFilePath,
+                boost::log::keywords::rotation_size = 100 * MB,
+                boost::log::keywords::auto_flush = true,
+                boost::log::keywords::open_mode = std::ios_base::app,
+                boost::log::keywords::format = "[%TimeStamp%] %Message%");
             // boost::log::add_file_log(log.logFilePath, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
         }
 
         // Add attributes like timestamp and thread id
-        // boost::log::add_common_attributes();
+        boost::log::add_common_attributes();
 
-         boost::log::core::get()->set_filter(boost::log::trivial::severity >= static_cast<boost::log::trivial::severity_level>(log.severity));
+        boost::log::core::get()->set_filter(boost::log::trivial::severity >= static_cast<boost::log::trivial::severity_level>(log.severity));
     }
 
     std::vector<secp256k1::uint256> generateRandomPrivateKeys(const uint32_t keysNumberToGenerate)

@@ -16,7 +16,7 @@ namespace
         const std::string speedStr = (info.pointsPerSecond < 0.01) ? "< 0.01 MKey/s" : std::format("{:.3f} MKey/s", info.pointsPerSecond);
 
         const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L} total)", info.total);
-        const std::string timeStr = std::format("[{:.2f}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
+        const std::string timeStr = std::format("[{:.3f}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
         const uint64_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
         const uint64_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
 

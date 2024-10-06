@@ -57,7 +57,7 @@ struct ResultsProcessor::Impl
                 // if it is not test: set_found for privateXPart
                 if (!gContext->config.devMode())
                 {
-                    gContext->httpClient->setFound(result.privateXPart, privateStr);
+                    (void) gContext->httpClient->setFound(result.privateXPart, privateStr);
                     utils::backupToTGAsync(resultsStr);
                 }
 
@@ -71,6 +71,7 @@ struct ResultsProcessor::Impl
 
     void stop()
     {
+        utils::Timer t;
         BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor stopping";
 
         stopFlag = true;
@@ -79,7 +80,7 @@ struct ResultsProcessor::Impl
             thread.join();
         }
 
-        BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor stopped";
+        BOOST_LOG_TRIVIAL(trace) << std::format("ResultsProcessor stopped: {} ms", t.elapsedMs());
     }
 };
 

@@ -35,13 +35,15 @@ struct Config::Impl
             log.type = (logConfig["type"] == "file") ? LogConfig::LogType::file : LogConfig::LogType::console;
         }
 
-        if (logConfig.contains("file") && logConfig["file"].is_string() && !logConfig["file"].empty())
+        if (log.type == LogConfig::LogType::file)
         {
-            log.logFilePath = logConfig["file"];
-        }
+            const std::string binaryDir = std::filesystem::current_path();
+            const std::string logDir = binaryDir + "/logs/";
 
-        if (log.type == LogConfig::LogType::file && !log.logFilePath.empty())
-        {
+            std::error_code ec;
+            std::filesystem::create_directory(logDir, binaryDir, ec);
+
+            log.logFilePath = std::format("{}keyhunter_{}_{}", logDir, utils::getTimestampStr(), "%N.log");
             fprintf(stderr, "Logging to file.. %s\n", log.logFilePath.c_str());
         }
 
@@ -128,7 +130,7 @@ struct Config::Impl
         }
         else
         {
-            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'pointsPerThread' must be an integer, using default value: " << hunter.pointsPerThread;
+            BOOST_LOG_TRIVIAL(warning) << "using default 'pointsPerThread' value: " << hunter.pointsPerThread;
         }
 
         if (configJson.contains("keysNumberToGenerate") && configJson["keysNumberToGenerate"].is_number_unsigned())
@@ -137,14 +139,16 @@ struct Config::Impl
         }
         else
         {
-            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'keysNumberToGenerate' must be an integer, using default value: " << hunter.keysNumberToGenerate;
+            BOOST_LOG_TRIVIAL(warning) << "Using default 'keysNumberToGenerate' value: " << hunter.keysNumberToGenerate;
         }
 
-        if (configJson.contains("forcePrivateXPart") && configJson["forcePrivateXPart"].is_boolean()
-            && configJson["forcePrivateXPart"] == true && configJson.contains("privateXPart") && configJson["privateXPart"].is_number_integer())
+        if (configJson.contains("forcePrivateXPart") && configJson["forcePrivateXPart"].is_boolean() && configJson["forcePrivateXPart"] == true)
         {
             hunter.forcePrivateXPart = true;
-            hunter.privateXPart =configJson["privateXPart"];
+            if (configJson.contains("privateXPart") && configJson["privateXPart"].is_number_integer())
+            {
+                hunter.privateXPart = configJson["privateXPart"];
+            }
         }
 
         if (configJson.contains("privateYOffset") && configJson["privateYOffset"].is_number_integer())
@@ -165,7 +169,7 @@ struct Config::Impl
         }
         else
         {
-            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'publicKeyCompressionTypeToCheck' must be an integer, using default value: " << hunter.publicKeyCompressionTypeToCheck;
+            BOOST_LOG_TRIVIAL(warning) << "Using default 'publicKeyCompressionTypeToCheck' value: " << hunter.publicKeyCompressionTypeToCheck;
         }
 
         if (configJson.contains("statusCallbackPeriodMs") && configJson["statusCallbackPeriodMs"].is_number_unsigned())
@@ -174,7 +178,7 @@ struct Config::Impl
         }
         else
         {
-            BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'statusCallbackPeriodMs' must be an unsigned integer, using default value: " << hunter.statusCallbackPeriodMs;
+            BOOST_LOG_TRIVIAL(warning) << "Using default 'statusCallbackPeriodMs' value: " << hunter.statusCallbackPeriodMs;
         }
 
         loadLogConfig();

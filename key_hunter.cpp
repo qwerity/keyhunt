@@ -106,6 +106,7 @@ struct KeyHunter::Impl
 
     void pushResultsToQueue2(const uint32_t privateXPart, const uint32_t keysNumberPerIteration, const uint32_t iteration) const
     {
+        utils::Timer t;
         const uint32_t count = resultAtomicList.size();
 
         std::vector<Hash160SearchResult> results;
@@ -149,6 +150,8 @@ struct KeyHunter::Impl
         {
             BOOST_LOG_TRIVIAL(trace) << "False positives count: " << falsePositiveCount;
         }
+
+        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] pushResultsToQueue2: {} ms", cudaInfo.id, t.elapsedMs());
     }
 
     void startSearchPublicHashWithPrivateDefinedXRandomY(const uint32_t privateXPart) const
@@ -161,8 +164,8 @@ struct KeyHunter::Impl
         const uint32_t remainder = totalKeysToGenerate - (iterationsCount * keysNumberPerIteration);
         const uint32_t finalIterationsCount = iterationsCount + (remainder > 0 ? 1 : 0);
 
-        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: total iterations: {:L} totalKeysToGenerate: {:L}, keysNumberPerIteration: {:L}",
-                                               finalIterationsCount, totalKeysToGenerate, keysNumberPerIteration);
+        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] KeyHunter: total iterations: {:L} totalKeysToGenerate: {:L}, keysNumberPerIteration: {:L}",
+                                                cudaInfo.id, finalIterationsCount, totalKeysToGenerate, keysNumberPerIteration);
 
         utils::Timer timer;
         uint32_t iteration{0};
@@ -170,9 +173,13 @@ struct KeyHunter::Impl
         {
             timer.start();
             {
+                utils::Timer t;
                 cuECC->generatePrivateKeysForXPerIteration(privateXPart, iteration);
+                BOOST_LOG_TRIVIAL(trace) << std::format("[{}] generatePrivateKeysForXPerIteration: {} ms", cudaInfo.id, t.elapsedMs());
 
+                t.start();
                 cuECC->calculatePublicKeys();
+                BOOST_LOG_TRIVIAL(trace) << std::format("[{}] calculatePublicKeys: {} ms", cudaInfo.id, t.elapsedMs());
             }
             //const uint64_t nextY = iteration * cuECC->getKeysNumberPerIteration() + 1;
             /// TODO(ksh): to be used later
@@ -187,7 +194,7 @@ struct KeyHunter::Impl
 
         assert(iteration == finalIterationsCount);
 
-        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", keysNumberPerIteration * finalIterationsCount);
+        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] KeyHunter: done, generated: {:L} keys", cudaInfo.id, keysNumberPerIteration * finalIterationsCount);
     }
 
     uint32_t getPrivateXPart() const
@@ -216,21 +223,31 @@ struct KeyHunter::Impl
 
     void startSearchPublicHash()
     {
+        utils::Timer t;
         BOOST_LOG_TRIVIAL(trace) << std::format("[{}] KeyHunter Thread ID: ", cudaInfo.id) << std::this_thread::get_id();
 
         // Preparing Public, Private, Results buffers
         hash160Lookup.setTargets(gContext->hash160Targets);
-        resultAtomicList.init(sizeof(Hash160SearchResult), 256);
+        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] hash160Lookup.setTargets: {} ms", cudaInfo.id, t.elapsedMs());
 
+        t.start();
+        resultAtomicList.init(sizeof(Hash160SearchResult), 256);
+        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] resultAtomicList.init: {} ms", cudaInfo.id, t.elapsedMs());
+
+        t.start();
         initializeGPoints();
+        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] startSearchPublicHash: {} ms", cudaInfo.id, t.elapsedMs());
+
+        t.start();
         cuECC->initWithPrivateDefinedXRandomY(gContext->config.hunter().pointsPerThread, gContext->config.hunter().publicKeyCompressionTypeToCheck);
+        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] initWithPrivateDefinedXRandomY: {} ms", cudaInfo.id, t.elapsedMs());
 
         // Getting from http service the next private key x part, generating public and checking targets hashes
         do
         {
             const uint32_t privateXPart = getPrivateXPart();
-            BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "\n[{} | {}] Generating for privateXPart: {:#x} [{:L} | {:L}]",
-                                                    cudaInfo.id, cudaInfo.name, privateXPart, privateXPart, static_cast<int>(privateXPart));
+            BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] Generating for privateXPart: {:#x} [{:L} | {:L}]",
+                                                    cudaInfo.id, privateXPart, privateXPart, static_cast<int>(privateXPart));
 
             startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
 
