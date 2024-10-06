@@ -24,7 +24,7 @@ public:
     http::status generateToken(std::string& token) const;
     bool hostAlive() const;
     http::status getNumber(uint32_t& number) const;
-    bool markDone(uint32_t number);
+    bool markDone(uint32_t number) const;
     bool setFound(uint32_t number, const std::string& privateKeyHex) const;
 
 private:

@@ -64,6 +64,16 @@ namespace utils
         return duration.count();  // Returns the time in seconds as float
     }
 
+    std::string getTimestampStr()
+    {
+        const auto now = std::chrono::system_clock::now();
+        const std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
+        const std::tm* localTime = std::localtime(&currentTime);
+        std::ostringstream oss;
+        oss << std::put_time(localTime, "%d_%m_%Y_%H:%M:%S");
+        return oss.str();
+    }
+
     uint32_t parseUInt32(std::string s)
     {
         return static_cast<uint32_t>(parseUInt64(std::move(s)));
@@ -192,7 +202,7 @@ namespace utils
         }
         else
         {
-            // boost::log::add_file_log(log.logFilePath, boost::log::keywords::auto_flush = true);
+            boost::log::add_file_log(log.logFilePath, boost::log::keywords::auto_flush = true);
             // boost::log::add_file_log(log.logFilePath, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
         }
 

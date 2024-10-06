@@ -24,9 +24,7 @@ struct HttpClient::Impl
     beast::tcp_stream tcpStream;
     std::mutex connectionMutex;
 
-    explicit Impl(ServerConfig config) : config(std::move(config)), ioc(), tcpStream(ioc)
-    {
-    }
+    explicit Impl(ServerConfig config) : config(std::move(config)), ioc(), tcpStream(ioc) {}
 
     Impl(const Impl& other) = delete;
     Impl(const Impl&& other) = delete;
@@ -263,7 +261,7 @@ struct HttpClient::Impl
         return true;
     }
 
-    bool setFound(uint32_t& number, const std::string& privateKeyHex)
+    bool setFound(const uint32_t number, const std::string& privateKeyHex)
     {
         const std::string body = std::format(R"({{"num": {}, "pvk": "{}"}})", number, privateKeyHex);
 
@@ -321,12 +319,12 @@ http::status HttpClient::getNumber(uint32_t& number) const
     return mImpl->getNumber(number);
 }
 
-auto HttpClient::markDone(uint32_t number) -> bool
+bool HttpClient::markDone(const uint32_t number) const
 {
     return mImpl->markDone(number);
 }
 
-bool HttpClient::setFound(uint32_t number, const std::string& privateKeyHex) const
+bool HttpClient::setFound(const uint32_t number, const std::string& privateKeyHex) const
 {
     return mImpl->setFound(number, privateKeyHex);
 }

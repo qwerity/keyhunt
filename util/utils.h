@@ -48,8 +48,7 @@ namespace utils
         bool mEnabled;
     };
 
-    uint64_t getSystemTime();
-
+    std::string getTimestampStr();
     std::string formatSeconds(unsigned int seconds);
 
     uint32_t parseUInt32(std::string s);

@@ -40,12 +40,17 @@ struct Config::Impl
             log.logFilePath = logConfig["file"];
         }
 
+        if (log.type == LogConfig::LogType::file && !log.logFilePath.empty())
+        {
+            fprintf(stderr, "Logging to file.. %s\n", log.logFilePath.c_str());
+        }
+
         if (logConfig.contains("severity") && logConfig["severity"].is_number())
         {
             uint32_t logSeverity = logConfig["severity"];
-            if (logSeverity > 5) // fatal
+            if (logSeverity > boost::log::trivial::fatal)
             {
-                logSeverity = 5;
+                logSeverity = boost::log::trivial::fatal;
             }
             log.severity = logSeverity;
         }
