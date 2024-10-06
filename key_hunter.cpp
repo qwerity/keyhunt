@@ -161,7 +161,7 @@ struct KeyHunter::Impl
         const uint32_t remainder = totalKeysToGenerate - (iterationsCount * keysNumberPerIteration);
         const uint32_t finalIterationsCount = iterationsCount + (remainder > 0 ? 1 : 0);
 
-        BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: total iterations: {:L} totalKeysToGenerate: {:L}, keysNumberPerIteration: {:L}",
+        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: total iterations: {:L} totalKeysToGenerate: {:L}, keysNumberPerIteration: {:L}",
                                                finalIterationsCount, totalKeysToGenerate, keysNumberPerIteration);
 
         utils::Timer timer;
@@ -187,7 +187,7 @@ struct KeyHunter::Impl
 
         assert(iteration == finalIterationsCount);
 
-        BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", keysNumberPerIteration * finalIterationsCount);
+        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "KeyHunter: done, generated: {:L} keys", keysNumberPerIteration * finalIterationsCount);
     }
 
     uint32_t getPrivateXPart() const
@@ -228,8 +228,8 @@ struct KeyHunter::Impl
         // Getting from http service the next private key x part, generating public and checking targets hashes
         do
         {
-            uint32_t privateXPart = getPrivateXPart();
-            BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "\n[{} | {}] Generating for privateXPart: {:#x} [{:L} | {:L}]",
+            const uint32_t privateXPart = getPrivateXPart();
+            BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "\n[{} | {}] Generating for privateXPart: {:#x} [{:L} | {:L}]",
                                                     cudaInfo.id, cudaInfo.name, privateXPart, privateXPart, static_cast<int>(privateXPart));
 
             startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
@@ -237,8 +237,11 @@ struct KeyHunter::Impl
             // if it is not test we are setting search over privateXPart done
             if (!gContext->config.devMode())
             {
-                gContext->httpClient->markDone(privateXPart);
-                utils::backupToTGAsync(std::format("markDone privateXPart: {}", privateXPart));
+                const std::string postString = std::format("markDone for privateXPart: {}", privateXPart);
+                utils::backupToTGAsync(postString);
+                (void) gContext->httpClient->markDone(privateXPart);
+
+                BOOST_LOG_TRIVIAL(fatal) << postString;
             }
         }
         while (!stopFlag && !gContext->config.hunter().forcePrivateXPart); // if force private X part is set, one iteration is enough

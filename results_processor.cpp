@@ -52,6 +52,8 @@ struct ResultsProcessor::Impl
                                                            result.cudaDeviceId, result.privateXPart, result.privateYPart, (result.compressed ? "compressed" : "uncompressed"),
                                                            privateStr, hash160Str);
 
+                BOOST_LOG_TRIVIAL(fatal) << std::format("[{}] Found match for private key: {}", result.cudaDeviceId, result.privateXPart);
+
                 // if it is not test: set_found for privateXPart
                 if (!gContext->config.devMode())
                 {

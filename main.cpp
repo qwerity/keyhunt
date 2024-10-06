@@ -26,7 +26,7 @@ namespace
             , speedStr, totalStr, timeStr);
 
         // fprintf(stderr, "\r%s", statusStr.c_str());
-        BOOST_LOG_TRIVIAL(info) << statusStr;
+        BOOST_LOG_TRIVIAL(fatal) << statusStr;
     }
 }
 
