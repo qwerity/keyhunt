@@ -393,7 +393,7 @@ namespace utils
 
             const size_t numEntries = fileSize / sizeof(hash160);
 
-            BOOST_LOG_TRIVIAL(trace) << std::format("Loading RipeMD-160 hashes from: {}, size: {:.2f}Mb", filename, static_cast<double>(fileSize) / MB);
+            BOOST_LOG_TRIVIAL(info) << std::format("Loading RipeMD-160 hashes from: {}, size: {:.2f}Mb", filename, static_cast<double>(fileSize) / MB);
 
             hashSet.reserve(numEntries);
             for (size_t i = 0; i < numEntries; ++i)
@@ -405,7 +405,7 @@ namespace utils
 
             file.close();
 
-            BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Read {:L} hashes from {} binary file: {:.03f}s", hashSet.size(), filename, timer.elapsedS());
+            BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "Read {:L} hashes from {} binary file: {:.03f}s", hashSet.size(), filename, timer.elapsedS());
         }
         catch (const std::exception& e)
         {
