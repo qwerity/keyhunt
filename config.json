@@ -5,7 +5,7 @@
 
   "statusCallbackPeriodMs": 1000,
 
-  "pointsPerThread": 128,
+  "pointsPerThread": 256,
   "keysNumberToGenerate": 0,
   "forcePrivateXPart": false,
   "privateX": 1,
@@ -19,7 +19,6 @@
 
   "log" : {
     "type": "console",
-    "file": "app.log",
-    "severity": 0
+    "severity": 2
   }
 }
