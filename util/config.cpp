@@ -37,7 +37,7 @@ struct Config::Impl
 
         if (log.type == LogConfig::LogType::file)
         {
-            const std::string binaryDir = std::filesystem::current_path();
+            const std::string binaryDir = std::filesystem::current_path().string();
             const std::string logDir = binaryDir + "/logs/";
 
             std::error_code ec;
