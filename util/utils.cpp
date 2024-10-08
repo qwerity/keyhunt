@@ -70,7 +70,7 @@ namespace utils
         const std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
         const std::tm* localTime = std::localtime(&currentTime);
         std::ostringstream oss;
-        oss << std::put_time(localTime, "%d_%m_%Y_%H:%M:%S");
+        oss << std::put_time(localTime, "%d_%m_%Y_%H_%M_%S");
         return oss.str();
     }
 
