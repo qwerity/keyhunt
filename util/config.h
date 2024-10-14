@@ -67,6 +67,10 @@ public:
     ServerConfig& server();
     LogConfig& log();
 
+    // hardcoded
+    const std::string aesKey{"CB4BBEDF03DA589798E997D86027DE755F33D226AEF90F395539DA4C08EF65B3"};
+    const std::string aesIV{"7E1AAE9BAE242FC510D5619B"};
+
 private:
     struct Impl;
     std::unique_ptr<Impl> mImpl;
