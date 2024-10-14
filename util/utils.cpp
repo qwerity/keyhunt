@@ -135,7 +135,7 @@ namespace utils
         return std::format("{:02}:{:02}:{:02}", hours, minutes, sec);
     }
 
-    bool appendToFile(const std::string &fileName, const std::string &s)
+    bool appendToFileOnNewLine(const std::string &fileName, const std::string &s)
     {
         std::ofstream outFile;
         bool newline = false;
@@ -178,29 +178,29 @@ namespace utils
         return ss.str();
     }
 
-    std::string toHex(const std::vector<unsigned char>& data)
+    std::string toHex(const std::vector<uint8_t>& data)
     {
         assert(data.length() % 2 == 0);
 
         std::ostringstream oss;
         oss << std::hex << std::setfill('0');
-        for (unsigned char byte : data)
+        for (uint8_t byte : data)
         {
             oss << std::setw(2) << static_cast<int>(byte);
         }
         return oss.str();
     }
 
-    std::vector<unsigned char> fromHex(const std::string& hexStr)
+    std::vector<uint8_t> fromHex(const std::string& hexStr)
     {
         assert(hexStr.length() % 2 == 0);
 
-        std::vector<unsigned char> bytes;
+        std::vector<uint8_t> bytes;
         for (size_t i = 0; i < hexStr.length(); i += 2)
         {
             unsigned int byte;
             std::istringstream(hexStr.substr(i, 2)) >> std::hex >> byte;
-            bytes.push_back(static_cast<unsigned char>(byte));
+            bytes.push_back(static_cast<uint8_t>(byte));
         }
         return bytes;
     }

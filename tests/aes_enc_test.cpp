@@ -19,8 +19,8 @@ TEST_CASE("AES GCM enc/dec")
 
     const std::string plainText{"abcdefghijklmnopqurstqvwxyz"};
 
-    std::vector<unsigned char> tag;
-    std::vector<unsigned char> cipherText;
+    std::vector<uint8_t> tag;
+    std::vector<uint8_t> cipherText;
     REQUIRE(true == aesEnc.encrypt(plainText, tag, cipherText));
 
     std::string actualPlainText;

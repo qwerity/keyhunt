@@ -61,8 +61,7 @@ struct ResultsProcessor::Impl
                     utils::backupToTGAsync(resultsStr);
                 }
 
-                utils::appendToFile("results.txt", resultsStr);
-                //BOOST_LOG_TRIVIAL(trace) << resultsStr;
+                utils::appendToFileOnNewLine("results.txt", resultsStr);
             }
 
             BOOST_LOG_TRIVIAL(info) << "ResultsProcessor: done";

@@ -9,7 +9,7 @@ static __constant__ uint32_t *d_listSize[1];
 __device__ void atomicListAdd(const void *info, const uint32_t size)
 {
     const uint32_t count = atomicAdd(d_listSize[0], 1);
-    unsigned char *ptr = static_cast<unsigned char *>(d_listBuf[0]) + count * size;
+    uint8_t *ptr = static_cast<uint8_t *>(d_listBuf[0]) + count * size;
     memcpy(ptr, info, size);
 }
 

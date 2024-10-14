@@ -9,7 +9,7 @@ namespace crypto
     {
     public:
         rng();
-        void get(unsigned char *buf, int len);
+        void get(uint8_t *buf, int len);
 
     private:
         void reseed();
@@ -18,8 +18,8 @@ namespace crypto
         uint32_t _counter{};
     };
 
-    bool aes_gcm_enc(const std::string& plaintext, const std::vector<unsigned char>& key, const std::vector<unsigned char>& iv, std::vector<unsigned char>& tag, std::vector<unsigned char>& ciphertext);
-    bool aes_gcm_dec(const std::vector<unsigned char>& ciphertext, const std::vector<unsigned char>& key, const std::vector<unsigned char>& iv, const std::vector<unsigned char>& tag, std::string& plaintext);
+    bool aes_gcm_enc(const std::string& plaintext, const std::vector<uint8_t>& key, const std::vector<uint8_t>& iv, std::vector<uint8_t>& tag, std::vector<uint8_t>& ciphertext);
+    bool aes_gcm_dec(const std::vector<uint8_t>& ciphertext, const std::vector<uint8_t>& key, const std::vector<uint8_t>& iv, const std::vector<uint8_t>& tag, std::string& plaintext);
 
     class AES
     {
@@ -30,12 +30,12 @@ namespace crypto
 
         AES(const std::string& hexKey, const std::string& iv);
 
-        bool encrypt(const std::string& plaintext, std::vector<unsigned char>& tag, std::vector<unsigned char>& ciphertext) const;
-        bool decrypt(const std::vector<unsigned char>& ciphertext, const std::vector<unsigned char>& tag, std::string& plaintext) const;
+        bool encrypt(const std::string& plaintext, std::vector<uint8_t>& tag, std::vector<uint8_t>& ciphertext) const;
+        bool decrypt(const std::vector<uint8_t>& ciphertext, const std::vector<uint8_t>& tag, std::string& plaintext) const;
 
     private:
-        std::vector<unsigned char> mKey;
-        std::vector<unsigned char> mIV;
+        std::vector<uint8_t> mKey;
+        std::vector<uint8_t> mIV;
     };
 
     void ripemd160(uint32_t *msg, uint32_t *digest);

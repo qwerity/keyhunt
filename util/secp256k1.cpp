@@ -544,7 +544,7 @@ uint256 secp256k1::generatePrivateKey()
 {
     static crypto::rng rng;
     uint256 k;
-    rng.get(reinterpret_cast<unsigned char *>(k.v), 32);
+    rng.get(reinterpret_cast<uint8_t *>(k.v), 32);
     return k;
 }
 

@@ -104,7 +104,7 @@ TEST_CASE("Test sha256", "")
         std::ranges::transform(digest, actualSha256.data(), utils::endian);
 
         std::array<uint32_t, SHA256_DIGEST_LENGTH / sizeof(uint32_t)> expectedSha256{};
-        SHA256(reinterpret_cast<const unsigned char *>(&value), 2 * sizeof(uint32_t), reinterpret_cast<unsigned char *>(expectedSha256.data()));
+        SHA256(reinterpret_cast<const uint8_t *>(&value), 2 * sizeof(uint32_t), reinterpret_cast<uint8_t *>(expectedSha256.data()));
         REQUIRE(expectedSha256 == actualSha256);
     }
 }

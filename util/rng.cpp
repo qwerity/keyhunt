@@ -8,7 +8,7 @@
     #include <Windows.h>
     #include <bcrypt.h>
 
-    static void secureRandom(unsigned char *buf, uint32_t count)
+    static void secureRandom(uint8_t *buf, uint32_t count)
     {
         BCRYPT_ALG_HANDLE h;
         BCryptOpenAlgorithmProvider(&h, BCRYPT_RNG_ALGORITHM, nullptr, 0);
@@ -19,7 +19,7 @@
     #include <stdexcept>
     #include <string>
 
-    static void secureRandom(unsigned char *buf, const uint32_t count)
+    static void secureRandom(uint8_t *buf, const uint32_t count)
     {
         // Read from /dev/urandom
         FILE *fp = fopen("/dev/urandom", "rb");
@@ -45,10 +45,10 @@ void crypto::rng::reseed()
 {
     _counter = 0;
     memset(_state, 0, sizeof(_state));
-    secureRandom(reinterpret_cast<unsigned char *>(_state), 32);
+    secureRandom(reinterpret_cast<uint8_t *>(_state), 32);
 }
 
-void crypto::rng::get(unsigned char *buf, int len)
+void crypto::rng::get(uint8_t *buf, int len)
 {
     int i = 0;
     while (len > 0)

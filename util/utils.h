@@ -57,12 +57,13 @@ namespace utils
     bool isHex(const std::string &s);
 
     bool appendToFile(const std::string &fileName, const std::string &s);
+    bool appendToFileOnNewLine(const std::string &fileName, const std::string &s);
 
     inline unsigned int endian(unsigned int x) { return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24); }
 
     std::string toHex(const uint32_t* arr, uint32_t size);
-    std::string toHex(const std::vector<unsigned char>& data);
-    std::vector<unsigned char> fromHex(const std::string& hexStr);
+    std::string toHex(const std::vector<uint8_t>& data);
+    std::vector<uint8_t> fromHex(const std::string& hexStr);
 
     void initLogging(const LogConfig& log);
 

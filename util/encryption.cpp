@@ -6,7 +6,7 @@
 
 namespace crypto
 {
-    bool aes_gcm_enc(const std::string& plaintext, const std::vector<unsigned char>& key, const std::vector<unsigned char>& iv, std::vector<unsigned char>& tag, std::vector<unsigned char>& ciphertext)
+    bool aes_gcm_enc(const std::string& plaintext, const std::vector<uint8_t>& key, const std::vector<uint8_t>& iv, std::vector<uint8_t>& tag, std::vector<uint8_t>& ciphertext)
     {
         EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
         if (!ctx) { return false; }
@@ -19,7 +19,7 @@ namespace crypto
 
         int len;
         ciphertext.resize(plaintext.size() + AES_BLOCK_SIZE);
-        if (EVP_EncryptUpdate(ctx, ciphertext.data(), &len, reinterpret_cast<const unsigned char*>(plaintext.data()), plaintext.size()) != 1)
+        if (EVP_EncryptUpdate(ctx, ciphertext.data(), &len, reinterpret_cast<const uint8_t*>(plaintext.data()), plaintext.size()) != 1)
         {
             return false;
         }
@@ -41,7 +41,7 @@ namespace crypto
         return true;
     }
 
-    bool aes_gcm_dec(const std::vector<unsigned char>& ciphertext, const std::vector<unsigned char>& key, const std::vector<unsigned char>& iv, const std::vector<unsigned char>& tag, std::string& plaintext)
+    bool aes_gcm_dec(const std::vector<uint8_t>& ciphertext, const std::vector<uint8_t>& key, const std::vector<uint8_t>& iv, const std::vector<uint8_t>& tag, std::string& plaintext)
     {
         EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
         if (!ctx) { return false; }
@@ -52,7 +52,7 @@ namespace crypto
             return false;
         }
 
-        std::vector<unsigned char> plaintext_buffer(ciphertext.size());
+        std::vector<uint8_t> plaintext_buffer(ciphertext.size());
         int len;
         if (EVP_DecryptUpdate(ctx, plaintext_buffer.data(), &len, ciphertext.data(), ciphertext.size()) != 1)
         {
@@ -60,7 +60,7 @@ namespace crypto
         }
         int plaintext_len = len;
 
-        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, tag.size(), const_cast<unsigned char*>(tag.data())) != 1)
+        if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, tag.size(), const_cast<uint8_t*>(tag.data())) != 1)
         {
             return false;
         }
@@ -81,12 +81,12 @@ namespace crypto
         mIV = utils::fromHex(iv);
     }
 
-    bool AES::encrypt(const std::string& plaintext, std::vector<unsigned char>& tag, std::vector<unsigned char>& ciphertext) const
+    bool AES::encrypt(const std::string& plaintext, std::vector<uint8_t>& tag, std::vector<uint8_t>& ciphertext) const
     {
         return aes_gcm_enc(plaintext, mKey, mIV, tag, ciphertext);
     }
 
-    bool AES::decrypt(const std::vector<unsigned char>& ciphertext, const std::vector<unsigned char>& tag, std::string& plaintext) const
+    bool AES::decrypt(const std::vector<uint8_t>& ciphertext, const std::vector<uint8_t>& tag, std::string& plaintext) const
     {
         return aes_gcm_dec(ciphertext, mKey, mIV, tag, plaintext);
     }
