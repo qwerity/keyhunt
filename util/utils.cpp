@@ -161,8 +161,10 @@ namespace utils
         return true;
     }
 
-    std::string convertToHexString(const uint32_t* arr, const uint32_t size)
+    std::string toHex(const uint32_t* arr, const uint32_t size)
     {
+        assert(size % 2 == 0);
+
         std::stringstream ss;
         // Iterate through each byte of the array
         for (uint32_t i = 0; i < size; ++i)
@@ -174,6 +176,33 @@ namespace utils
             }
         }
         return ss.str();
+    }
+
+    std::string toHex(const std::vector<unsigned char>& data)
+    {
+        assert(data.length() % 2 == 0);
+
+        std::ostringstream oss;
+        oss << std::hex << std::setfill('0');
+        for (unsigned char byte : data)
+        {
+            oss << std::setw(2) << static_cast<int>(byte);
+        }
+        return oss.str();
+    }
+
+    std::vector<unsigned char> fromHex(const std::string& hexStr)
+    {
+        assert(hexStr.length() % 2 == 0);
+
+        std::vector<unsigned char> bytes;
+        for (size_t i = 0; i < hexStr.length(); i += 2)
+        {
+            unsigned int byte;
+            std::istringstream(hexStr.substr(i, 2)) >> std::hex >> byte;
+            bytes.push_back(static_cast<unsigned char>(byte));
+        }
+        return bytes;
     }
 
     void initLogging(const LogConfig& log)

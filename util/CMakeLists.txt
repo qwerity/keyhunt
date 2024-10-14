@@ -9,6 +9,7 @@ set(SRC_FILES
     ripemd160.cpp
     rng.cpp
     sha256.cpp
+    encryption.cpp
 
     common.h
     common_host.h

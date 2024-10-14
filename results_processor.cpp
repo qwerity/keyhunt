@@ -44,9 +44,9 @@ struct ResultsProcessor::Impl
                 }
 
                 /// TODO(ksh): commented as it is not needed, only useful for debugging purposes
-                //const std::string publicXStr{utils::convertToHexString(result.publicXKey, 8)};
-                const std::string privateStr{utils::convertToHexString(result.privateKey, 8)};
-                const std::string hash160Str{utils::convertToHexString(result.digest, 5)};
+                //const std::string publicXStr{utils::toHex(result.publicXKey, 8)};
+                const std::string privateStr{utils::toHex(result.privateKey, 8)};
+                const std::string hash160Str{utils::toHex(result.digest, 5)};
 
                 const std::string resultsStr = std::format("[{}][({:>10}, {:>10}) | {:<12}] private: {}, hash160: {}",
                                                            result.cudaDeviceId, result.privateXPart, result.privateYPart, (result.compressed ? "compressed" : "uncompressed"),

@@ -60,7 +60,10 @@ namespace utils
 
     inline unsigned int endian(unsigned int x) { return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24); }
 
-    std::string convertToHexString(const uint32_t* arr, uint32_t size);
+    std::string toHex(const uint32_t* arr, uint32_t size);
+    std::string toHex(const std::vector<unsigned char>& data);
+    std::vector<unsigned char> fromHex(const std::string& hexStr);
+
     void initLogging(const LogConfig& log);
 
     std::vector<secp256k1::uint256> generateRandomPrivateKeys(uint32_t keysNumberToGenerate = 5);
