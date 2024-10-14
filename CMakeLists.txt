@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.29)
 project(cuda-keyhunt-pvk CXX CUDA)
 
 ####################################################################################################################################################################################
+include(CMakeGraphVizOptions)
+set(CMAKE_GRAPHVIZ_OUTPUT "${CMAKE_BINARY_DIR}/graphviz")
+set(CMAKE_GRAPHVIZ_GENERATE_TARGETS ON)
+set(CMAKE_GRAPHVIZ_GENERATE_DEPENDENCIES ON)
+
 include(FetchContent)
 include(cmake/utils.cmake)
 

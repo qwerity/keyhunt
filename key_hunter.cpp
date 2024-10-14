@@ -2,7 +2,6 @@
 
 #include <thread>
 #include <format>
-#include <unordered_set>
 
 #include <boost/log/trivial.hpp>
 

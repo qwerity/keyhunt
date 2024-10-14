@@ -41,7 +41,7 @@ namespace utils
     Timer::Timer() : mStartTime{std::chrono::steady_clock::now()}
     {
 
-    };
+    }
 
     void Timer::start()
     {
@@ -68,7 +68,7 @@ namespace utils
     {
         const auto now = std::chrono::system_clock::now();
         const std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
-        const std::tm* localTime = std::localtime(&currentTime);
+        const std::tm* localTime = localtime(&currentTime);
         std::ostringstream oss;
         oss << std::put_time(localTime, "%d_%m_%Y_%H_%M_%S");
         return oss.str();
@@ -135,32 +135,23 @@ namespace utils
         return std::format("{:02}:{:02}:{:02}", hours, minutes, sec);
     }
 
-    long getFileSize(const std::string &fileName)
-    {
-        FILE *fp = fopen(fileName.c_str(), "rb");
-        if (fp == nullptr)
-        {
-            return -1;
-        }
-        fseek(fp, 0, SEEK_END);
-        long pos = ftell(fp);
-        fclose(fp);
-        return pos;
-    }
-
     bool appendToFile(const std::string &fileName, const std::string &s)
     {
         std::ofstream outFile;
         bool newline = false;
-        if (getFileSize(fileName) > 0)
+
+        std::error_code ec;
+        if (const auto size = std::filesystem::file_size(fileName, ec); !ec && size > 0)
         {
             newline = true;
         }
+
         outFile.open(fileName.c_str(), std::ios::app);
         if (!outFile.is_open())
         {
             return false;
         }
+
         // Add newline following previous line
         if (newline)
         {
@@ -172,14 +163,6 @@ namespace utils
 
     std::string convertToHexString(const uint32_t* arr, const uint32_t size)
     {
-//        std::string s;
-//        for (uint32_t i = 0; i < size; ++i)
-//        {
-//            char hex[9]{};
-//            snprintf(hex, 9, "%.8x", utils::endian(arr[i]));
-//            s += std::string(hex);
-//        }
-
         std::stringstream ss;
         // Iterate through each byte of the array
         for (uint32_t i = 0; i < size; ++i)
@@ -198,7 +181,6 @@ namespace utils
         if (log.type == LogConfig::LogType::console)
         {
             boost::log::add_console_log(std::cerr, boost::log::keywords::auto_flush = true);
-            // boost::log::add_console_log(std::cerr, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
         }
         else
         {
@@ -206,8 +188,7 @@ namespace utils
                 boost::log::keywords::rotation_size = 100 * MB,
                 boost::log::keywords::auto_flush = true,
                 boost::log::keywords::open_mode = std::ios_base::app,
-                boost::log::keywords::format = "[%TimeStamp%] %Message%");
-            // boost::log::add_file_log(log.logFilePath, boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
+                boost::log::keywords::format = "[%TimeStamp%] [%ThreadID%]: %Message%");
         }
 
         // Add attributes like timestamp and thread id

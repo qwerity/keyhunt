@@ -3,11 +3,11 @@
 #include "util/common.h"
 #include "ptx.cuh"
 
-constexpr uint32_t MAX_TARGETS_CONSTANT_MEM{16};
+constexpr uint32_t maxTargetsConstantMem{16};
 
 __constant__ uint32_t d_UseBloomFilter{};
 
-__constant__ uint32_t _TARGET_HASH[MAX_TARGETS_CONSTANT_MEM][5];
+__constant__ uint32_t d_TargetHash[maxTargetsConstantMem][5];
 __constant__ uint32_t d_NumTargetHashes{};
 
 __constant__ uint32_t *d_BloomFilterPtr{};
@@ -42,7 +42,7 @@ void Hash160Lookup::setTargetConstantMemory(const std::unordered_set<hash160> &t
     for (const auto& target : targets)
     {
         undoRMD160FinalRound(target.h, h);
-        cudaCheckError(cudaMemcpyToSymbol(_TARGET_HASH, h, sizeof(uint32_t) * 5, i * sizeof(uint32_t) * 5));
+        cudaCheckError(cudaMemcpyToSymbol(d_TargetHash, h, sizeof(uint32_t) * 5, i * sizeof(uint32_t) * 5));
 
         ++i;
     }
@@ -70,9 +70,9 @@ void Hash160Lookup::initializeBloomFilter(const std::unordered_set<hash160> &tar
     {
         uint32_t h[5];
         undoRMD160FinalRound(target.h, h);
-        for (uint32_t j = 0; j < 5; ++j)
+        for (unsigned int j : h)
         {
-            const uint32_t idx = h[j] & mask;
+            const uint32_t idx = j & mask;
             filter[idx / 32] |= (0x01 << (idx % 32));
         }
     }
@@ -92,9 +92,9 @@ void Hash160Lookup::initializeBloomFilter64(const std::unordered_set<hash160> & 
         idx[3] = (static_cast<uint64_t>(hash[2] ^ hash[3]) << 32 | (hash[3] ^ hash[4])) & mask;
         idx[4] = (static_cast<uint64_t>(hash[0] ^ hash[3]) << 32 | (hash[1] ^ hash[3])) & mask;
 
-        for (uint32_t i = 0; i < 5; ++i)
+        for (unsigned long long i : idx)
         {
-            filter[idx[i] / 32] |= (0x01 << (idx[i] % 32));
+            filter[i / 32] |= (0x01 << (i % 32));
         }
     }
 }
@@ -147,14 +147,14 @@ void Hash160Lookup::setTargets(const std::unordered_set<hash160>& hash160Targets
 {
     thrust::release(d_bloomFilter);
 
-    if (hash160Targets.size() <= MAX_TARGETS_CONSTANT_MEM)
+    if (hash160Targets.size() <= maxTargetsConstantMem)
     {
         setTargetConstantMemory(hash160Targets);
     }
     else
     {
         setTargetBloomFilter(hash160Targets);
-    };
+    }
 }
 
 __device__ void doRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5])
@@ -169,9 +169,9 @@ __device__ void doRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5])
 __device__ bool checkBloomFilter(const hash160& hash)
 {
     bool foundMatch = true;
-    for (uint32_t i = 0; i < 5; ++i)
+    for (unsigned int i : hash.h)
     {
-        const uint32_t idx = hash.h[i] & d_BloomFilterMask;
+        const uint32_t idx = i & d_BloomFilterMask;
         const uint32_t f = d_BloomFilterPtr[idx / 32];
         if ((f & (0x01 << (idx % 32))) == 0)
         {
@@ -191,10 +191,10 @@ __device__ bool checkBloomFilter64(const hash160& hash)
     idx[3] = (static_cast<uint64_t>(hash.h[2] ^ hash.h[3]) << 32 | (hash.h[3] ^ hash.h[4])) & d_BloomFilterMask64;
     idx[4] = (static_cast<uint64_t>(hash.h[0] ^ hash.h[3]) << 32 | (hash.h[1] ^ hash.h[3])) & d_BloomFilterMask64;
 
-    for (int i = 0; i < 5; i++)
+    for (unsigned long long i : idx)
     {
-        const uint32_t f = d_BloomFilterPtr[idx[i] / 32];
-        if ((f & (0x01 << (idx[i] % 32))) == 0)
+        const uint32_t f = d_BloomFilterPtr[i / 32];
+        if ((f & (0x01 << (i % 32))) == 0)
         {
             foundMatch = false;
         }
@@ -220,7 +220,7 @@ __device__ bool checkHash(const hash160& hash)
         bool equal = true;
         for (uint32_t i = 0; i < 5; ++i)
         {
-            equal &= (hash.h[i] == _TARGET_HASH[j][i]);
+            equal &= (hash.h[i] == d_TargetHash[j][i]);
         }
         foundMatch |= equal;
     }

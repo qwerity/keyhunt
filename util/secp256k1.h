@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 #ifdef _WIN32
     #define sscanf sscanf_s
@@ -24,7 +25,7 @@ namespace secp256k1
 
         uint256() = default;
 
-        uint256(const std::string &s)
+        explicit uint256(const std::string &s)
         {
             std::string t = s;
             // 0x prefix
@@ -211,14 +212,7 @@ namespace secp256k1
 
         [[nodiscard]] bool isZero() const
         {
-            for (auto& i : v)
-            {
-                if (i != 0)
-                {
-                    return false;
-                }
-            }
-            return true;
+            return std::ranges::all_of(v, [](auto i) { return i == 0; });
         }
 
         [[nodiscard]] int cmp(const uint256 &val) const
@@ -300,11 +294,11 @@ namespace secp256k1
         }
     };
 
-    constexpr uint32_t _POINT_AT_INFINITY_WORDS[8] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
-    constexpr uint32_t _P_WORDS[8] = {0xFFFFFC2F, 0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
-    constexpr uint32_t _N_WORDS[8] = {0xD0364141, 0xBFD25E8C, 0xAF48A03B, 0xBAAEDCE6, 0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
-    constexpr uint32_t _GX_WORDS[8] = {0x16F81798, 0x59F2815B, 0x2DCE28D9, 0x029BFCDB, 0xCE870B07, 0x55A06295, 0xF9DCBBAC, 0x79BE667E};
-    constexpr uint32_t _GY_WORDS[8] = {0xFB10D4B8, 0x9C47D08F, 0xA6855419, 0xFD17B448, 0x0E1108A8, 0x5DA4FBFC, 0x26A3C465, 0x483ADA77};
+    constexpr uint32_t g_POINT_AT_INFINITY_WORDS[8] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+    constexpr uint32_t g_P_WORDS[8] = {0xFFFFFC2F, 0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+    constexpr uint32_t g_N_WORDS[8] = {0xD0364141, 0xBFD25E8C, 0xAF48A03B, 0xBAAEDCE6, 0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+    constexpr uint32_t g_GX_WORDS[8] = {0x16F81798, 0x59F2815B, 0x2DCE28D9, 0x029BFCDB, 0xCE870B07, 0x55A06295, 0xF9DCBBAC, 0x79BE667E};
+    constexpr uint32_t g_GY_WORDS[8] = {0xFB10D4B8, 0x9C47D08F, 0xA6855419, 0xFD17B448, 0x0E1108A8, 0x5DA4FBFC, 0x26A3C465, 0x483ADA77};
     // TODO(ksh): not used
     // constexpr uint32_t _BETA_WORDS[8] = {0x719501EE, 0xC1396C28, 0x12F58995, 0x9CF04975, 0xAC3434E9, 0x6E64479E, 0x657C0710, 0x7AE96A2B};
     // constexpr uint32_t _LAMBDA_WORDS[8] = {0x1B23BD72, 0xDF02967C, 0x20816678, 0x122E22EA, 0x8812645A, 0xA5261C02, 0xC05C30E0, 0x5363AD4C};
@@ -318,8 +312,8 @@ namespace secp256k1
 
         ecpoint()
         {
-            x = uint256(_POINT_AT_INFINITY_WORDS);
-            y = uint256(_POINT_AT_INFINITY_WORDS);
+            x = uint256(g_POINT_AT_INFINITY_WORDS);
+            y = uint256(g_POINT_AT_INFINITY_WORDS);
         }
 
         ecpoint(const uint256 &x, const uint256 &y) : x(x), y(y) {}
@@ -354,8 +348,8 @@ namespace secp256k1
         }
     };
 
-    const uint256 P(_P_WORDS);
-    const uint256 N(_N_WORDS);
+    const uint256 P(g_P_WORDS);
+    const uint256 N(g_N_WORDS);
 
     // TODO(ksh): not used
     // const uint256 BETA(_BETA_WORDS);

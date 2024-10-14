@@ -2,7 +2,10 @@
 #include "secp256k1.h"
 
 #include <algorithm>
-#include <iomanip>
+
+#ifndef _WIN32
+    #include <iomanip>
+#endif
 
 using namespace secp256k1;
 
@@ -262,12 +265,12 @@ static bool isEven(const uint256 &x)
 
 ecpoint secp256k1::pointAtInfinity()
 {
-    return {_POINT_AT_INFINITY_WORDS, _POINT_AT_INFINITY_WORDS};
+    return {g_POINT_AT_INFINITY_WORDS, g_POINT_AT_INFINITY_WORDS};
 }
 
 ecpoint secp256k1::G()
 {
-    return {_GX_WORDS, _GY_WORDS};
+    return {g_GX_WORDS, g_GY_WORDS};
 }
 
 uint256 secp256k1::invModP(const uint256 &x)

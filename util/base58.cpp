@@ -79,7 +79,6 @@ std::string Base58::toBase58(const secp256k1::uint256 &x)
 void Base58::getMinMaxFromPrefix(const std::string &prefix, secp256k1::uint256 &minValueOut, secp256k1::uint256 &maxValueOut)
 {
     secp256k1::uint256 minValue = toBigInt(prefix);
-    secp256k1::uint256 maxValue = minValue;
     int exponent = 1;
     // 2^192
     uint32_t expWords[] = {0, 0, 0, 0, 0, 0, 1, 0};
@@ -93,8 +92,9 @@ void Base58::getMinMaxFromPrefix(const std::string &prefix, secp256k1::uint256 &
         minValue = nextValue;
         nextValue = nextValue.mul(58u);
     }
+
     secp256k1::uint256 diff = secp256k1::uint256(58).pow(exponent - 1).sub(1);
-    maxValue = minValue.add(diff);
+    secp256k1::uint256 maxValue = minValue.add(diff);
     if (maxValue.cmp(exp) > 0)
     {
         maxValue = exp.sub(1);

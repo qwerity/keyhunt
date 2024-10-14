@@ -23,7 +23,7 @@ int main(int argc, char* argv[])
     const std::string hash160TargetsFilepath = argv[1];
     std::unordered_set<hash160> hash160Set;
 
-    if(!utils::readHash160HexStrFileToSet(hash160TargetsFilepath, hash160Set))
+    if (!utils::readHash160HexStrFileToSet(hash160TargetsFilepath, hash160Set))
     {
         return -1;
     }

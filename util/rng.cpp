@@ -1,14 +1,11 @@
 #include "crypto_util.h"
 
-#include <cstdio>
 #include <cstring>
-#include <stdexcept>
-#include <string>
 
 #ifdef _WIN32
     #pragma comment(lib, "bcrypt.lib")
 
-    #include<Windows.h>
+    #include <Windows.h>
     #include <bcrypt.h>
 
     static void secureRandom(unsigned char *buf, uint32_t count)
@@ -18,6 +15,10 @@
         BCryptGenRandom(h, buf, count, 0);
     }
 #else
+    #include <cstdio>
+    #include <stdexcept>
+    #include <string>
+
     static void secureRandom(unsigned char *buf, const uint32_t count)
     {
         // Read from /dev/urandom

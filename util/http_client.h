@@ -22,10 +22,10 @@ public:
     [[nodiscard]]  std::string hostConfig() const;
 
     http::status generateToken(std::string& token) const;
-    bool hostAlive() const;
+    [[nodiscard]] bool hostAlive() const;
     http::status getNumber(uint32_t& number) const;
-    bool markDone(uint32_t number) const;
-    bool setFound(uint32_t number, const std::string& privateKeyHex) const;
+    [[nodiscard]] bool markDone(uint32_t number) const;
+    [[nodiscard]] bool setFound(uint32_t number, const std::string& privateKeyHex) const;
 
 private:
     struct Impl;
