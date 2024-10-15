@@ -65,6 +65,8 @@ void setupPrivateXPart(const std::shared_ptr<GlobalContext>& context)
 
 int main()
 {
+    utils::initOpenssl();
+
     // Config will initialize here
     auto context = std::make_shared<GlobalContext>();
     if (!context->config.isLoaded())
@@ -131,5 +133,6 @@ int main()
         }
     }
 
+    utils::releaseOpenssl();
     return 0;
 }

@@ -7,6 +7,8 @@
 #include <functional>
 #include <unordered_set>
 
+#include "crypto_util.h"
+
 namespace secp256k1
 {
     struct uint256;
@@ -56,7 +58,6 @@ namespace utils
 
     bool isHex(const std::string &s);
 
-    bool appendToFile(const std::string &fileName, const std::string &s);
     bool appendToFileOnNewLine(const std::string &fileName, const std::string &s);
 
     inline unsigned int endian(unsigned int x) { return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24); }
@@ -66,6 +67,9 @@ namespace utils
     std::vector<uint8_t> fromHex(const std::string& hexStr);
 
     void initLogging(const LogConfig& log);
+
+    void initOpenssl();
+    void releaseOpenssl();
 
     std::vector<secp256k1::uint256> generateRandomPrivateKeys(uint32_t keysNumberToGenerate = 5);
 
@@ -78,6 +82,9 @@ namespace utils
     void readHash160Targets(const std::vector<std::string>& ripemd160TargetsFilePaths, std::unordered_set<hash160>& targets);
 
     uint32_t randomUINT32_t();
-    void backupToTG(const std::string& text);
+    bool backupToTG(const std::string& text);
     void backupToTGAsync(const std::string& text);
+
+    bool writeEncResultsToFile(const crypto::AES& aesEnc, const std::string& filename, const std::string& resultsStr);
+    bool readEncResults(const crypto::AES& aesEnc, const std::string& filename, std::vector<std::string>& results);
 }
