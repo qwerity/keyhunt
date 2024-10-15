@@ -1,4 +1,5 @@
 #include "results_processor.h"
+#include "util/crypto_util.h"
 #include "util/utils.h"
 
 #include <thread>
@@ -14,7 +15,11 @@ struct ResultsProcessor::Impl
 
     std::thread thread;
 
-    explicit Impl(const std::shared_ptr<GlobalContext>& context) : gContext(context) {}
+    crypto::AES aesEnc;
+
+    explicit Impl(const std::shared_ptr<GlobalContext>& context) : gContext(context), aesEnc(Config::aesKey, Config::aesIV)
+    {}
+
     ~Impl()
     {
         stop();
@@ -54,14 +59,19 @@ struct ResultsProcessor::Impl
 
                 BOOST_LOG_TRIVIAL(fatal) << std::format("[{}] Found match for private key: {}", result.cudaDeviceId, result.privateXPart);
 
+                bool online{false};
+
                 // if it is not test: set_found for privateXPart
                 if (!gContext->config.devMode())
                 {
-                    (void) gContext->httpClient->setFound(result.privateXPart, privateStr);
+                    online |= gContext->httpClient->setFound(result.privateXPart, privateStr);
                     utils::backupToTGAsync(resultsStr);
                 }
 
-                utils::appendToFileOnNewLine("results.txt", resultsStr);
+                if (/*!online &&*/ !utils::writeEncResultsToFile(aesEnc, "results.enc", resultsStr))
+                {
+                    utils::appendToFileOnNewLine("results.txt", resultsStr);
+                }
             }
 
             BOOST_LOG_TRIVIAL(info) << "ResultsProcessor: done";
