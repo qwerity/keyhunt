@@ -61,7 +61,7 @@ include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 ####################################################################################################################################################################################
 # Set compiler options
 # Set the C++ compiler flags for Debug and Release configurations
-set(CMAKE_CXX_FLAGS_DEBUG "-Wall")
+set(CMAKE_CXX_FLAGS_DEBUG "")
 set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-Wall")
 
