@@ -56,7 +56,6 @@ set_target_properties(cuda_keys PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     POSITION_INDEPENDENT_CODE ON
 )
-#target_compile_options(cuda_keys PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall>)
 
 target_link_libraries(cuda_keys PRIVATE CUDA::cudart_static)
 

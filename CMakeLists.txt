@@ -93,7 +93,7 @@ set(MAIN_SRC
     results_processor.h
 )
 add_executable(${PROJECT_NAME} ${MAIN_SRC})
-suppress_msvc_warnings(${PROJECT_NAME})
+suppress_target_msvc_warnings(${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE util)
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
