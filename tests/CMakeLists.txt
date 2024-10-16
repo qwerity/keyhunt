@@ -14,7 +14,6 @@ FetchContent_MakeAvailable(catch2)
 link_libraries(Catch2::Catch2WithMain)
 
 ####################################################################################################################################################################################
-link_libraries(nlohmann_json::nlohmann_json)
 link_libraries(util)
 
 ####################################################################################################################################################################################
@@ -23,26 +22,18 @@ if(UNIX)
 endif()
 
 ####################################################################################################################################################################################
-add_executable(hash_test
-    hash_test.cpp
-)
+add_executable(hash_test hash_test.cpp)
 target_link_libraries(hash_test PRIVATE cuda_keys)
-target_link_libraries(hash_test PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 if(UNIX)
     target_link_libraries(hash_test PRIVATE TBB::tbb)
 endif()
 
 ####################################################################################################################################################################################
-add_executable(aes_enc_test
-    aes_enc_test.cpp
-)
+add_executable(aes_enc_test aes_enc_test.cpp)
 
 ####################################################################################################################################################################################
-add_executable(private_key_generation_tests
-    private_key_generation_tests.cpp
-)
+add_executable(private_key_generation_tests private_key_generation_tests.cpp)
 target_link_libraries(private_key_generation_tests PRIVATE cuda_keys)
-target_link_libraries(private_key_generation_tests PRIVATE ${Boost_LIBRARIES})
 
 ####################################################################################################################################################################################
 add_executable(http_client_test http_client_test.cpp)

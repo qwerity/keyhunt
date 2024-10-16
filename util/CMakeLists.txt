@@ -39,7 +39,7 @@ set(SRC_FILES
 add_library(util STATIC ${SRC_FILES})
 
 target_link_libraries(util PRIVATE nlohmann_json::nlohmann_json)
-target_link_libraries(util PRIVATE ${Boost_LIBRARIES})
+target_link_libraries(util PRIVATE Boost::log Boost::iostreams)
 target_link_libraries(util PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 
 ####################################################################################################################################################################################

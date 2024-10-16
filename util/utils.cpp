@@ -17,18 +17,16 @@
 #include <format>
 #include <random>
 
-#include <boost/regex.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/utility/setup.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
-
 #include <boost/beast/ssl.hpp>
+#include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/io_context.hpp>
-#include <boost/beast/http.hpp>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
