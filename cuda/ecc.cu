@@ -232,7 +232,15 @@ void ECC::generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const
     mImpl->generatePrivateKeysForXPerIteration(privateXPart, iteration);
 }
 
-void ECC::getPrivateKeys(thrust::host_vector<uint256_t>& h_privateKeys) const
+//void ECC::getPrivateKeys(thrust::host_vector<uint256_t>& h_privateKeys) const
+//{
+//    mImpl->getPrivateKeys(h_privateKeys);
+//}
+
+void ECC::getPrivateKeys(std::vector<uint256_t>& h_privateKeys) const
 {
-    mImpl->getPrivateKeys(h_privateKeys);
+    thrust::host_vector<uint256_t> thrust_keys;
+    mImpl->getPrivateKeys(thrust_keys);
+
+    h_privateKeys.assign(thrust_keys.begin(), thrust_keys.end());
 }

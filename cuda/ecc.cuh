@@ -24,7 +24,11 @@ public:
     void calculatePublicKeys() const;
     void generatePrivateKeysForXPerIteration(uint32_t privateXPart, uint32_t iteration) const;
 
-    void getPrivateKeys(thrust::host_vector<uint256_t>& h_privateKeys) const;
+    /// TODO(ksh): somehow this function doesn't exported to the lib code, to figure out later
+    /// so disabling this interface for the moment
+    /// void getPrivateKeys(thrust::host_vector<uint256_t>& h_privateKeys) const;
+
+    void getPrivateKeys(std::vector<uint256_t>& h_privateKeys) const;
 
 private:
     struct Impl;

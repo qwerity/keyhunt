@@ -20,8 +20,10 @@ TEST_CASE("check private key generation", "")
     {
         cuEcc->generatePrivateKeysForXPerIteration(privateXPart, iteration);
 
-        thrust::host_vector<uint256_t> h_privateKeys;
+        std::vector<uint256_t> h_privateKeys;
         cuEcc->getPrivateKeys(h_privateKeys);
+        REQUIRE(h_privateKeys.size() == keysNumberPerIteration);
+
         for (uint32_t i = 0; i < h_privateKeys.size(); ++i)
         {
             uint32_t msg[16]{};
