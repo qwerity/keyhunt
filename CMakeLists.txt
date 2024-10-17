@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.29)
-project(cuda-keyhunt-pvk CXX CUDA)
+project(keyhunt-pvk CXX CUDA)
 
 ####################################################################################################################################################################################
 include(CMakeGraphVizOptions)
@@ -9,6 +9,9 @@ set(CMAKE_GRAPHVIZ_GENERATE_DEPENDENCIES ON)
 
 include(FetchContent)
 include(cmake/utils.cmake)
+
+####################################################################################################################################################################################
+include_directories(${CMAKE_SOURCE_DIR})
 
 ####################################################################################################################################################################################
 FetchContent_Declare(
@@ -75,31 +78,17 @@ else()
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -g")
 endif()
+
 ####################################################################################################################################################################################
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/bin)
 
-include_directories(${CMAKE_SOURCE_DIR})
-
 ####################################################################################################################################################################################
 add_subdirectory(util)
 add_subdirectory(cuda)
 add_subdirectory(tools)
-
-####################################################################################################################################################################################
-set(MAIN_SRC
-    main.cpp
-    key_hunter.cpp
-    key_hunter.h
-    results_processor.cpp
-    results_processor.h
-)
-add_executable(${PROJECT_NAME} ${MAIN_SRC})
-suppress_target_msvc_warnings(${PROJECT_NAME})
-
-target_link_libraries(${PROJECT_NAME} PRIVATE util)
-target_link_libraries(${PROJECT_NAME} PRIVATE cuda_keys)
+add_subdirectory(key_hunter)
 
 # TESTS ############################################################################################################################################################################
 if(BUILD_TESTS)
