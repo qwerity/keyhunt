@@ -25,3 +25,65 @@ function(suppress_msvc_warnings)
         /wd4530  # C4530: C++ exception handler used, but unwind semantics are not enabled. Specify /EHsc
     )
 endfunction()
+
+
+function(fetch_and_include_needed_libs)
+    include(FetchContent)
+
+    ################################################################################################################################################################################
+    FetchContent_Declare(
+        nlohmann_json
+        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+    )
+    FetchContent_MakeAvailable(nlohmann_json)
+
+    include_directories(SYSTEM ${nlohmann_json_SOURCE_DIR}/include)
+    ################################################################################################################################################################################
+endfunction()
+
+function(include_needed_libs)
+    ################################################################################################################################################################################
+    if(WIN32)
+        set(OPENSSL_ROOT_DIR "${CMAKE_SOURCE_DIR}/external/openssl")
+    endif()
+    set(OPENSSL_USE_STATIC_LIBS TRUE)
+    find_package(OpenSSL 3 REQUIRED)
+    include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
+    #################################################################################################################################################################################
+    find_package(CUDAToolkit 12 EXACT REQUIRED)
+    include_directories(SYSTEM ${CUDAToolkit_INCLUDE_DIRS})
+    ################################################################################################################################################################################
+    if(WIN32)
+        set(BOOST_ROOT "C:/boost/boost-1.86.0/")
+        set(BOOST_LIBRARYDIR "${BOOST_ROOT}/stage/lib")
+
+        set(Boost_USE_STATIC_LIBS ON)
+        set(Boost_USE_STATIC_RUNTIME ON)
+        set(Boost_USE_MULTITHREADED ON)
+        set(Boost_NO_WARN_NEW_VERSIONS ON)
+
+        # Set _WIN32_WINNT and BOOST_USE_WINAPI_VERSION to target Windows 8
+        add_definitions(-D_WIN32_WINNT=0x0602 -DBOOST_USE_WINAPI_VERSION=0x0602)
+    endif()
+
+    find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log iostreams regex)
+    include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
+    ################################################################################################################################################################################
+endfunction()
+
+function(configure_global_compilation_flags)
+    # Set compiler options
+    # Set the C++ compiler flags for Debug and Release configurations
+    set(CMAKE_CXX_FLAGS_DEBUG "-Wall")
+    set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-Wall")
+
+    if(WIN32)
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /fsanitize=address")
+        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /fsanitize=address")
+    else()
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
+        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -g")
+    endif()
+    ####################################################################################################################################################################################
+endfunction()

@@ -59,6 +59,10 @@ There is needed to install following packages to be able to compile
     - `./bootstrap.bat`
     - If there is existing previous builds please remove `bin.v2` and `stage` directories
     - `./b2 -j14 toolset=msvc-14.2 cxxflags="/std:c++20" threading=multi address-model=64 link=static runtime-link=static variant=release --with-headers --with-system --with-log --with-iostreams --with-regex stage`
+- Openssl 3.3.2 // no need to do this, already added to the project
+  - Open VS 2019 development prompt 
+  - `perl Configure VC-WIN64A no-shared no-docs no-tests --prefix=C:\Users\ksh\workspace\openssl-3.3.2\build --openssldir=C:\Users\ksh\workspace\openssl-3.3.2\build`
+  - `set CL=/MP && nmake install` // for multi-thread compilation
 
 ## Build Win x64
 - Open Terminal in project directory
