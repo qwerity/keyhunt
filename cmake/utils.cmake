@@ -69,6 +69,9 @@ function(include_needed_libs)
     find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log iostreams regex)
     include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
     ################################################################################################################################################################################
+    link_directories(${CMAKE_SOURCE_DIR}/external/wallycore/lib)
+    include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/external/wallycore/include)
+    ################################################################################################################################################################################
 endfunction()
 
 function(configure_global_compilation_flags)
@@ -79,6 +82,8 @@ function(configure_global_compilation_flags)
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-Wall")
 
     if(WIN32)
+        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
+
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /fsanitize=address")
         set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /fsanitize=address")
     else()
