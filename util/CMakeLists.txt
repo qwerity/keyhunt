@@ -33,6 +33,9 @@ set(SRC_FILES
 
     http_client.cpp
     http_client.h
+
+    bitcoin_utils.cpp
+    bitcoin_utils.h
 )
 
 # Define the static library target

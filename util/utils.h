@@ -64,6 +64,7 @@ namespace utils
 
     std::string toHex(const uint32_t* arr, uint32_t size);
     std::string toHex(const std::vector<uint8_t>& data);
+    std::string toHex(const unsigned char* data, uint32_t len);
     std::vector<uint8_t> fromHex(const std::string& hexStr);
 
     void initLogging(const LogConfig& log);

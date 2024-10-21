@@ -185,6 +185,18 @@ namespace utils
         return oss.str();
     }
 
+    std::string toHex(const unsigned char* data, uint32_t len)
+    {
+        std::ostringstream oss;
+        oss << std::hex << std::setfill('0');  // Set hex formatting and fill with '0'
+
+        for (uint32_t i = 0; i < len; ++i)
+        {
+            oss << std::setw(2) << static_cast<int>(data[i]);  // Convert byte to hex
+        }
+        return oss.str();
+    }
+
     std::vector<uint8_t> fromHex(const std::string& hexStr)
     {
         assert(hexStr.length() % 2 == 0);

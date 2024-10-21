@@ -39,8 +39,14 @@ target_link_libraries(private_key_generation_tests PRIVATE cuda_keys)
 add_executable(http_client_test http_client_test.cpp)
 
 ####################################################################################################################################################################################
+add_executable(mnemonic_tests mnemonic_tests.cpp)
+target_link_libraries(mnemonic_tests PRIVATE util)
+target_link_libraries(mnemonic_tests PRIVATE wallycore libsecp256k1)
+
+####################################################################################################################################################################################
 add_test(NAME hash_test COMMAND hash_test)
 add_test(NAME private_key_generation_tests COMMAND private_key_generation_tests)
 add_test(NAME http_client_test COMMAND http_client_test)
+add_test(NAME mnemonic_tests COMMAND mnemonic_tests)
 
 ####################################################################################################################################################################################
