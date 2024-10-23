@@ -9,6 +9,8 @@
 #include <util/utils.h>
 #include <util/bitcoin_utils.h>
 
+#include "test_data.h"
+
 TEST_CASE("Test WallyCore lib: mnemonic -> hd keys generation", "")
 {
     wally_init(1);
@@ -94,4 +96,113 @@ TEST_CASE("Test WallyCore lib: mnemonic -> hd keys generation", "")
     REQUIRE("18rggXncvjaGvwX4FbSTqFKZfg7iJKdxPT" == bitcoin::getP2PKHAddress(derived_key_4));
     REQUIRE("38fR6RcPqsWr7hpeusMde1XacC2fyjVRNR" == bitcoin::getP2SH_P2WPKHAddress(derived_key_4));
     REQUIRE("L3J3p57yzZxucz5Q3Rns92Vdo2jrWT9ToJRpKX3LiszV6poHgUak" == bitcoin::privateKeyWIF(derived_key_4));
+}
+
+TEST_CASE("Test WallyCore lib: mnemonic -> list", "")
+{
+    wally_init(1);
+    utils::ScopeOutRunner outRunner([](){
+        wally_cleanup(1);
+    });
+
+    const char* mnemonic = mnemonicTestData.mnemonic.c_str();
+
+    // BIP39 wordlist (English)
+    words* wordlist = nullptr;
+    REQUIRE(WALLY_OK == bip39_get_wordlist(nullptr, &wordlist));
+
+    // Verify the mnemonic is valid
+    REQUIRE(WALLY_OK == bip39_mnemonic_validate(wordlist, mnemonic));
+
+    // Passphrase (optional, can be empty)
+    const char* passphrase = "";
+
+    // Buffer for the seed (512 bits = 64 bytes)
+    unsigned char seed[BIP39_SEED_LEN_512];
+    memset(seed, 0, BIP39_SEED_LEN_512);
+
+    // Generate the seed from the mnemonic
+    REQUIRE(WALLY_OK == bip39_mnemonic_to_seed(mnemonic, passphrase, seed, BIP39_SEED_LEN_512, nullptr));
+    REQUIRE(mnemonicTestData.seed == utils::toHex(seed, BIP39_SEED_LEN_512));
+
+    ext_key root_key{};
+    REQUIRE(WALLY_OK == bip32_key_from_seed(seed, BIP39_SEED_LEN_512, BIP32_VER_MAIN_PRIVATE, 0, &root_key));
+
+    for (const auto& data : mnemonicTestData.keysTestData)
+    {
+        ext_key derived_key{};
+        REQUIRE(WALLY_OK == bip32_key_from_parent_path_str(&root_key, data.path.c_str(), 0, BIP32_FLAG_KEY_PRIVATE, &derived_key));
+        REQUIRE(data.privateKey == utils::toHex(derived_key.priv_key + 1, EC_PRIVATE_KEY_LEN));
+        REQUIRE(data.hash160 == utils::toHex(derived_key.hash160, HASH160_LEN));
+        if (data.path.find("49") != std::string::npos)
+        {
+            REQUIRE(data.btcAddress == bitcoin::getP2SH_P2WPKHAddress(derived_key));
+        }
+        else
+        {
+            REQUIRE(data.btcAddress == bitcoin::getP2PKHAddress(derived_key));
+        }
+    }
+}
+
+struct ext_key derive_key_from_parent(const ext_key& parent_key, uint32_t addr_index)
+{
+    ext_key child_key{};
+
+    // Derive the child key from the parent using the addr index
+    int ret = bip32_key_from_parent(&parent_key, addr_index, BIP32_FLAG_KEY_PRIVATE, &child_key);
+    if (ret != WALLY_OK)
+    {
+        std::cerr << "Error deriving child key for address index: " << addr_index << std::endl;
+        return {};
+    }
+
+    // Print the derived private key
+    std::cout << "Private Key (m/" << addr_index << "): " << bitcoin::privateKeyWIF(child_key) << std::endl;  // Skip the first byte (0x00)
+
+    return child_key;
+}
+
+#include <openssl/hmac.h>
+
+TEST_CASE("Check root key generation with OpenSSL")
+{
+    wally_init(1);
+    utils::ScopeOutRunner outRunner([](){
+        wally_cleanup(1);
+    });
+
+    const char* mnemonic = "tennis hero student waste adapt where fall call amused mandate hat panel";
+
+    // BIP39 wordlist (English)
+    words* wordlist = nullptr;
+    REQUIRE(WALLY_OK == bip39_get_wordlist(nullptr, &wordlist));
+
+    // Verify the mnemonic is valid
+    REQUIRE(WALLY_OK == bip39_mnemonic_validate(wordlist, mnemonic));
+
+    // Passphrase (optional, can be empty)
+    const char* passphrase = "";
+
+    // Buffer for the seed (512 bits = 64 bytes)
+    unsigned char seed[BIP39_SEED_LEN_512]{0};
+
+    // Generate the seed from the mnemonic
+    REQUIRE(WALLY_OK == bip39_mnemonic_to_seed(mnemonic, passphrase, seed, BIP39_SEED_LEN_512, nullptr));
+
+    unsigned char I[64]{0};  // Output from HMAC-SHA512
+    unsigned int len{0};
+    const unsigned char BITCOIN_SEED[] = "Bitcoin seed";
+    HMAC(EVP_sha512(), BITCOIN_SEED, sizeof(BITCOIN_SEED) - 1, seed, BIP39_SEED_LEN_512, I, &len);
+
+    std::vector<unsigned char> root_private_key(I, I + 32); // Root private key (first 32 bytes of I)
+    std::vector<unsigned char> chain_code(I + 32, I + 64); // Chain code (last 32 bytes of I)
+
+    // BIP32: Derive the root key from the seed
+    ext_key root_key{};
+    REQUIRE(WALLY_OK == bip32_key_from_seed(seed, BIP39_SEED_LEN_512, BIP32_VER_MAIN_PRIVATE, 0, &root_key));
+    std::cout << std::format("root key: [{}, {}]", utils::toHex(root_key.priv_key + 1, EC_PRIVATE_KEY_LEN), utils::toHex(root_key.chain_code, EC_PRIVATE_KEY_LEN)) << std::endl;
+
+    REQUIRE(0 == memcmp(root_private_key.data(), root_key.priv_key + 1, EC_PRIVATE_KEY_LEN));
+    REQUIRE(0 == memcmp(chain_code.data(), root_key.chain_code, EC_PRIVATE_KEY_LEN));
 }

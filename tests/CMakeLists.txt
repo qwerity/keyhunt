@@ -1,7 +1,11 @@
 project(cuda-keyhunt-pvk-tests CXX)
 
 ####################################################################################################################################################################################
-suppress_msvc_warnings()
+#suppress_msvc_warnings()
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/tests)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR}/bin/tests)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/bin/tests)
 
 ####################################################################################################################################################################################
 FetchContent_Declare(
@@ -39,7 +43,7 @@ target_link_libraries(private_key_generation_tests PRIVATE cuda_keys)
 add_executable(http_client_test http_client_test.cpp)
 
 ####################################################################################################################################################################################
-add_executable(mnemonic_tests mnemonic_tests.cpp)
+add_executable(mnemonic_tests mnemonic_tests.cpp test_data.h)
 target_link_libraries(mnemonic_tests PRIVATE util)
 target_link_libraries(mnemonic_tests PRIVATE wallycore libsecp256k1)
 
