@@ -26,6 +26,33 @@ function(suppress_msvc_warnings)
     )
 endfunction()
 
+function(print_compiler_flags module)
+    #message("${module}: CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")
+    message("--- ${module}: CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+    message("--- ${module}: CMAKE_CUDA_FLAGS: ${CMAKE_CUDA_FLAGS}")
+endfunction()
+
+function(configure_global_compilation_flags)
+    # Set compiler options
+    # Set the C++ compiler flags for Debug and Release configurations
+    set(CMAKE_CXX_FLAGS_DEBUG "-Wall")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-Wall")
+
+    if(WIN32)
+        # Set _WIN32_WINNT and BOOST_USE_WINAPI_VERSION to target Windows 8
+        set(WINAPI_VERSION 0x0602)
+        add_definitions(-D_WIN32_WINNT=${WINAPI_VERSION} -DBOOST_USE_WINAPI_VERSION=${WINAPI_VERSION})
+
+        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
+
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /fsanitize=address")
+        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /fsanitize=address")
+    else()
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
+        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -g")
+    endif()
+    ####################################################################################################################################################################################
+endfunction()
 
 function(fetch_and_include_needed_libs)
     include(FetchContent)
@@ -61,9 +88,6 @@ function(include_needed_libs)
         set(Boost_USE_STATIC_RUNTIME ON)
         set(Boost_USE_MULTITHREADED ON)
         set(Boost_NO_WARN_NEW_VERSIONS ON)
-
-        # Set _WIN32_WINNT and BOOST_USE_WINAPI_VERSION to target Windows 8
-        add_definitions(-D_WIN32_WINNT=0x0602 -DBOOST_USE_WINAPI_VERSION=0x0602)
     endif()
 
     find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log iostreams regex)
@@ -72,23 +96,4 @@ function(include_needed_libs)
     link_directories(${CMAKE_SOURCE_DIR}/external/wallycore/lib)
     include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/external/wallycore/include)
     ################################################################################################################################################################################
-endfunction()
-
-function(configure_global_compilation_flags)
-    # Set compiler options
-    # Set the C++ compiler flags for Debug and Release configurations
-    set(CMAKE_CXX_FLAGS_DEBUG "-Wall")
-    set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-Wall")
-
-    if(WIN32)
-        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
-
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /fsanitize=address")
-        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /fsanitize=address")
-    else()
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
-        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -g")
-    endif()
-    ####################################################################################################################################################################################
 endfunction()

@@ -13,9 +13,10 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 ################################################################################################################################################################################
 include(cmake/utils.cmake)
+configure_global_compilation_flags()
+
 include_needed_libs()
 fetch_and_include_needed_libs()
-configure_global_compilation_flags()
 
 ####################################################################################################################################################################################
 option(BUILD_TESTS "Build test_bitcoin executable." OFF)

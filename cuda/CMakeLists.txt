@@ -1,5 +1,18 @@
-set(CMAKE_CUDA_STANDARD 20)
+####################################################################################################################################################################################
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+if (MSVC)
+    if (MSVC_VERSION GREATER_EQUAL 1930)  # Visual Studio 2022
+        set(CMAKE_CUDA_STANDARD 20)
+    elseif (MSVC_VERSION GREATER_EQUAL 1920 AND MSVC_VERSION LESS 1930)  # Visual Studio 2019
+        set(CMAKE_CUDA_STANDARD 17)
+    else()
+        # Unknown or unsupported MSVC version. Using CUDA 17 by default.
+        set(CMAKE_CUDA_STANDARD 17)
+    endif()
+else()
+    set(CMAKE_CUDA_STANDARD 20)
+endif()
 
 ####################################################################################################################################################################################
 if (NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
@@ -12,9 +25,9 @@ message(STATUS "Using CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 set(CUDA_PROFILING_OUTPUT "--ptxas-options=-v")
 #set(CUDA_SUPPRESS_WARNINGS "-diag-suppress 20091")
 #set(CUDA_SUPPRESS_WARNINGS "-diag-suppress 20012")
-set(NVCC_COMPILATION_FLAGS "--split-compile=0 --threads=0")
+#set(NVCC_COMPILATION_FLAGS "--split-compile=0 --threads=0")
 
-set(CMAKE_CUDA_FLAGS "-rdc=true --default-stream per-thread ${CUDA_PROFILING_OUTPUT} ${CUDA_SUPPRESS_WARNINGS} ${NVCC_COMPILATION_FLAGS}")
+set(CMAKE_CUDA_FLAGS "-rdc=true --expt-relaxed-constexpr --default-stream per-thread ${CUDA_PROFILING_OUTPUT} ${CUDA_SUPPRESS_WARNINGS} ${NVCC_COMPILATION_FLAGS}")
 set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -g -lineinfo") # -G enables device-side debugging but significantly slows down the compilation
 set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -DNDEBUG")
 set(CMAKE_CUDA_FLAGS_RELWITHDEBINFO "-O2 -g -lineinfo")
@@ -49,6 +62,7 @@ set_source_files_properties(ecc.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G
 #set_source_files_properties(ecc_helper.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
 set_source_files_properties(secp256k1.cuh PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
 set_source_files_properties(hash160_lookup.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
+set_source_files_properties(atomic_list.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
 
 add_library(cuda_keys STATIC ${SRC})
 set_target_properties(cuda_keys PROPERTIES
