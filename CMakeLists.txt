@@ -34,6 +34,7 @@ add_subdirectory(util)
 add_subdirectory(cuda)
 add_subdirectory(tools)
 add_subdirectory(key_hunter)
+add_subdirectory(mnemonic_hunter)
 
 # TESTS ############################################################################################################################################################################
 if(BUILD_TESTS)
