@@ -14,6 +14,7 @@ __device__ void hashPublicKey(const uint256_t& x, const uint256_t& y, uint32_t *
     sha256PublicKey(x, y, hash);
 
     // Swap to little-endian
+    #pragma unroll
     for (uint32_t i = 0; i < 8; ++i)
     {
         hash[i] = endian(hash[i]);
@@ -27,6 +28,7 @@ __device__ void hashPublicKeyCompressed(const uint256_t& x, const uint32_t yPari
     sha256PublicKeyCompressed(x, yParity, hash);
 
     // Swap to little-endian
+    #pragma unroll
     for (uint32_t i = 0; i < 8; ++i)
     {
         hash[i] = endian(hash[i]);
@@ -42,6 +44,7 @@ __device__ void setResultFound(const uint32_t idx, const bool compressed, const 
     r.idx = idx;
     r.compressed = compressed;
 
+    #pragma unroll
     for (uint32_t i = 0; i < 8; ++i)
     {
         r.privateKey[i] = endian(privateKey[i]);
@@ -78,6 +81,7 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
 
     uint256_t privateKey;
 
+    #pragma unroll
     for(uint32_t i = 0; i < d_pointsPerThread; ++i)
     {
         readUInt256(privateKeys, i, privateKey);
@@ -119,6 +123,7 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
 
     uint256_t privateKey;
 
+    #pragma unroll
     for (uint32_t step{0}; step < bitsNumber; ++step)
     {
         const ecpoint_t& stepGPoint = d_gPointsPtr[step];
@@ -127,6 +132,7 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
         uint256_t inverse{0, 0, 0, 0, 0, 0, 0, 1};
         int batchIdx{0};
 
+        #pragma unroll
         for(uint32_t i = 0; i < d_pointsPerThread; ++i)
         {
             uint256_t publicX;
@@ -144,6 +150,7 @@ __global__ void multiplyStepKernel(const uint256_t *privateKeys)
 
         doBatchInverse(inverse);
 
+        #pragma unroll
         for (int i = d_pointsPerThread - 1; i >= 0; --i)
         {
             readUInt256(privateKeys, i, privateKey);

@@ -78,7 +78,7 @@ struct ECC::Impl
         mKeysNumberPerIteration = mGridSize * mBlockSize * mPointsPerThread;
     }
 
-    uint32_t getIndex(const uint32_t grid, const uint32_t block, const uint32_t idx) const
+    [[nodiscard]] uint32_t getIndex(const uint32_t grid, const uint32_t block, const uint32_t idx) const
     {
         // Total number of threads
         const uint32_t totalThreads = mGridSize * mBlockSize;
@@ -89,7 +89,7 @@ struct ECC::Impl
         return base + threadId;
     }
 
-    uint32_t getKeysNumberPerIteration() const
+    [[nodiscard]] uint32_t getKeysNumberPerIteration() const
     {
         return mKeysNumberPerIteration;
     }

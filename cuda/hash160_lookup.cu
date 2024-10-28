@@ -160,6 +160,8 @@ void Hash160Lookup::setTargets(const std::unordered_set<hash160>& hash160Targets
 __device__ void doRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5])
 {
     constexpr uint32_t iv[5] = {0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0};
+
+    #pragma unroll
     for (int i = 0; i < 5; i++)
     {
         hOut[i] = endian(hIn[i] + iv[(i + 1) % 5]);
@@ -169,6 +171,8 @@ __device__ void doRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5])
 __device__ bool checkBloomFilter(const hash160& hash)
 {
     bool foundMatch = true;
+
+    #pragma unroll
     for (unsigned int i : hash.h)
     {
         const uint32_t idx = i & d_BloomFilterMask;
@@ -191,6 +195,7 @@ __device__ bool checkBloomFilter64(const hash160& hash)
     idx[3] = (static_cast<uint64_t>(hash.h[2] ^ hash.h[3]) << 32 | (hash.h[3] ^ hash.h[4])) & d_BloomFilterMask64;
     idx[4] = (static_cast<uint64_t>(hash.h[0] ^ hash.h[3]) << 32 | (hash.h[1] ^ hash.h[3])) & d_BloomFilterMask64;
 
+    #pragma unroll
     for (unsigned long long i : idx)
     {
         const uint32_t f = d_BloomFilterPtr[i / 32];
@@ -218,6 +223,8 @@ __device__ bool checkHash(const hash160& hash)
     for (int j = 0; j < d_NumTargetHashes; ++j)
     {
         bool equal = true;
+
+        #pragma unroll
         for (uint32_t i = 0; i < 5; ++i)
         {
             equal &= (hash.h[i] == d_TargetHash[j][i]);
