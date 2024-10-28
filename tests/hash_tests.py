@@ -1,6 +1,6 @@
 import struct
 import hashlib
-from ecdsa import VerifyingKey, SECP256k1
+from ecdsa import VerifyingKey, SigningKey, SECP256k1
 
 # Step 1: Define the public key (hardcoded example)
 public_key_hex = "04ffa86eb932c8e50aeda2d191cfade48dd6c2d04b9f92882e68b6ba72606a07c41413d526b358f6586619a34d686b3d12b9e0c6ac9873424a9722405b67bc76c7"
@@ -59,5 +59,22 @@ sha256_hash = hash_object.hexdigest()
 
 # Print the result
 print(f"SHA-256: {sha256_hash}")
+
+####################################################################################
+private_key_bytes = bytes.fromhex(sha256_hash)
+
+# Create a SigningKey object from the private key bytes
+private_key = SigningKey.from_string(private_key_bytes, curve=SECP256k1)
+
+# Derive the public key
+public_key = private_key.verifying_key
+
+# Get the public key in bytes (compressed or uncompressed format)
+public_key_bytes_uncompressed = b"\x04" + public_key.to_string()
+public_key_bytes_compressed = public_key.to_string("compressed")
+
+# Display the public key in hexadecimal format
+print("Public key (uncompressed):", public_key_bytes_uncompressed.hex())
+print("Public key (compressed):", public_key_bytes_compressed.hex())
 
 ####################################################################################

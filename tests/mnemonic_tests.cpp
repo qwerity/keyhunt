@@ -9,6 +9,8 @@
 #include <util/utils.h>
 #include <util/bitcoin_utils.h>
 
+#include <openssl/hmac.h>
+
 #include "test_data.h"
 
 TEST_CASE("Test WallyCore lib: mnemonic -> hd keys generation", "")
@@ -50,6 +52,14 @@ TEST_CASE("Test WallyCore lib: mnemonic -> hd keys generation", "")
 
     // Serialize the root key and convert to Base58Check (xprv format)
     REQUIRE("xprv9s21ZrQH143K3NnNxz2WPZ3UTVw8kEZDSSvxdiubKHVWaBbk8K6Q3LAbhWCHyAEqoJUXMq2RGqaTJNW8kxNg8GRQ1bDotct4RejcpCTGaQ9" == bitcoin::keyToBase58(root_key, BIP32_FLAG_KEY_PRIVATE));
+
+    const std::string m0 = "m/0";
+    ext_key m0Key{};
+    REQUIRE(WALLY_OK == bip32_key_from_parent_path_str(&root_key, m0.c_str(), 0, BIP32_FLAG_KEY_PRIVATE, &m0Key));
+    REQUIRE("c25ec8d53730cf453fa516cfe9ee4995c39318e0595dbcb15e4d877bde1a8630" == utils::toHex(m0Key.priv_key + 1, EC_PRIVATE_KEY_LEN));
+    REQUIRE("afa3778cd632b207d5e17ba7f6eb409f326d6fe5d82d7c727c9ae77a89aee1ac" == utils::toHex(m0Key.chain_code, EC_PRIVATE_KEY_LEN));
+    REQUIRE("03250897e9364b8a41376ec13b2a38f2102e03616c725bdc9a5628b0bf00b0db99" == utils::toHex(m0Key.pub_key, EC_PUBLIC_KEY_LEN));
+    REQUIRE("2487e5b2c039c635a819b05a01cdf3e92d266293" == utils::toHex(m0Key.hash160, HASH160_LEN));
 
     const std::string accountPath = "m/44'/0'/0'";
     ext_key account_key{};
@@ -163,8 +173,6 @@ struct ext_key derive_key_from_parent(const ext_key& parent_key, uint32_t addr_i
     return child_key;
 }
 
-#include <openssl/hmac.h>
-
 TEST_CASE("Check root key generation with OpenSSL")
 {
     wally_init(1);
@@ -201,7 +209,8 @@ TEST_CASE("Check root key generation with OpenSSL")
     // BIP32: Derive the root key from the seed
     ext_key root_key{};
     REQUIRE(WALLY_OK == bip32_key_from_seed(seed, BIP39_SEED_LEN_512, BIP32_VER_MAIN_PRIVATE, 0, &root_key));
-    std::cout << std::format("root key: [{}, {}]", utils::toHex(root_key.priv_key + 1, EC_PRIVATE_KEY_LEN), utils::toHex(root_key.chain_code, EC_PRIVATE_KEY_LEN)) << std::endl;
+    REQUIRE("98ca9c9345c45dbb69adaea3d52f1eedeb7b82ec6dc6ec178ece47d15f737c3a" == utils::toHex(root_key.priv_key + 1, EC_PRIVATE_KEY_LEN));
+    REQUIRE("8459d6d7804b3afacec9929c35b1328f3ee0e7acfce0f7d268f03737480cbb96" == utils::toHex(root_key.chain_code, EC_PRIVATE_KEY_LEN));
 
     REQUIRE(0 == memcmp(root_private_key.data(), root_key.priv_key + 1, EC_PRIVATE_KEY_LEN));
     REQUIRE(0 == memcmp(chain_code.data(), root_key.chain_code, EC_PRIVATE_KEY_LEN));
