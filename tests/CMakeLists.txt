@@ -4,8 +4,8 @@ project(cuda-keyhunt-pvk-tests CXX)
 #suppress_msvc_warnings()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/tests)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR}/bin/tests)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/bin/tests)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE}/tests)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG}/tests)
 
 ####################################################################################################################################################################################
 FetchContent_Declare(
@@ -27,7 +27,7 @@ endif()
 
 ####################################################################################################################################################################################
 add_executable(hash_test hash_test.cpp)
-target_link_libraries(hash_test PRIVATE cuda_keys)
+target_link_libraries(hash_test PRIVATE ecc_cuda)
 if(UNIX)
     target_link_libraries(hash_test PRIVATE TBB::tbb)
 endif()
@@ -37,7 +37,7 @@ add_executable(aes_enc_test aes_enc_test.cpp)
 
 ####################################################################################################################################################################################
 add_executable(private_key_generation_tests private_key_generation_tests.cpp)
-target_link_libraries(private_key_generation_tests PRIVATE cuda_keys)
+target_link_libraries(private_key_generation_tests PRIVATE ecc_cuda)
 
 ####################################################################################################################################################################################
 add_executable(http_client_test http_client_test.cpp)
@@ -52,5 +52,15 @@ add_test(NAME hash_test COMMAND hash_test)
 add_test(NAME private_key_generation_tests COMMAND private_key_generation_tests)
 add_test(NAME http_client_test COMMAND http_client_test)
 add_test(NAME mnemonic_tests COMMAND mnemonic_tests)
+
+####################################################################################################################################################################################
+####################################################################################################################################################################################
+add_executable(cuda_secp256k1_v2_test cuda_secp256k1_v2_test.cu)
+target_link_libraries(cuda_secp256k1_v2_test PRIVATE util)
+target_link_libraries(cuda_secp256k1_v2_test PRIVATE ecc_cuda)
+set_target_properties(cuda_secp256k1_v2_test PROPERTIES
+    CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    CUDA_SEPARABLE_COMPILATION ON
+)
 
 ####################################################################################################################################################################################

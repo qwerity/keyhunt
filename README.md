@@ -50,7 +50,7 @@ There is needed to install following packages to be able to compile
 - libboost-dev-all
 
 ### Windows x64
-- Visual Studio 2019 Community
+- Visual Studio 2019/2022 Community 
 - [NVidia Cuda Toolkit 12.6.1](https://developer.download.nvidia.com/compute/cuda/12.6.1/local_installers/cuda_12.6.1_560.94_windows.exe)
 - Boost 1.86
   - [Download archive](https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.7z)
@@ -58,7 +58,7 @@ There is needed to install following packages to be able to compile
   - Open Powershell in **BOOST_ROOT**
     - `./bootstrap.bat`
     - If there is existing previous builds please remove `bin.v2` and `stage` directories
-    - `./b2 -j14 toolset=msvc-14.2 cxxflags="/std:c++20" threading=multi address-model=64 link=static runtime-link=static variant=debug,release --with-headers --with-system --with-log --with-iostreams --with-regex stage`
+    - `./b2 -j14 toolset=msvc-14.2,msvc-14.3 cxxflags="/std:c++20" threading=multi address-model=64 link=static runtime-link=static variant=debug,release --with-headers --with-system --with-log --with-iostreams --with-regex stage`
 - Openssl 3.3.2 // no need to do this, already added to the project
   - Open VS 2019 development prompt 
   - `perl Configure VC-WIN64A no-shared no-docs no-tests --prefix=C:\Users\ksh\workspace\openssl-3.3.2\build --openssldir=C:\Users\ksh\workspace\openssl-3.3.2\build`

@@ -13,17 +13,19 @@ function(suppress_target_msvc_warnings target)
 endfunction()
 
 function(suppress_msvc_warnings)
-    add_compile_options(
-        /wd5045  # Spectre mitigation warning
-        /wd4514  # Unreferenced inline function removed
-        /wd4668  # #if not defined preprocessor issue
-        /wd4365  # Signed/unsigned mismatch
-        /wd4820  # Padding added after data member
-        /wd4868  # C4868: compiler may not enforce left-to-right evaluation order in braced initializer list
-        /wd4710  # C4710: function not inlined
-        /wd4711  # C4711: selected for automatic inline expansion
-        /wd4530  # C4530: C++ exception handler used, but unwind semantics are not enabled. Specify /EHsc
-    )
+    if(MSVC)
+        add_compile_options(
+            /wd5045  # Spectre mitigation warning
+            /wd4514  # Unreferenced inline function removed
+            /wd4668  # #if not defined preprocessor issue
+            /wd4365  # Signed/unsigned mismatch
+            /wd4820  # Padding added after data member
+            /wd4868  # C4868: compiler may not enforce left-to-right evaluation order in braced initializer list
+            /wd4710  # C4710: function not inlined
+            /wd4711  # C4711: selected for automatic inline expansion
+            /wd4530  # C4530: C++ exception handler used, but unwind semantics are not enabled. Specify /EHsc
+        )
+    endif()
 endfunction()
 
 function(print_compiler_flags module)

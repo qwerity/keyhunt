@@ -6,8 +6,6 @@
 #include "hash160_lookup.cuh"
 #include "secp256k1.cuh"
 
-#include "secp256k1_v2/bip32.cuh"
-
 #include "util/common.h"
 
 __device__ void hashPublicKey(const uint256_t& x, const uint256_t& y, uint32_t *digestOut)
@@ -118,33 +116,72 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
     }
 }
 
-__global__ void publicKeyGenerationKernel(const uint256_t *privateKeys)
+__global__ void multiplyStepKernel(const uint256_t *privateKeys)
 {
-    for(uint32_t i = 0; i < d_pointsPerThread; ++i)
+    // 256 is a 256 bit in a private key
+    constexpr uint32_t bitsNumber{256};
+
+    uint256_t privateKey;
+
+    #pragma unroll
+    for (uint32_t step{0}; step < bitsNumber; ++step)
     {
-        extended_private_key_t privateExKey;
-        extended_public_key_t publicEXKey;
+        const ecpoint_t& stepGPoint = d_gPointsPtr[step];
 
-        auto* privateKey = reinterpret_cast<uint256_t*>(privateExKey.key);
-        readUInt256(privateKeys, i, *privateKey);
+        // Multiply together all (_Gx - x) and then invert
+        uint256_t inverse{0, 0, 0, 0, 0, 0, 0, 1};
+        int batchIdx{0};
 
-        /// TODO: optimize this
-        for (uint32_t j = 0; j < 8; ++j)
+        #pragma unroll
+        for(uint32_t i = 0; i < d_pointsPerThread; ++i)
         {
-            privateKey->v[j] = endian(privateKey->v[j]);
+            uint256_t publicX;
+            readUInt256(d_publicKeyXPtr, i, publicX);
+
+            readUInt256(privateKeys, i, privateKey);
+
+            const uint32_t bit = privateKey[7 - step / 32] & 1 << (step % 32);
+            if (bit != 0 && !isInfinity(publicX))
+            {
+                beginBatchAddWithDouble(&stepGPoint, publicX, d_multChainPtr, batchIdx, inverse);
+                batchIdx++;
+            }
         }
-        generatePublicFromPrivateKey(&privateExKey, &publicEXKey);
 
-        auto* newX = reinterpret_cast<uint256_t*>(publicEXKey.key);
-        auto* newY = reinterpret_cast<uint256_t*>(publicEXKey.key + 32);
+        doBatchInverse(inverse);
 
-        for (uint32_t j = 0; j < 8; ++j)
+        #pragma unroll
+        for (int i = d_pointsPerThread - 1; i >= 0; --i)
         {
-            newX->v[j] = endian(newX->v[j]);
-            newY->v[j] = endian(newY->v[j]);
-        }
+            readUInt256(privateKeys, i, privateKey);
 
-        writeUInt256(*newX, i, d_publicKeyXPtr);
-        writeUInt256(*newY, i, d_publicKeyYPtr);
+            const uint32_t bit = privateKey[7 - step / 32] & 1 << (step % 32);
+            if (bit != 0)
+            {
+                uint256_t newX;
+                uint256_t newY;
+
+                uint256_t publicX;
+                readUInt256(d_publicKeyXPtr, i, publicX);
+
+                if (!isInfinity(publicX))
+                {
+                    uint256_t publicY;
+                    readUInt256(d_publicKeyYPtr, i, publicY);
+
+                    batchIdx--;
+                    completeBatchAddWithDouble(&stepGPoint, publicX, publicY, batchIdx, d_multChainPtr, inverse, newX, newY);
+                }
+                else
+                {
+                    newX = stepGPoint.x;
+                    newY = stepGPoint.y;
+                }
+
+                writeUInt256(newX, i, d_publicKeyXPtr);
+                writeUInt256(newY, i, d_publicKeyYPtr);
+            }
+        }
     }
 }
+

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <thrust/host_vector.h>
 #include "util/cuda_util.h"
 #include "util/common_host.h"
 

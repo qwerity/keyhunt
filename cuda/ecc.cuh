@@ -1,7 +1,9 @@
 #pragma once
 
 #include "defines.cuh"
-#include <thrust/host_vector.h>
+
+#include <vector>
+#include <memory>
 
 class ECC
 {

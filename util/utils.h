@@ -35,13 +35,13 @@ namespace utils
     class ScopeOutRunner
     {
     public:
-        explicit ScopeOutRunner(std::function<void()> f, bool enabled = true) : mf(std::move(f)), mEnabled(enabled) {};
+        explicit ScopeOutRunner(std::function<void()> f, bool enabled = true) : mf(std::move(f)), mEnabled(enabled) {}
         ~ScopeOutRunner()
         {
             if(mEnabled && mf) { mf(); }
         }
 
-        void setEnabled(bool e) { mEnabled = e; };
+        void setEnabled(bool e) { mEnabled = e; }
         void enable() { setEnabled(true); }
         void disable() { setEnabled(false); }
 
@@ -60,11 +60,14 @@ namespace utils
 
     bool appendToFileOnNewLine(const std::string &fileName, const std::string &s);
 
-    inline unsigned int endian(unsigned int x) { return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24); }
+    inline uint32_t endian(uint32_t x) { return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24); }
+    inline uint64_t endian64(uint64_t x) { return (x << 56) | ((x << 40) & 0x00ff000000000000) | ((x << 24) & 0x0000ff0000000000) | ((x << 8)  & 0x000000ff00000000) |
+                                                ((x >> 8) & 0x00000000ff000000) | ((x >> 24) & 0x0000000000ff0000) | ((x >> 40) & 0x000000000000ff00) | (x >> 56);
+    }
 
     std::string toHex(const uint32_t* arr, uint32_t size);
     std::string toHex(const std::vector<uint8_t>& data);
-    std::string toHex(const unsigned char* data, uint32_t len);
+    std::string toHex(const uint8_t* data, uint32_t len);
     std::vector<uint8_t> fromHex(const std::string& hexStr);
 
     void initLogging(const LogConfig& log);

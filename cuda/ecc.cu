@@ -67,15 +67,15 @@ struct ECC::Impl
     {
         int minGridSize{};
         int recommendedBlockSize{};
-        cudaCheckError(cudaOccupancyMaxPotentialBlockSize(&minGridSize, &recommendedBlockSize, multiplyStepKernel));
+        cudaCheckError(cudaOccupancyMaxPotentialBlockSize(&minGridSize, &recommendedBlockSize, publicKeyGenerationKernel));
 
         mBlockSize = (blockSize != 0) ? blockSize : recommendedBlockSize;
-        std::fprintf(stderr, "minGridSize: %d, recommendedBlockSize: %d, set blockSize; %u\n", minGridSize, recommendedBlockSize, mBlockSize);
 
         setPointsPerThread(pointsPerThread);
         mGridSize = minGridSize;
 
         mKeysNumberPerIteration = mGridSize * mBlockSize * mPointsPerThread;
+        std::fprintf(stderr, "minGridSize: %d, recommendedBlockSize: %d, set blockSize: %u, mKeysNumberPerIteration: %u\n", minGridSize, recommendedBlockSize, mBlockSize, mKeysNumberPerIteration);
     }
 
     [[nodiscard]] uint32_t getIndex(const uint32_t grid, const uint32_t block, const uint32_t idx) const
@@ -191,8 +191,8 @@ struct ECC::Impl
         const uint256_t *privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys.data());
         cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
         {
-            multiplyStepKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
-        }, "multiplyStepKernel"));
+            publicKeyGenerationKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+        }, "publicKeyGenerationKernel"));
 
         cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
         {
@@ -231,11 +231,6 @@ void ECC::generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const
 {
     mImpl->generatePrivateKeysForXPerIteration(privateXPart, iteration);
 }
-
-//void ECC::getPrivateKeys(thrust::host_vector<uint256_t>& h_privateKeys) const
-//{
-//    mImpl->getPrivateKeys(h_privateKeys);
-//}
 
 void ECC::getPrivateKeys(std::vector<uint256_t>& h_privateKeys) const
 {

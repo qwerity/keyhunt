@@ -8,8 +8,6 @@
 
 namespace bitcoin
 {
-    #define BIP32_KEY_LEN 33
-
     std::string keyToBase58(const ext_key& key, uint32_t serFlags)
     {
         unsigned char serialized_key[BIP32_SERIALIZED_LEN]{};

@@ -1,7 +1,8 @@
 #pragma once
+
 #include "defines.cuh"
 
-__global__ void multiplyStepKernel(const uint256_t *privateKeys);
+__global__ void publicKeyGenerationKernel(const uint256_t *privateKeys);
 __global__ void checkHashKernel(const uint256_t *privateKeys);
 
 // Check publickey hash160 compressed/uncompressed/both

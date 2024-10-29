@@ -27,13 +27,26 @@ set(CUDA_PROFILING_OUTPUT "--ptxas-options=-v")
 #set(CUDA_SUPPRESS_WARNINGS "-diag-suppress 20012")
 #set(NVCC_COMPILATION_FLAGS "--split-compile=0 --threads=0")
 
-set(CMAKE_CUDA_FLAGS "-rdc=true --expt-relaxed-constexpr --default-stream per-thread ${CUDA_PROFILING_OUTPUT} ${CUDA_SUPPRESS_WARNINGS} ${NVCC_COMPILATION_FLAGS}")
-set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -g -lineinfo") # -G enables device-side debugging but significantly slows down the compilation
-set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -DNDEBUG")
-set(CMAKE_CUDA_FLAGS_RELWITHDEBINFO "-O2 -g -lineinfo")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr ${CUDA_PROFILING_OUTPUT} ${CUDA_SUPPRESS_WARNINGS} ${NVCC_COMPILATION_FLAGS}")
+set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -O0 -G") # -G enables device-side debugging but significantly slows down the compilation
+
+#message("CMAKE_CUDA_FLAGS: ${CMAKE_CUDA_FLAGS}")
+#message("CMAKE_CUDA_FLAGS_DEBUG: ${CMAKE_CUDA_FLAGS_DEBUG}")
+#message("CMAKE_CUDA_FLAGS_RELEASE: ${CMAKE_CUDA_FLAGS_RELEASE}")
 
 ####################################################################################################################################################################################
-set(SRC
+set(SECP256K1_V2_SRC
+    secp256k1_v2/sha.cu
+    secp256k1_v2/hmac.cu
+    secp256k1_v2/bip32.cu
+    secp256k1_v2/bip39.cu
+    secp256k1_v2/secp256k1.cu
+    secp256k1_v2/ripemd160.cu
+    secp256k1_v2/utils.cu
+)
+
+####################################################################################################################################################################################
+set(ECC_SRC
     ecc.cu
     ecc.cuh
     ecc_helper.cu
@@ -57,20 +70,15 @@ set(SRC
     atomic_list.cu
 )
 
-set_source_files_properties(hash160_lookup.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
-set_source_files_properties(ecc.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
-#set_source_files_properties(ecc_helper.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
-set_source_files_properties(secp256k1.cuh PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
-set_source_files_properties(hash160_lookup.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
-set_source_files_properties(atomic_list.cu PROPERTIES COMPILE_FLAGS $<$<CONFIG:Debug>:-G>)
+add_library(ecc_cuda STATIC ${ECC_SRC} ${SECP256K1_V2_SRC})
+target_include_directories(ecc_cuda PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(ecc_cuda PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/secp256k1_v2)
 
-add_library(cuda_keys STATIC ${SRC})
-set_target_properties(cuda_keys PROPERTIES
+set_target_properties(ecc_cuda PROPERTIES
     CUDA_RESOLVE_DEVICE_SYMBOLS ON
     CUDA_SEPARABLE_COMPILATION ON
-    POSITION_INDEPENDENT_CODE ON
 )
 
-target_link_libraries(cuda_keys PRIVATE CUDA::cudart_static)
+target_link_libraries(ecc_cuda PRIVATE CUDA::cudart_static)
 
 ####################################################################################################################################################################################

@@ -4,7 +4,7 @@
 #include <wally_bip32.h>
 #include <wally_crypto.h>
 #include <iostream>
-#include <cstring>  // for memset
+#include <cstring>
 
 #include <util/utils.h>
 #include <util/bitcoin_utils.h>
