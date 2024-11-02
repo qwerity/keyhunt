@@ -107,11 +107,158 @@ __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* pare
     cuda_memcpy_offset(&child->chainCode[0], reinterpret_cast<const uint8_t*>(&hmacSHA512Result), 32, 32);
 }
 
-__global__ void mnemonicToHash160(const uint8_t mnemonic[SIZE_MNEMONIC_FRAME], uint8_t* masterExKey, uint32_t seed[64 / 4], uint8_t* childKey, uint16_t childNumber, extended_public_key_t* childPublicKey, uint32_t* hash160_bytes)
+__global__ void mnemonicToHash160(const uint8_t* mnemonic, uint8_t* masterExKey, uint32_t* seed, uint8_t* childKey, uint8_t* childChildKey, uint8_t* hardenedChildKey, uint16_t childNumber, extended_public_key_t* childPublicKey, uint32_t* hash160_bytes)
 {
     mnemonicToExtendedPrivateKey(mnemonic, seed, masterExKey);
+    hardenedPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(masterExKey), reinterpret_cast<extended_private_key_t*>(hardenedChildKey), childNumber);
     normalPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(masterExKey), reinterpret_cast<extended_private_key_t*>(childKey), childNumber);
+    normalPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(childKey), reinterpret_cast<extended_private_key_t*>(childChildKey), childNumber);
     generatePublicFromPrivateKey(reinterpret_cast<const extended_private_key_t*>(childKey), childPublicKey);
     publicKeyToHash160(childPublicKey, hash160_bytes);
 }
 
+__constant__ uint32_t dev_num_bytes_find[1];
+__constant__ uint32_t dev_generate_path[10];
+__constant__ uint32_t dev_num_paths[1];
+__constant__ uint32_t dev_num_childs[1];
+__constant__ int16_t dev_static_words_indices[12];
+__device__ void generatePublicsForMnemonicByPaths(const uint8_t* mnemonic, const extended_private_key_t* masterKey)
+{
+    extended_private_key_t target_key;
+    extended_private_key_t target_key_fo_pub;
+    extended_private_key_t master_private_fo_extint;
+    extended_public_key_t target_public_key;
+    
+    //______________________________________________________________________________________________________________________
+    if (dev_generate_path[0] != 0)
+    {
+        normalPrivateChildFromPrivate(masterKey, &target_key, 0);
+        //m/0/x
+        for (int i = 0; i < dev_num_childs[0]; i++)
+        {
+            normalPrivateChildFromPrivate(&target_key, &target_key_fo_pub, i);
+        }
+    }
+
+    //______________________________________________________________________________________________________________________
+    if (dev_generate_path[1] != 0)
+    {
+        normalPrivateChildFromPrivate(masterKey, &target_key, 1);
+        //m/1/x
+        for (int i = 0; i < dev_num_childs[0]; i++)
+        {
+            normalPrivateChildFromPrivate(&target_key, &target_key_fo_pub, i);
+            generatePublicFromPrivateKey(&target_key_fo_pub, &target_public_key);
+        }
+    }
+    //______________________________________________________________________________________________________________________
+    if ((dev_generate_path[2] != 0) || (dev_generate_path[3] != 0))
+    {
+        //m/0
+        normalPrivateChildFromPrivate(masterKey, &master_private_fo_extint, 0);
+
+        if (dev_generate_path[2] != 0)
+        {
+            //m/0/0
+            normalPrivateChildFromPrivate(&master_private_fo_extint, &target_key, 0);
+            //m/0/0/x
+            for (int i = 0; i < dev_num_childs[0]; i++)
+            {
+                normalPrivateChildFromPrivate(&target_key, &target_key_fo_pub, i);
+                generatePublicFromPrivateKey(&target_key_fo_pub, &target_public_key);
+            }
+        }
+        if (dev_generate_path[3] != 0)
+        {
+            //m/0/1
+            normalPrivateChildFromPrivate(&master_private_fo_extint, &target_key, 1);
+            //m/0/1/x
+            for (int i = 0; i < dev_num_childs[0]; i++)
+            {
+                normalPrivateChildFromPrivate(&target_key, &target_key_fo_pub, i);
+                generatePublicFromPrivateKey(&target_key_fo_pub, &target_public_key);
+            }
+        }
+    }
+    //______________________________________________________________________________________________________________________
+    if ((dev_generate_path[4] != 0) || (dev_generate_path[5] != 0))
+    {
+        hardenedPrivateChildFromPrivate(masterKey, &target_key, 44);
+        hardenedPrivateChildFromPrivate(&target_key, &target_key, 0);
+        hardenedPrivateChildFromPrivate(&target_key, &master_private_fo_extint, 0);
+        //______________________________________________________________________________________________________________________
+        if (dev_generate_path[4] != 0)
+        {
+            normalPrivateChildFromPrivate(&master_private_fo_extint, &target_key, 0);
+            //m/44'/0'/0'/0/x
+            for (int i = 0; i < dev_num_childs[0]; i++)
+            {
+                normalPrivateChildFromPrivate(&target_key, &target_key_fo_pub, i);
+            }
+        }
+        //______________________________________________________________________________________________________________________
+        if (dev_generate_path[5] != 0)
+        {
+            normalPrivateChildFromPrivate(&master_private_fo_extint, &target_key, 1);
+            //m/44'/0'/0'/1/x
+            for (int i = 0; i < dev_num_childs[0]; i++)
+            {
+                normalPrivateChildFromPrivate(&target_key, &target_key_fo_pub, i);
+            }
+        }
+    }
+    //______________________________________________________________________________________________________________________
+    if ((dev_generate_path[6] != 0) || (dev_generate_path[7] != 0))
+    {
+        hardenedPrivateChildFromPrivate(masterKey, &target_key, 49);
+        hardenedPrivateChildFromPrivate(&target_key, &target_key, 0);
+        hardenedPrivateChildFromPrivate(&target_key, &master_private_fo_extint, 0);
+        //______________________________________________________________________________________________________________________
+        if (dev_generate_path[6] != 0)
+        {
+            normalPrivateChildFromPrivate(&master_private_fo_extint, &target_key, 0);
+            //m/49'/0'/0'/0/x
+            for (int i = 0; i < dev_num_childs[0]; i++)
+            {
+                normalPrivateChildFromPrivate(&target_key, &target_key_fo_pub, i);
+            }
+        }
+        //______________________________________________________________________________________________________________________
+        if (dev_generate_path[7] != 0)
+        {
+            normalPrivateChildFromPrivate(&master_private_fo_extint, &target_key, 1);
+            //m/49'/0'/0'/1/x
+            for (int i = 0; i < dev_num_childs[0]; i++)
+            {
+                normalPrivateChildFromPrivate(&target_key, &target_key_fo_pub, i);
+            }
+        }
+    }
+    //______________________________________________________________________________________________________________________
+    if ((dev_generate_path[8] != 0) || (dev_generate_path[9] != 0))
+    {
+        hardenedPrivateChildFromPrivate(masterKey, &target_key, 84);
+        hardenedPrivateChildFromPrivate(&target_key, &target_key, 0);
+        hardenedPrivateChildFromPrivate(&target_key, &master_private_fo_extint, 0);
+        //______________________________________________________________________________________________________________________
+        if (dev_generate_path[8] != 0)
+        {
+            normalPrivateChildFromPrivate(&master_private_fo_extint, &target_key, 0);
+            //m/84'/0'/0'/0/x
+            for (int i = 0; i < dev_num_childs[0]; i++)
+            {
+                normalPrivateChildFromPrivate(&target_key, &target_key_fo_pub, i);
+            }
+        }
+        //______________________________________________________________________________________________________________________
+        if (dev_generate_path[9] != 0)
+        {
+            normalPrivateChildFromPrivate(&master_private_fo_extint, &target_key, 1);
+            //m/84'/0'/0'/1/x
+            for (int i = 0; i < dev_num_childs[0]; i++)
+            {
+                normalPrivateChildFromPrivate(&target_key, &target_key_fo_pub, i);
+            }
+        }
+    }
+}

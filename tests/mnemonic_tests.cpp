@@ -61,6 +61,24 @@ TEST_CASE("Test WallyCore lib: mnemonic -> hd keys generation", "")
     REQUIRE("03250897e9364b8a41376ec13b2a38f2102e03616c725bdc9a5628b0bf00b0db99" == utils::toHex(m0Key.pub_key, EC_PUBLIC_KEY_LEN));
     REQUIRE("2487e5b2c039c635a819b05a01cdf3e92d266293" == utils::toHex(m0Key.hash160, HASH160_LEN));
 
+    const std::string m00 = "m/0/0";
+    ext_key m00_Key{};
+    REQUIRE(WALLY_OK == bip32_key_from_parent_path_str(&root_key, m00.c_str(), 0, BIP32_FLAG_KEY_PRIVATE, &m00_Key));
+    REQUIRE("fee4d626b71f5f88d3d36fcd17e00096eebccaa045b373d1c286acd4c35137dc" == utils::toHex(m00_Key.priv_key + 1, EC_PRIVATE_KEY_LEN));
+
+    const std::string m0_hardened = "m/0'";
+    ext_key m0_hardenedKey{};
+    REQUIRE(WALLY_OK == bip32_key_from_parent_path_str(&root_key, m0_hardened.c_str(), 0, BIP32_FLAG_KEY_PRIVATE, &m0_hardenedKey));
+    REQUIRE("1de83cc85f2da1da4a3d491efa476e688f307e7e61131cf52bae4552cabed0e3" == utils::toHex(m0_hardenedKey.priv_key + 1, EC_PRIVATE_KEY_LEN));
+    REQUIRE("572686fd24298f96b8d38f86ef06156e8900a618aae86ff9c024cf0e8577ae35" == utils::toHex(m0_hardenedKey.chain_code, EC_PRIVATE_KEY_LEN));
+    REQUIRE("02f75252c81a2f504ce9c464d2ac8c9f7779f380a51c9b8465669f2f1b45b9d8fb" == utils::toHex(m0_hardenedKey.pub_key, EC_PUBLIC_KEY_LEN));
+    REQUIRE("38208d6a934272ba6bddc7819047b3f28b1952d4" == utils::toHex(m0_hardenedKey.hash160, HASH160_LEN));
+
+    const std::string m00_hardened = "m/0/0'";
+    ext_key m00_hardenedKey{};
+    REQUIRE(WALLY_OK == bip32_key_from_parent_path_str(&root_key, m00_hardened.c_str(), 0, BIP32_FLAG_KEY_PRIVATE, &m00_hardenedKey));
+    REQUIRE("0cf6f8318c880c5fb170eb423cd857da89e8e86510530f47256338aa9fc1cc4b" == utils::toHex(m00_hardenedKey.priv_key + 1, EC_PRIVATE_KEY_LEN));
+
     const std::string accountPath = "m/44'/0'/0'";
     ext_key account_key{};
     REQUIRE(WALLY_OK == bip32_key_from_parent_path_str(&root_key, accountPath.c_str(), 0, BIP32_FLAG_KEY_PRIVATE, &account_key));

@@ -10,11 +10,11 @@ __constant__ constexpr uint8_t key_swap[16] = {0x20, 0x6e, 0x69, 0x6f, 0x63, 0x7
 
 __device__ void mnemonicToExtendedPrivateKey(const uint8_t* mnemonic, uint32_t seed[64 / 4], uint8_t* extended_private_key)
 {
-    uint32_t ipad[512 / 4]{};
+    uint32_t ipad[512 / 4]{}; // 512 bytes = 128 uint32_t blocks
     uint32_t opad[512 / 4]{};
 
 #pragma unroll
-    for (int x = 0; x < 120 / 8; x++)
+    for (int x = 0; x < 120 / 8; x++) // 15
     {
         *(uint64_t*) ((uint64_t*) ipad + x) = 0x3636363636363636ULL ^ SWAP512(*(uint64_t*) ((uint64_t*) mnemonic + x));
     }

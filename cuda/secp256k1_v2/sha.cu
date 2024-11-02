@@ -9,11 +9,8 @@ __device__ uint32_t SWAP256(uint32_t val)
 
 __device__ uint64_t SWAP512(uint64_t val)
 {
-    uint64_t tmp;
-    uint64_t ret;
-    tmp = (rotr64((uint64_t) ((val) & (uint64_t) 0x0000FFFF0000FFFFUL), 16) | rotl64((uint64_t) ((val) & (uint64_t) 0xFFFF0000FFFF0000UL), 16));
-    ret = (rotr64((uint64_t) ((tmp) & (uint64_t) 0xFF00FF00FF00FF00UL), 8) | rotl64((uint64_t) ((tmp) & (uint64_t) 0x00FF00FF00FF00FFUL), 8));
-    return ret;
+    uint64_t tmp = (rotr64((uint64_t) ((val) & (uint64_t) 0x0000FFFF0000FFFFUL), 16) | rotl64((uint64_t) ((val) & (uint64_t) 0xFFFF0000FFFF0000UL), 16));
+    return (rotr64((uint64_t) ((tmp) & (uint64_t) 0xFF00FF00FF00FF00UL), 8) | rotl64((uint64_t) ((tmp) & (uint64_t) 0x00FF00FF00FF00FFUL), 8));
 }
 
 __device__ void sha256Process(const uint32_t* W, uint32_t* digest)

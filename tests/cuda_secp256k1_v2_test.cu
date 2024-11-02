@@ -2,6 +2,7 @@
 #include "cuda/secp256k1_v2/sha.cuh"
 
 #include "util/utils.h"
+#include "util/cuda_util.h"
 
 #include <iostream>
 
@@ -11,7 +12,10 @@
 using namespace std;
 int main()
 {
-    const char mnemonic_[] = "tennis hero student waste adapt where fall call amused mandate hat panel";
+    constexpr int defaultCudaDeviceID{0};
+    cu::cudaInit(defaultCudaDeviceID);
+
+    constexpr char mnemonic_[] = "tennis hero student waste adapt where fall call amused mandate hat panel";
 
     thrust::host_vector<uint8_t> mnemonic(SIZE_MNEMONIC_FRAME, 0);
     thrust::copy(mnemonic_, mnemonic_ + sizeof(mnemonic_), mnemonic.begin());
@@ -21,13 +25,16 @@ int main()
     thrust::device_vector<uint8_t> d_mnemonic = mnemonic;
 
     thrust::device_vector<uint8_t> d_m0_child(sizeof(extended_private_key_t));
+    thrust::device_vector<uint8_t> d_m00_child(sizeof(extended_private_key_t));
+    thrust::device_vector<uint8_t> d_m0_hardened_child(sizeof(extended_private_key_t));
     thrust::device_vector<extended_public_key_t> d_m0_child_pub(1);
 
     thrust::device_vector<uint32_t> d_hash160_bytes(5);
 
     mnemonicToHash160<<<1, 1>>>(thrust::raw_pointer_cast(d_mnemonic.data()), thrust::raw_pointer_cast(d_masterExKey.data()), thrust::raw_pointer_cast(d_seed.data()),
-                                    thrust::raw_pointer_cast(d_m0_child.data()), 0,
-                                    thrust::raw_pointer_cast(d_m0_child_pub.data()), thrust::raw_pointer_cast(d_hash160_bytes.data()));
+                                thrust::raw_pointer_cast(d_m0_child.data()), thrust::raw_pointer_cast(d_m00_child.data()), thrust::raw_pointer_cast(d_m0_hardened_child.data()), 0,
+                                thrust::raw_pointer_cast(d_m0_child_pub.data()), thrust::raw_pointer_cast(d_hash160_bytes.data()));
+    cudaDeviceSynchronize();
 
     cout << "mnemonic: " << mnemonic_ << endl;
 
@@ -41,7 +48,7 @@ int main()
     cout << "seed:" << seedStr << endl;
     if ("48a9daa56a2ebd1bcf9d0524fb96ea49217ecbad1fd12a065ad1996b103965826e3f9617dade34c48b927be05e3f5fae8009ac3576bcb7510d4c198b523cc646" != seedStr)
     {
-        cout << "Seed is wrong\n";
+        cerr << "Seed is wrong\n";
     }
 
     thrust::host_vector<uint8_t> masterExKey = d_masterExKey;
@@ -49,44 +56,60 @@ int main()
     cout << "Master Private Key:" << masterPrivateKeyStr << endl;
     if ("98ca9c9345c45dbb69adaea3d52f1eedeb7b82ec6dc6ec178ece47d15f737c3a" != masterPrivateKeyStr)
     {
-        cout << "Master private key is wrong\n";
+        cerr << "Master private key is wrong\n";
     }
     const auto masterChainCodeStr = utils::toHex(masterExKey.data() + 32, 32);
     cout << "Master Chain Code:" << masterChainCodeStr << endl;
     if ("8459d6d7804b3afacec9929c35b1328f3ee0e7acfce0f7d268f03737480cbb96" != masterChainCodeStr)
     {
-        cout << "Master chain code is wrong\n";
+        cerr << "Master chain code is wrong\n";
+    }
+
+    thrust::host_vector<uint8_t> m0_hardened_child = d_m0_hardened_child;
+    const auto m0HardenedPrivKeyStr = utils::toHex(m0_hardened_child.data(), 32);
+    cout << "m/0' priv key: " << m0HardenedPrivKeyStr << endl;
+    if ("1de83cc85f2da1da4a3d491efa476e688f307e7e61131cf52bae4552cabed0e3" != m0HardenedPrivKeyStr)
+    {
+        cerr << "m/0' priv key is wrong\n";
     }
 
     thrust::host_vector<uint8_t> m0_child = d_m0_child;
     const auto m0PrivKeyStr = utils::toHex(m0_child.data(), 32);
-    cout << "m0 priv key: " << m0PrivKeyStr << endl;
+    cout << "m/0 priv key: " << m0PrivKeyStr << endl;
     if ("c25ec8d53730cf453fa516cfe9ee4995c39318e0595dbcb15e4d877bde1a8630" != m0PrivKeyStr)
     {
-        cout << "m0 priv key is wrong\n";
+        cerr << "m/0 priv key is wrong\n";
+    }
+
+    thrust::host_vector<uint8_t> m00_child = d_m00_child;
+    const auto m00PrivKeyStr = utils::toHex(m00_child.data(), 32);
+    cout << "m/0/0 priv key: " << m00PrivKeyStr << endl;
+    if ("fee4d626b71f5f88d3d36fcd17e00096eebccaa045b373d1c286acd4c35137dc" != m00PrivKeyStr)
+    {
+        cerr << "m/0/0 priv key is wrong\n";
     }
 
     const auto m0ChainCodeStr = utils::toHex(m0_child.data() + 32, 32);
-    cout << "m0 chain code: " << m0ChainCodeStr << endl;
+    cout << "m/0 chain code: " << m0ChainCodeStr << endl;
     if ("afa3778cd632b207d5e17ba7f6eb409f326d6fe5d82d7c727c9ae77a89aee1ac" != m0ChainCodeStr)
     {
-        cout << "m0 chain code: is wrong\n";
+        cerr << "m/0 chain code: is wrong\n";
     }
 
     thrust::host_vector<extended_public_key_t> h_m0_child_pub = d_m0_child_pub;
     const auto h_m0_child_pubStr = utils::toHex(h_m0_child_pub.data()->key, 64);
-    cout << "m0 pub: " << h_m0_child_pubStr << endl;
+    cout << "m/0 pub: " << h_m0_child_pubStr << endl;
     if ("250897e9364b8a41376ec13b2a38f2102e03616c725bdc9a5628b0bf00b0db99d1acd3d1e8297c4bae55aea7ccf603cf721b1fc00252bb7988d80c3658d4dafb" != h_m0_child_pubStr)
     {
-        cout << "m0 pub is wrong\n";
+        cerr << "m/0 pub is wrong\n";
     }
 
     thrust::host_vector<uint32_t> hash160_bytes = d_hash160_bytes;
     const auto m0_hash160_bytesStr = utils::toHex(hash160_bytes.data(), 5);
-    cout << "m0 hash160_bytes: " << m0_hash160_bytesStr << endl;
+    cout << "m/0 hash160_bytes: " << m0_hash160_bytesStr << endl;
     if ("2487e5b2c039c635a819b05a01cdf3e92d266293" != utils::toHex(hash160_bytes.data(), 5))
     {
-        cout << "m0 hash160_bytes is wrong\n";
+        cerr << "m/0 hash160_bytes is wrong\n";
     }
 
     return 0;
