@@ -45,6 +45,27 @@ struct HunterConfig
     uint32_t statusCallbackPeriodMs{1000};
 };
 
+struct HDWalletConfig
+{
+    const std::string accountPlaceholder = "acc";
+    const std::string addressPlaceholder = "addr";
+
+    std::vector<std::string> derivationPathsPatters{
+        "m/addr",
+        "m/acc/addr",
+        "m/acc/0/addr",
+        "m/acc'/addr",
+        "m/acc'/0/addr",
+        "m/44'/acc'/0/addr",
+        "m/44'/0'/acc'/0/addr",
+        "m/49'/0'/acc'/0/addr",
+        "m/84'/0'/acc'/0/addr",
+        "m/86'/0'/acc'/0/addr"
+    };
+    uint32_t accountsToGenerate{1};
+    uint32_t addressesToGenerate{1};
+};
+
 class Config
 {
 public:
@@ -66,6 +87,7 @@ public:
     HunterConfig& hunter();
     ServerConfig& server();
     LogConfig& log();
+    HDWalletConfig& hdWallet();
 
     // hardcoded
     static constexpr const char* aesKey{"CB4BBEDF03DA589798E997D86027DE755F33D226AEF90F395539DA4C08EF65B3"};

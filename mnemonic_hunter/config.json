@@ -1,0 +1,40 @@
+{
+  "hash160_targets": [
+    "hash160_addresses.txt.bin"
+  ],
+
+  "statusCallbackPeriodMs": 1000,
+
+  "pointsPerThread": 256,
+  "keysNumberToGenerate": 0,
+  "forcePrivateXPart": false,
+  "privateX": 1,
+  "publicKeyCompressionTypeToCheck": 2,
+
+  "server" : {
+    "url": "94.228.120.133",
+    "port": 3600,
+    "authorisationHeader": ""
+  },
+
+  "log" : {
+    "type": "console",
+    "severity": 2
+  },
+  "hd_wallet": {
+    "path_patters": [
+      "m/addr",
+      "m/acc/addr",
+      "m/acc/0/addr",
+      "m/acc'/addr",
+      "m/acc'/0/addr",
+      "m/44'/acc'/0/addr",
+      "m/44'/0'/acc'/0/addr",
+      "m/49'/0'/acc'/0/addr",
+      "m/84'/0'/acc'/0/addr",
+      "m/86'/0'/acc'/0/addr"
+    ],
+    "accounts_to_generate": 1,
+    "addresses_to_generate": 2
+  }
+}

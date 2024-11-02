@@ -3,6 +3,8 @@
 
 #include <filesystem>
 #include <fstream>
+
+#include <boost/algorithm/string/join.hpp>
 #include <boost/log/trivial.hpp>
 
 struct Config::Impl
@@ -15,6 +17,7 @@ struct Config::Impl
     HunterConfig hunter;
     ServerConfig server;
     LogConfig log;
+    HDWalletConfig hdWallet;
 
     explicit Impl(std::string configFilepath) : jsonConfigFilepath{std::move(configFilepath)}
     {
@@ -80,6 +83,67 @@ struct Config::Impl
         if (serverConfig.contains("port") && serverConfig["port"].is_string() && !serverConfig["port"].empty())
         {
             server.port = serverConfig["port"];
+        }
+    }
+
+    void loadHDWalletConfig()
+    {
+        if (!configJson.contains("hd_wallet") || !configJson["hd_wallet"].is_object())
+        {
+            return;
+        }
+
+        const auto& hdwalletConfig = configJson["hd_wallet"];
+
+        // Parse path patterns
+        if (hdwalletConfig.contains("path_patters") && hdwalletConfig["path_patters"].is_array() && !hdwalletConfig["path_patters"].empty())
+        {
+            for (const auto& pattern : hdwalletConfig["path_patters"])
+            {
+                if (pattern.is_string() && !pattern.empty())
+                {
+                    const auto& pathStr = pattern.get<std::string>();
+                    hdWallet.derivationPathsPatters.push_back(pathStr);
+                }
+            }
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Using default 'hd_wallet.path_patters' value: " << boost::algorithm::join(hdWallet.derivationPathsPatters, ",");
+        }
+
+        if (hdwalletConfig.contains("accounts_to_generate") && hdwalletConfig["accounts_to_generate"].is_number_unsigned())
+        {
+            const auto accounts = hdwalletConfig["accounts_to_generate"].get<uint32_t>();
+            if (accounts > 0)
+            {
+                hdWallet.accountsToGenerate = accounts;
+            }
+            else
+            {
+                BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: hd_wallet.accounts_to_generate should be non 0 value";
+            }
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Using default 'hd_wallet.accounts_to_generate' value: " << hdWallet.accountsToGenerate;
+        }
+
+        if (hdwalletConfig.contains("addresses_to_generate") && hdwalletConfig["addresses_to_generate"].is_number_unsigned())
+        {
+            const auto addressesToGenerate = hdwalletConfig["addresses_to_generate"].get<uint32_t>();
+            if (addressesToGenerate > 0)
+            {
+                hdWallet.addressesToGenerate = addressesToGenerate;
+            }
+            else
+            {
+                BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: hd_wallet.addresses_to_generate should be non 0 value";
+            }
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Using default 'hd_wallet.addresses_to_generate' value: " << hdWallet.addressesToGenerate;
         }
     }
 
@@ -183,6 +247,7 @@ struct Config::Impl
 
         loadLogConfig();
         loadServerConfig();
+        loadHDWalletConfig();
 
         loaded = true;
     }
@@ -256,6 +321,11 @@ ServerConfig& Config::server()
 LogConfig& Config::log()
 {
     return mImpl->log;
+}
+
+HDWalletConfig& Config::hdWallet()
+{
+    return mImpl->hdWallet;
 }
 
 bool Config::setPrivateKeyXPart(const uint32_t xPart) const
