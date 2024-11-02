@@ -178,8 +178,9 @@ struct ECC::Impl
         allocateMultChainDeviceMemory();
     }
 
-    void calculatePublicKeys()
+    void calculatePublicKeysAndCheckHash160()
     {
+        /// TODO(ksh): check do this block needed here?
         cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
         {
             constexpr uint256_t infinite{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
@@ -222,9 +223,9 @@ uint32_t ECC::getKeysNumberPerIteration() const
     return mImpl->getKeysNumberPerIteration();
 }
 
-void ECC::calculatePublicKeys() const
+void ECC::calculatePublicKeysAndCheckHash160() const
 {
-    mImpl->calculatePublicKeys();
+    mImpl->calculatePublicKeysAndCheckHash160();
 }
 
 void ECC::generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration) const

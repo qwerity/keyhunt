@@ -23,7 +23,7 @@ public:
 
     [[nodiscard]] uint32_t getKeysNumberPerIteration() const;
 
-    void calculatePublicKeys() const;
+    void calculatePublicKeysAndCheckHash160() const;
     void generatePrivateKeysForXPerIteration(uint32_t privateXPart, uint32_t iteration) const;
 
     /// TODO(ksh): somehow this function doesn't exported to the lib code, to figure out later

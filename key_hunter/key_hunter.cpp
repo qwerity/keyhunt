@@ -177,8 +177,8 @@ struct KeyHunter::Impl
                 BOOST_LOG_TRIVIAL(trace) << std::format("[{}] generatePrivateKeysForXPerIteration: {} ms", cudaInfo.id, t.elapsedMs());
 
                 t.start();
-                cuECC->calculatePublicKeys();
-                BOOST_LOG_TRIVIAL(trace) << std::format("[{}] calculatePublicKeys: {} ms", cudaInfo.id, t.elapsedMs());
+                cuECC->calculatePublicKeysAndCheckHash160();
+                BOOST_LOG_TRIVIAL(trace) << std::format("[{}] calculatePublicKeysAndCheckHash160: {} ms", cudaInfo.id, t.elapsedMs());
             }
             //const uint64_t nextY = iteration * cuECC->getKeysNumberPerIteration() + 1;
             /// TODO(ksh): to be used later
