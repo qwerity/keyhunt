@@ -51,7 +51,7 @@ __device__ void bip49_publicKeyToHash160(extended_public_key_t* pub, uint32_t* h
 
 __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t hardenedChildNumber)
 {
-    uint32_t hmacSHA512Result[64 / 4]{};
+    alignas(8 * 8) uint32_t hmacSHA512Result[64 / 4]{};
     uint8_t hmacInput[40]{}; //37 bytes
 
     for (int x = 0; x < 32; x++)
@@ -79,7 +79,7 @@ __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* pa
 
 __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t normalChildNumber)
 {
-    uint32_t hmacSHA512Result[64 / 4]{};
+    alignas(8 * 8) uint32_t hmacSHA512Result[64 / 4]{};
 
     extended_public_key_t pub;
     generatePublicFromPrivateKey(parent, &pub);
