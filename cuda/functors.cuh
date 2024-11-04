@@ -18,8 +18,8 @@ struct PrivateKeyForXWithRandomYFunctor
     uint256_t operator()(const uint32_t& i) const
     {
         uint2 p;
-        p.x = endian(xPart);
-        p.y = endian(i + yPartIncrementBy);
+        p.x = SWAP32(xPart);
+        p.y = SWAP32(i + yPartIncrementBy);
 
         uint256_t digest;
         sha256PrivateKeyBase(p, digest);

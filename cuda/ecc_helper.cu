@@ -4,7 +4,6 @@
 #include "sha256.cuh"
 #include "ptx.cuh"
 #include "hash160_lookup.cuh"
-#include "secp256k1.cuh"
 
 #include "secp256k1_v2/bip32.cuh"
 
@@ -19,7 +18,7 @@ __device__ void hashPublicKey(const uint256_t& x, const uint256_t& y, uint32_t *
     #pragma unroll
     for (uint32_t i = 0; i < 8; ++i)
     {
-        hash[i] = endian(hash[i]);
+        hash[i] = SWAP32(hash[i]);
     }
     ripemd160sha256NoFinal(hash, digestOut);
 }
@@ -33,7 +32,7 @@ __device__ void hashPublicKeyCompressed(const uint256_t& x, const uint32_t yPari
     #pragma unroll
     for (uint32_t i = 0; i < 8; ++i)
     {
-        hash[i] = endian(hash[i]);
+        hash[i] = SWAP32(hash[i]);
     }
     ripemd160sha256NoFinal(hash, digestOut);
 }
@@ -49,8 +48,8 @@ __device__ void setResultFound(const uint32_t idx, const bool compressed, const 
     #pragma unroll
     for (uint32_t i = 0; i < 8; ++i)
     {
-        r.privateKey[i] = endian(privateKey[i]);
-        r.publicXKey[i] = endian(publicX[i]);
+        r.privateKey[i] = SWAP32(privateKey[i]);
+        r.publicXKey[i] = SWAP32(publicX[i]);
     }
     doRMD160FinalRound(digest, r.digest);
 
@@ -131,7 +130,7 @@ __global__ void publicKeyGenerationKernel(const uint256_t *privateKeys)
         /// TODO: optimize this
         for (uint32_t j = 0; j < 8; ++j)
         {
-            privateKey->v[j] = endian(privateKey->v[j]);
+            privateKey->v[j] = SWAP32(privateKey->v[j]);
         }
         generatePublicFromPrivateKey(&privateExKey, &publicEXKey);
 
@@ -140,8 +139,8 @@ __global__ void publicKeyGenerationKernel(const uint256_t *privateKeys)
 
         for (uint32_t j = 0; j < 8; ++j)
         {
-            newX->v[j] = endian(newX->v[j]);
-            newY->v[j] = endian(newY->v[j]);
+            newX->v[j] = SWAP32(newX->v[j]);
+            newY->v[j] = SWAP32(newY->v[j]);
         }
 
         writeUInt256(*newX, i, d_publicKeyXPtr);

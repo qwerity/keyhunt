@@ -52,8 +52,6 @@ set(ECC_SRC
     ecc_helper.cu
     ecc_helper.cuh
 
-    secp256k1.cuh
-
     udevice_vector.cuh
 
     ptx.cuh

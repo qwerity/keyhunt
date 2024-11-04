@@ -8,8 +8,8 @@ __device__ void hmacSHA512(const uint32_t* key, const uint32_t* message, uint32_
 
     for (int x = 0; x < 32 / 4; x++)
     {
-        ipadKey[x] = 0x36363636 ^ *(uint32_t*) ((uint32_t*) key + x);
-        opadKey[x] = 0x5C5C5C5C ^ *(uint32_t*) ((uint32_t*) key + x);
+        ipadKey[x] = 0x36363636 ^ *(key + x);
+        opadKey[x] = 0x5C5C5C5C ^ *(key + x);
     }
 
     for (int x = 32 / 4; x < 128 / 4; x++)
@@ -22,24 +22,24 @@ __device__ void hmacSHA512(const uint32_t* key, const uint32_t* message, uint32_
 
     for (int x = 0; x < 128 / 4; x++)
     {
-        innerConcat[x] = *(uint32_t*) ((uint32_t*) &ipadKey + x);
+        innerConcat[x] = *(reinterpret_cast<uint32_t*>(&ipadKey) + x);
     }
     for (int x = 0; x < 36 / 4; x++)
     {
         innerConcat[128 / 4 + x] = message[x];
     }
-    *(uint8_t*) ((uint8_t*) &innerConcat + 128 + (37 - 1)) = *(uint8_t*) ((uint8_t*) message + 36);
+    *(reinterpret_cast<uint8_t*>(&innerConcat) + 128 + (37 - 1)) =*const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(message) + 36);
 
-    sha512((uint64_t*) &innerConcat, 128 + 37, (uint64_t*) output);
+    sha512(reinterpret_cast<uint64_t*>(&innerConcat), 128 + 37, reinterpret_cast<uint64_t*>(output));
 
     for (int x = 0; x < (128 / 4); x++)
     {
-        *(uint32_t*) ((uint32_t*) &innerConcat + x) = *(uint32_t*) ((uint32_t*) &opadKey + x);
+        *(reinterpret_cast<uint32_t*>(&innerConcat) + x) = *(reinterpret_cast<uint32_t*>(&opadKey) + x);
     }
     for (int x = 0; x < (64 / 4); x++)
     {
-        *(uint32_t*) ((uint32_t*) &innerConcat + 128 / 4 + x) = *(uint32_t*) ((uint32_t*) output + x);
+        *(reinterpret_cast<uint32_t*>(&innerConcat) + 128 / 4 + x) = *(output + x);
     }
 
-    sha512((uint64_t*) &innerConcat, 192, (uint64_t*) output);
+    sha512(reinterpret_cast<uint64_t*>(&innerConcat), 192, reinterpret_cast<uint64_t*>(output));
 }

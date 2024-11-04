@@ -184,7 +184,7 @@ __device__ void doRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5])
     #pragma unroll
     for (int i = 0; i < 5; i++)
     {
-        hOut[i] = endian(hIn[i] + iv[(i + 1) % 5]);
+        hOut[i] = SWAP32(hIn[i] + iv[(i + 1) % 5]);
     }
 }
 

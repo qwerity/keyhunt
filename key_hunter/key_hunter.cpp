@@ -46,31 +46,6 @@ struct KeyHunter::Impl
         BOOST_LOG_TRIVIAL(trace) << "KeyHunter stopped";
     }
 
-    void initializeGPoints() const
-    {
-        constexpr uint32_t gPointsNumber{256};
-
-        std::vector<ecpoint_t> h_gPointsTmp;
-        h_gPointsTmp.resize(gPointsNumber);
-
-        secp256k1::ecpoint p{secp256k1::G()};
-        for (uint32_t i = 0; i < gPointsNumber; ++i)
-        {
-            if (!pointExists(p))
-            {
-                throw std::runtime_error("Point does not exist!");
-            }
-
-            // set as BigEndian to device memory
-            h_gPointsTmp[i] = {p.x.v, p.y.v, Endianness::BigEndian};
-
-            // ... 2G, 4G, 8G...(2^255)G
-            p = secp256k1::doublePoint(p);
-        }
-
-        cuECC->setGPoints(h_gPointsTmp);
-    }
-
     void signalStatusInfo(const uint64_t keysNumberPerIteration, const uint32_t iteration, const uint32_t totalIterations, const uint64_t elapsedTimeMs) const
     {
         static uint64_t periodElapsedTimeMS{0};
@@ -234,12 +209,8 @@ struct KeyHunter::Impl
         BOOST_LOG_TRIVIAL(trace) << std::format("[{}] resultAtomicList.init: {} ms", cudaInfo.id, t.elapsedMs());
 
         t.start();
-        initializeGPoints();
-        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] startSearchPublicHash: {} ms", cudaInfo.id, t.elapsedMs());
-
-        t.start();
-        cuECC->initWithPrivateDefinedXRandomY(gContext->config.hunter().pointsPerThread, gContext->config.hunter().publicKeyCompressionTypeToCheck);
-        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] initWithPrivateDefinedXRandomY: {} ms", cudaInfo.id, t.elapsedMs());
+        cuECC->init(gContext->config.hunter().pointsPerThread, gContext->config.hunter().publicKeyCompressionTypeToCheck);
+        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] init: {} ms", cudaInfo.id, t.elapsedMs());
 
         // Getting from http service the next private key x part, generating public and checking targets hashes
         do

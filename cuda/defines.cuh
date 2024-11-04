@@ -4,6 +4,7 @@
 #include <cstdio>
 
 #include <cuda_runtime.h>
+#include <device_launch_parameters.h>
 
 enum class Endianness
 {
@@ -226,4 +227,84 @@ cudaError_t cudaKernelSyncLaunchWithTiming(const cudaStream_t& stream, LambdaFun
     cudaEventDestroy(stopEvent);
 
     return err;
+}
+
+/**
+ * Reads an 8-word big integer from device memory
+ */
+__device__ __forceinline__ void readInt(const uint32_t *data, const uint32_t depth, uint256_t& x)
+{
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
+
+    const auto x_uint4 = reinterpret_cast<uint4 *>(x.v);
+    const auto data_uint4 = reinterpret_cast<const uint4 *>(data);
+    x_uint4[0] = data_uint4[index*2];
+    x_uint4[1] = data_uint4[index*2 + 1];
+}
+
+__device__ __forceinline__ uint32_t readIntLSW(const uint32_t *data, const uint32_t depth)
+{
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
+
+    const auto data_uint4 = reinterpret_cast<const uint4 *>(data);
+    return data_uint4[index*2 + 1].w;
+}
+
+/**
+ * Writes an 8-word big integer to device memory
+ */
+__device__ __forceinline__ void writeInt(const uint256_t& x, const uint32_t depth, uint32_t *data)
+{
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
+
+    const auto x_uint4 = reinterpret_cast<const uint4 *>(x.v);
+    const auto data_uint4 = reinterpret_cast<uint4 *>(data);
+
+    data_uint4[index*2] = x_uint4[0];
+    data_uint4[index*2 + 1] = x_uint4[1];
+}
+
+__device__ __forceinline__ uint32_t readUInt256LSW(const uint256_t *data, const uint32_t depth)
+{
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
+
+    return data[index].v[7];
+}
+
+__device__ __forceinline__ void readUInt256(const uint256_t *data, const uint32_t depth, uint256_t& x)
+{
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
+
+    x = data[index];
+}
+
+__device__ __forceinline__ void writeUInt256(const uint256_t& x, const uint32_t depth, uint256_t *data)
+{
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const uint32_t base = depth * totalThreads;
+    const uint32_t index = base + threadId;
+
+    data[index] = x;
 }

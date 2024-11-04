@@ -15,9 +15,6 @@ __constant__ uint32_t d_pointsPerThread{};
 __constant__ uint256_t *d_publicKeyXPtr{};
 __constant__ uint256_t *d_publicKeyYPtr{};
 
-__constant__ uint256_t *d_multChainPtr{};
-__constant__ ecpoint_t *d_gPointsPtr{};
-
 struct ECC::Impl
 {
     cudaStream_t mGeneratorStream{};
@@ -34,9 +31,6 @@ struct ECC::Impl
 
     thrust::udevice_vector<uint256_t> d_privateKeys;
 
-    thrust::udevice_vector<uint256_t> d_multChain;
-    thrust::udevice_vector<ecpoint_t> d_gPoints;
-
     Impl()
     {
         cudaStreamCreate(&mGeneratorStream);
@@ -48,10 +42,8 @@ struct ECC::Impl
     ~Impl()
     {
         release(d_privateKeys);
-        release(d_multChain);
         release(d_publicKeysX);
         release(d_publicKeysY);
-        release(d_gPoints);
 
         cudaStreamDestroy(mGeneratorStream);
         cudaStreamDestroy(mInitStream);
@@ -94,16 +86,6 @@ struct ECC::Impl
         return mKeysNumberPerIteration;
     }
 
-    // generate a table of points G, 2G, 4G, 8G...(2^255)G
-    void setGPoints(const std::vector<ecpoint_t>& gPoints)
-    {
-        thrust::host_vector<ecpoint_t> h_gPoints(gPoints.begin(), gPoints.end());
-
-        d_gPoints = h_gPoints;
-        const auto* d_gPointsRawPtr = thrust::raw_pointer_cast(d_gPoints.data());
-        cudaCheckError(cudaMemcpyToSymbol(d_gPointsPtr, &d_gPointsRawPtr, sizeof(ecpoint_t*)));
-    }
-
     void allocatePublicKeysDeviceMemory()
     {
         const uint32_t keysNumber = getKeysNumberPerIteration();
@@ -117,14 +99,6 @@ struct ECC::Impl
 
         const uint256_t* d_publicKeysYRawPtr = thrust::raw_pointer_cast(d_publicKeysY.data());
         cudaCheckError(cudaMemcpyToSymbol(d_publicKeyYPtr, &d_publicKeysYRawPtr, sizeof(uint256_t *)));
-    }
-
-    void allocateMultChainDeviceMemory()
-    {
-        d_multChain.resize(getKeysNumberPerIteration());
-
-        const uint256_t* d_multChainRawPtr = thrust::raw_pointer_cast(d_multChain.data());
-        cudaCheckError(cudaMemcpyToSymbol(d_multChainPtr, &d_multChainRawPtr, sizeof(uint256_t*)));
     }
 
     void allocatePrivateKeysDeviceMemory()
@@ -162,7 +136,7 @@ struct ECC::Impl
         }, "generatePrivateKeysForXPerIteration"));
     }
 
-    void initWithPrivateDefinedXRandomY(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t blockSize)
+    void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t blockSize)
     {
         computeResolutionForMaxOccupancy(pointsPerThread, blockSize);
 
@@ -173,9 +147,6 @@ struct ECC::Impl
 
         // Allocate space for public keys on device
         allocatePublicKeysDeviceMemory();
-
-        // Allocates device memory for storing the multiplication chain used in the batch inversion operation
-        allocateMultChainDeviceMemory();
     }
 
     void calculatePublicKeysAndCheckHash160()
@@ -208,14 +179,9 @@ ECC::~ECC() = default;
 ECC::ECC(ECC&& rhs) noexcept = default;
 ECC& ECC::operator=(ECC &&rhs) noexcept = default;
 
-void ECC::setGPoints(const std::vector<ecpoint_t>& h_GPoints) const
+void ECC::init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t blockSize) const
 {
-    mImpl->setGPoints(h_GPoints);
-}
-
-void ECC::initWithPrivateDefinedXRandomY(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t blockSize) const
-{
-    mImpl->initWithPrivateDefinedXRandomY(pointsPerThread, publicKeyCompressionTypeToCheck, blockSize);
+    mImpl->init(pointsPerThread, publicKeyCompressionTypeToCheck, blockSize);
 }
 
 uint32_t ECC::getKeysNumberPerIteration() const

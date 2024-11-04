@@ -15,7 +15,7 @@ int main()
     constexpr int defaultCudaDeviceID{0};
     cu::cudaInit(defaultCudaDeviceID);
 
-    constexpr char mnemonic_[] = "tennis hero student waste adapt where fall call amused mandate hat panel";
+    constexpr uint8_t mnemonic_[] = "tennis hero student waste adapt where fall call amused mandate hat panel";
 
     thrust::host_vector<uint8_t> mnemonic(SIZE_MNEMONIC_FRAME, 0);
     thrust::copy(mnemonic_, mnemonic_ + sizeof(mnemonic_), mnemonic.begin());

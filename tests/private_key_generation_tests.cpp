@@ -10,7 +10,7 @@
 TEST_CASE("check private key generation", "")
 {
     std::unique_ptr cuEcc(std::make_unique<ECC>());
-    cuEcc->initWithPrivateDefinedXRandomY(32, PointCompressionType::COMPRESSED, 2);
+    cuEcc->init(32, PointCompressionType::COMPRESSED, 2);
 
     const uint32_t keysNumberPerIteration = cuEcc->getKeysNumberPerIteration();
     const uint32_t privateXPart{1};

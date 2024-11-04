@@ -109,7 +109,7 @@ __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* pare
 
 __global__ void mnemonicToHash160(const uint8_t* mnemonic, uint8_t* masterExKey, uint32_t* seed, uint8_t* childKey, uint8_t* childChildKey, uint8_t* hardenedChildKey, uint16_t childNumber, extended_public_key_t* childPublicKey, uint32_t* hash160_bytes)
 {
-    mnemonicToExtendedPrivateKey(mnemonic, seed, masterExKey);
+    mnemonicToExtendedMasterKey(mnemonic, seed, masterExKey);
     hardenedPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(masterExKey), reinterpret_cast<extended_private_key_t*>(hardenedChildKey), childNumber);
     normalPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(masterExKey), reinterpret_cast<extended_private_key_t*>(childKey), childNumber);
     normalPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(childKey), reinterpret_cast<extended_private_key_t*>(childChildKey), childNumber);
