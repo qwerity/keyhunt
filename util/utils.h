@@ -14,6 +14,7 @@ namespace secp256k1
     struct uint256;
 }
 
+struct StatusInfo;
 struct LogConfig;
 struct hash160;
 
@@ -74,6 +75,8 @@ namespace utils
 
     void initLogging(const LogConfig& log);
 
+    void statusCallback(const StatusInfo& info);
+
     void initOpenssl();
     void releaseOpenssl();
 
@@ -93,4 +96,8 @@ namespace utils
 
     bool writeEncResultsToFile(const crypto::AES& aesEnc, const std::string& filename, const std::string& resultsStr);
     bool readEncResults(const crypto::AES& aesEnc, const std::string& filename, std::vector<std::string>& results);
+
+    // Convert expanded paths to vectors of indices
+    std::vector<std::vector<uint32_t>> bip32GetDerivationPathsFromPatterns(const std::vector<std::string>& derivationPathsPatters, uint32_t accountsToGenerate, uint32_t addressesToGenerate, std::vector<std::string>& allExpandedPaths);
+    std::vector<std::vector<uint32_t>> bip32GetDerivationPathsFromPatterns(const std::vector<std::string>& derivationPathsPatters, uint32_t accountsToGenerate, uint32_t addressesToGenerate);
 }

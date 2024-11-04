@@ -23,7 +23,6 @@ struct KeyHunter::Impl
     std::atomic<bool> stopFlag{false};
 
     Hash160Lookup hash160Lookup;
-
     CudaAtomicList resultAtomicList;
 
     // Implementation
@@ -56,7 +55,7 @@ struct KeyHunter::Impl
         periodElapsedTimeMS += elapsedTimeMs;
         periodKeysNumber += keysNumberPerIteration;
 
-        if (periodElapsedTimeMS >= gContext->config.hunter().statusCallbackPeriodMs)
+        if (periodElapsedTimeMS >= gContext->config.statusCallbackPeriodMs())
         {
             const double periodElapsedTimeS = static_cast<double>(periodElapsedTimeMS) / 1000.0;
 
@@ -155,7 +154,7 @@ struct KeyHunter::Impl
                 cuECC->calculatePublicKeysAndCheckHash160();
                 BOOST_LOG_TRIVIAL(trace) << std::format("[{}] calculatePublicKeysAndCheckHash160: {} ms", cudaInfo.id, t.elapsedMs());
             }
-            //const uint64_t nextY = iteration * cuECC->getKeysNumberPerIteration() + 1;
+            //const uint64_t nextY = iteration * cuECC->getMnemonicsPerIteration() + 1;
             /// TODO(ksh): to be used later
             // gContext->config.setCalculationIteration(iteration);
 
@@ -181,7 +180,7 @@ struct KeyHunter::Impl
         else if (!gContext->config.hunter().forcePrivateXPart)
         {
             http::status responseCode{http::status::unknown};
-            responseCode = gContext->httpClient->getNumber(privateXPart);
+            responseCode = gContext->httpClient->getXPartNumber(privateXPart);
             if (responseCode != http::status::ok)
             {
                 privateXPart = utils::randomUINT32_t();
@@ -209,7 +208,7 @@ struct KeyHunter::Impl
         BOOST_LOG_TRIVIAL(trace) << std::format("[{}] resultAtomicList.init: {} ms", cudaInfo.id, t.elapsedMs());
 
         t.start();
-        cuECC->init(gContext->config.hunter().pointsPerThread, gContext->config.hunter().publicKeyCompressionTypeToCheck);
+        cuECC->init(gContext->config.pointsPerThread(), gContext->config.publicKeyCompressionTypeToCheck(), gContext->config.gridSize(), gContext->config.blockSize());
         BOOST_LOG_TRIVIAL(trace) << std::format("[{}] init: {} ms", cudaInfo.id, t.elapsedMs());
 
         // Getting from http service the next private key x part, generating public and checking targets hashes
@@ -224,9 +223,9 @@ struct KeyHunter::Impl
             // if it is not test we are setting search over privateXPart done
             if (!gContext->config.devMode())
             {
-                const std::string postString = std::format("markDone for privateXPart: {}", privateXPart);
+                const std::string postString = std::format("markXPartDone for privateXPart: {}", privateXPart);
                 utils::backupToTGAsync(postString);
-                (void) gContext->httpClient->markDone(privateXPart);
+                (void) gContext->httpClient->markXPartDone(privateXPart);
 
                 BOOST_LOG_TRIVIAL(fatal) << postString;
             }

@@ -9,6 +9,10 @@
 
 #include "util/common.h"
 
+// Check public key hash160 compressed/uncompressed/both
+__constant__ int d_publicKeyCompressionTypeToCheck{PointCompressionType::BOTH};
+
+
 __device__ void hashPublicKey(const uint256_t& x, const uint256_t& y, uint32_t *digestOut)
 {
     uint256_t hash;

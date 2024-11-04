@@ -1,156 +1,55 @@
 #include "hd_wallet.h"
+#include "util/results_processor.h"
 
 #include "util/utils.h"
 #include "cuda/secp256k1_v2/bip32.cuh"
 
 #include <wally_bip32.h>
 #include <wally_bip39.h>
+#include <wally_crypto.h>
 
-#include <iostream>
-#include <vector>
-#include <set>
+#include <thread>
+#include <format>
+#include <future>
+
+#include <boost/log/trivial.hpp>
 
 using namespace std;
 
-struct PathCompare
+void setupMnemonics(const std::shared_ptr<GlobalContext>& context)
 {
-    bool operator()(const std::vector<uint32_t>& a, const std::vector<uint32_t>& b) const
+    const HDWalletConfig& hdWallet = context->config.hdWallet();
+
+    const bool devMode = context->config.devMode();
+    BOOST_LOG_TRIVIAL(info) << std::format("{} Mode ON [forceMnemonic: {}]", (devMode ? "Dev" : "Prod"), hdWallet.forceMnemonic);
+
+    if (devMode && hdWallet.forceMnemonic)
     {
-        if (a.size() != b.size())
-        {
-            return a.size() < b.size();
-        }
-        return a < b;
-    }
-};
-
-// Helper function to expand a single pattern into all its combinations
-std::vector<std::string> expand_pattern(const std::string& pattern, uint32_t accN, uint32_t addrN)
-{
-    std::vector<std::string> expanded;
-
-    const string accountPlaceholder{"acc"};
-    const uint32_t acc_placeholder_length = accountPlaceholder.size();
-    const uint32_t acc_hardened_placeholder_length = acc_placeholder_length + 1;
-    const string addressPlaceholder{"addr"};
-
-    size_t acc_pos = pattern.find(accountPlaceholder);
-    size_t addr_pos = pattern.find(addressPlaceholder);
-
-    if (acc_pos == std::string::npos && addr_pos == std::string::npos)
-    {
-        expanded.push_back(pattern);
-        return expanded;
+        BOOST_LOG_TRIVIAL(info) << "Using mnemonic: " << hdWallet.mnemonic;
+        return;
     }
 
-    // Handle account expansion
-    std::vector<std::string> acc_expanded;
-    if (acc_pos != std::string::npos)
+    BOOST_LOG_TRIVIAL(info) <<  std::format("Checking connection with the host ({})...", context->httpClient->hostConfig());
+    const bool hostIsAlive = context->httpClient->hostAlive();
+
+    if (devMode && !hdWallet.forceMnemonic && hostIsAlive)
     {
-        bool is_hardened = (pattern[acc_pos + acc_placeholder_length] == '\'');
-        const std::string& acc_pattern = pattern;
-        for (uint32_t i = 0; i < accN; ++i)
-        {
-            std::string replacement = std::to_string(i) + (is_hardened ? "'" : "");
-            std::string new_pattern = acc_pattern;
-            new_pattern.replace(acc_pos, is_hardened ? acc_hardened_placeholder_length : acc_placeholder_length, replacement);
-            acc_expanded.push_back(new_pattern);
-        }
+        BOOST_LOG_TRIVIAL(info) << "Host is alive";
+        return;
+    }
+
+    if (!hostIsAlive)
+    {
+        BOOST_LOG_TRIVIAL(info) << "Host is NOT alive";
     }
     else
     {
-        acc_expanded.push_back(pattern);
-    }
-
-    // Handle address expansion
-    for (const auto& acc_pattern: acc_expanded)
-    {
-        addr_pos = acc_pattern.find(addressPlaceholder);
-        if (addr_pos != std::string::npos)
-        {
-            for (uint32_t i = 0; i < addrN; ++i)
-            {
-                std::string new_pattern = acc_pattern;
-                new_pattern.replace(addr_pos, addressPlaceholder.size(), std::to_string(i));
-                expanded.push_back(new_pattern);
-            }
-        }
-        else
-        {
-            expanded.push_back(acc_pattern);
-        }
-    }
-
-    return expanded;
-}
-
-std::vector<uint32_t> get_derivation_vector(const std::string& pattern)
-{
-    std::vector<uint32_t> path(BIP32_PATH_MAX_LEN);
-    size_t written;
-
-    int result = bip32_path_from_str(pattern.c_str(), 0, 0, 0, path.data(), path.size(), &written);
-
-    if (result != WALLY_OK)
-    {
-        throw std::runtime_error("Failed to parse BIP32 path: " + pattern);
-    }
-
-    path.resize(written);
-    return path;
-}
-
-std::vector<std::vector<uint32_t>> get_all_derivation_paths(const std::vector<string>& expanded_patterns, uint32_t accN, uint32_t addrN)
-{
-    std::vector<std::vector<uint32_t>> all_paths;
-
-    for (const auto& expanded: expanded_patterns)
-    {
-        all_paths.push_back(get_derivation_vector(expanded));
-    }
-
-    return all_paths;
-}
-
-// Utility function to print paths for verification
-template <typename T>
-void print_paths(const T& paths)
-{
-    for (const auto& path: paths)
-    {
-        if (!path.empty())
-        {
-            printf("m/");
-        }
-        for (size_t i = 0; i < path.size(); ++i)
-        {
-            printf("%u%s", path[i] & ~BIP32_INITIAL_HARDENED_CHILD, (path[i] & BIP32_INITIAL_HARDENED_CHILD) ? "'" : "");
-            if (i < path.size() - 1)
-            {
-                printf("/");
-            }
-        }
-        printf("\n");
+        BOOST_LOG_TRIVIAL(info) << "Host is alive";
     }
 }
 
 int main()
 {
-    utils::initOpenssl();
-
-    constexpr int wallyInitFlags{0};
-
-    // Initialize the Wally core library
-    if (wally_init(wallyInitFlags) != WALLY_OK)
-    {
-        std::cerr << "Failed to initialize Wally\n";
-        return 1;
-    }
-    utils::ScopeOutRunner outRunner([]() {
-        wally_cleanup(wallyInitFlags);
-        utils::releaseOpenssl();
-    });
-
     // Config will initialize here
     auto context = std::make_shared<GlobalContext>();
     if (!context->config.isLoaded())
@@ -158,35 +57,79 @@ int main()
         return 1;
     }
 
-    HDWallet hdWallet(context);
-    {
-        HDWalletConfig& hdWalletConfig = context->config.hdWallet();
+    context->httpClient = std::make_shared<HttpClient>(context->config.server());
+    context->hash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();
+    context->statusCallback = utils::statusCallback;
 
-        std::vector<std::string> expanded_patterns;
-        for (const auto& pattern: hdWalletConfig.derivationPathsPatters)
+    utils::initLogging(context->config.log());
+
+    utils::initOpenssl();
+
+    constexpr int wallyInitFlags{0};
+
+    // Initialize the Wally core library
+    if (wally_init(wallyInitFlags) != WALLY_OK)
+    {
+        BOOST_LOG_TRIVIAL(error) << "Failed to initialize Wally";
+        return 1;
+    }
+    utils::ScopeOutRunner outRunner([]() {
+        wally_cleanup(wallyInitFlags);
+        utils::releaseOpenssl();
+    });
+
+    setupMnemonics(context);
+
+    // load hash160 targets to memory
+    utils::readHash160Targets(context->config.hunter().ripemd160TargetsFilePaths, context->hash160Targets);
+    if (context->hash160Targets.empty())
+    {
+        BOOST_LOG_TRIVIAL(info) << "Stopping application as hash160 targets are not set";
+        return 2;
+    }
+
+    // Start generation checking and results processing
+    const ResultsProcessor resultProcessor(context);
+    resultProcessor.startHash160ResultsQueueProcessing();
+
+    const int gpuDevicesCount = cu::getDeviceCount();
+    std::vector<std::thread> threads;
+    std::vector<std::future<void>> futures;
+
+    threads.reserve(gpuDevicesCount);
+    futures.reserve(gpuDevicesCount);
+
+    for (int cudaDeviceId = 0; cudaDeviceId < gpuDevicesCount; ++cudaDeviceId)
+    {
+        std::promise<void> promise;
+        futures.push_back(promise.get_future());
+
+        threads.emplace_back([&context, cudaDeviceId, promise = std::move(promise)]() mutable
         {
-            auto exp = expand_pattern(pattern, hdWalletConfig.accountsToGenerate, hdWalletConfig.addressesToGenerate);
-            expanded_patterns.insert(expanded_patterns.end(), exp.begin(), exp.end());
-        }
+            // For using concrete CUDA device
+            auto cudaInfo = cu::cudaInit(cudaDeviceId);
+            HDWallet hdWallet(context, std::move(cudaInfo));
+            hdWallet.startSearchPublicHash();
 
-        std::vector<std::vector<uint32_t>> paths = get_all_derivation_paths(expanded_patterns, hdWalletConfig.accountsToGenerate, hdWalletConfig.addressesToGenerate);
-        std::set<std::vector<uint32_t>, PathCompare> oPath(paths.begin(), paths.end());
-        print_paths(oPath);
+            // Signal that the thread has finished
+            promise.set_value();
+        });
     }
 
-    uint64_t mnemonicsPerSecond = 0;
-    utils::Timer t;
-    while (t.elapsedS() <= 1)
+    // Wait for all threads to finish
+    for (auto& future: futures)
     {
-        ++mnemonicsPerSecond;
-        // Specify entropy length for mnemonic (128 bits for 12 words, 256 bits for 24 words)
-        std::vector<uint8_t> entropy = HDWallet::generateEntropy(BIP39_ENTROPY_LEN_128);
-
-        std::string mnemonic = HDWallet::generateMnemonic(entropy);
-//        std::cout << "Generated mnemonic: " << mnemonic << '\n';
+        future.wait();// Wait for the promise to be fulfilled
     }
 
-    std::cerr << "mnemonicsPerSecond: " << mnemonicsPerSecond << '\n';
+    // Join all the threads manually
+    for (auto& thread: threads)
+    {
+        if (thread.joinable())
+        {
+            thread.join();
+        }
+    }
 
     return 0;
 }

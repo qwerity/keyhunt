@@ -1,6 +1,7 @@
 #include "key_hunter.h"
-#include "results_processor.h"
+#include "util/results_processor.h"
 
+#include "util/common_host.h"
 #include "util/utils.h"
 
 #include <thread>
@@ -8,27 +9,6 @@
 #include <future>
 
 #include <boost/log/trivial.hpp>
-
-namespace
-{
-    void statusCallback(const StatusInfo& info)
-    {
-        const std::string speedStr = (info.pointsPerSecond < 0.01) ? "< 0.01 MKey/s" : std::format("{:.3f} MKey/s", info.pointsPerSecond);
-
-        const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L} total)", info.total);
-        const std::string timeStr = std::format("[{:.3f}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
-        const uint64_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
-        const uint64_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
-
-        const std::string statusStr = std::format("[{} | {} | {}/{}MB] [{}/{}] {} {} {}"
-            , info.device, info.deviceName, usedDeviceMemoryMb, totalDeviceMemoryMb
-            , info.iteration, info.totalIterations
-            , speedStr, totalStr, timeStr);
-
-        // fprintf(stderr, "\r%s", statusStr.c_str());
-        BOOST_LOG_TRIVIAL(fatal) << statusStr;
-    }
-}
 
 void setupPrivateXPart(const std::shared_ptr<GlobalContext>& context)
 {
@@ -66,6 +46,9 @@ void setupPrivateXPart(const std::shared_ptr<GlobalContext>& context)
 int main()
 {
     utils::initOpenssl();
+    utils::ScopeOutRunner outRunner([]() {
+        utils::releaseOpenssl();
+    });
 
     // Config will initialize here
     auto context = std::make_shared<GlobalContext>();
@@ -76,7 +59,7 @@ int main()
 
     context->httpClient = std::make_shared<HttpClient>(context->config.server());
     context->hash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();
-    context->statusCallback = statusCallback;
+    context->statusCallback = utils::statusCallback;
 
     utils::initLogging(context->config.log());
 
@@ -133,6 +116,5 @@ int main()
         }
     }
 
-    utils::releaseOpenssl();
     return 0;
 }

@@ -1,5 +1,7 @@
 #include <catch2/catch_all.hpp>
 
+#include "cuda/secp256k1_v2/bip32.cuh"
+
 #include <wally_bip39.h>
 #include <wally_bip32.h>
 #include <wally_crypto.h>
@@ -12,6 +14,9 @@
 #include <openssl/hmac.h>
 
 #include "test_data.h"
+#include "util/common_host.h"
+
+#include "cuda/hd_wallet.cuh"
 
 TEST_CASE("Test WallyCore lib: mnemonic -> hd keys generation", "")
 {
@@ -232,4 +237,56 @@ TEST_CASE("Check root key generation with OpenSSL")
 
     REQUIRE(0 == memcmp(root_private_key.data(), root_key.priv_key + 1, EC_PRIVATE_KEY_LEN));
     REQUIRE(0 == memcmp(chain_code.data(), root_key.chain_code, EC_PRIVATE_KEY_LEN));
+}
+
+TEST_CASE("CUDA Test WallyCore lib: mnemonic -> hd keys generation", "")
+{
+    constexpr int wallyInitFlags{0};
+    wally_init(wallyInitFlags);
+    utils::ScopeOutRunner outRunner([](){ wally_cleanup(wallyInitFlags); });
+
+    std::unique_ptr cuhdWallet(std::make_unique<CUHDWallet>());
+    std::vector<extended_public_key_t> publicKeys;
+
+    constexpr uint8_t mnemonic[SIZE_MNEMONIC_FRAME] = "tennis hero student waste adapt where fall call amused mandate hat panel";
+    std::vector<uint8_t> mnemonics(SIZE_MNEMONIC_FRAME, 0);
+    std::copy_n(mnemonic, sizeof(mnemonic), mnemonics.begin());
+
+    HDWalletConfig config;
+    std::vector<std::string> allExpandedPaths;
+    std::vector<std::vector<uint32_t>> derivationPaths = utils::bip32GetDerivationPathsFromPatterns(config.derivationPathsPatters, config.accountsToGenerate, config.addressesToGenerate, allExpandedPaths);
+
+    cuhdWallet->init(derivationPaths, 2, 1, 1);
+    cuhdWallet->generatePublicKeysForMnemonics(mnemonics.data(), 1);
+    cuhdWallet->getPublicKeys(publicKeys);
+    REQUIRE(derivationPaths.size() == publicKeys.size());
+
+    const char* passphrase = "";
+    unsigned char seed[BIP39_SEED_LEN_512];
+    memset(seed, 0, BIP39_SEED_LEN_512);
+
+    // Generate the seed from the mnemonic
+    REQUIRE(WALLY_OK ==bip39_mnemonic_to_seed(reinterpret_cast<const char*>(mnemonic), passphrase, seed, BIP39_SEED_LEN_512, nullptr));
+
+    ext_key root_key{};
+    REQUIRE(WALLY_OK == bip32_key_from_seed(seed, BIP39_SEED_LEN_512, BIP32_VER_MAIN_PRIVATE, 0, &root_key));
+
+    // Function to compress a 64-byte public key to 33 bytes
+    auto compressPublicKey = [](const uint8_t* pubKey64, uint8_t* compressed33) {
+        compressed33[0] = (pubKey64[63] & 1) ? 0x03 : 0x02;
+
+        // Copy the x-coordinate (32 bytes)
+        memcpy(compressed33 + 1, pubKey64, 32);
+    };
+
+    uint8_t compressed[33]{};
+    for (uint32_t i = 0; i < publicKeys.size(); ++i)
+    {
+        ext_key key{};
+        bip32_key_from_parent_path_str(&root_key, allExpandedPaths[i].c_str(), 0, BIP32_FLAG_KEY_PRIVATE, &key);
+        std::string expectedPublicKeyStr = utils::toHex(key.pub_key, EC_PUBLIC_KEY_LEN);
+        compressPublicKey(publicKeys[i].key, compressed);
+        std::string actualPublicKeyStr = utils::toHex(compressed, sizeof(compressed));
+        REQUIRE(actualPublicKeyStr == expectedPublicKeyStr);
+    }
 }

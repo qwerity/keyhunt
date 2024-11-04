@@ -18,17 +18,12 @@ __constant__ uint64_t d_BloomFilterMask64{};
 
 namespace
 {
-    inline uint32_t swp(const uint32_t x)
-    {
-        return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
-    }
-
     void undoRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5])
     {
         constexpr uint32_t iv[5] = {0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0};
         for (int i = 0; i < 5; i++)
         {
-            hOut[i] = swp(hIn[i]) - iv[(i + 1) % 5];
+            hOut[i] = SWAP32(hIn[i]) - iv[(i + 1) % 5];
         }
     }
 

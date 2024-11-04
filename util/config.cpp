@@ -19,6 +19,12 @@ struct Config::Impl
     LogConfig log;
     HDWalletConfig hdWallet;
 
+    uint32_t statusCallbackPeriodMs{1000};
+    uint32_t publicKeyCompressionTypeToCheck{2};
+    uint32_t pointsPerThread{128};
+    uint32_t blockSize{0}; // if 0 - will be calculated on fly
+    uint32_t gridSize{0}; // if 0 - will be calculated on fly
+
     explicit Impl(std::string configFilepath) : jsonConfigFilepath{std::move(configFilepath)}
     {
         load(jsonConfigFilepath);
@@ -94,6 +100,20 @@ struct Config::Impl
         }
 
         const auto& hdwalletConfig = configJson["hd_wallet"];
+
+        if (hdwalletConfig.contains("forceMnemonic") && hdwalletConfig["forceMnemonic"].is_boolean() && hdwalletConfig["forceMnemonic"] == true)
+        {
+            hdWallet.forceMnemonic = true;
+            if (hdwalletConfig.contains("mnemonic") && hdwalletConfig["mnemonic"].is_string() && !hdwalletConfig["mnemonic"].empty())
+            {
+                hdWallet.mnemonic = hdwalletConfig["mnemonic"].get<std::string>();
+            }
+        }
+
+        if (hdwalletConfig.contains("mnemonicsToGenerate") && hdwalletConfig["mnemonicsToGenerate"].is_number_unsigned())
+        {
+            hdWallet.mnemonicsToGenerate = hdwalletConfig["mnemonicsToGenerate"].get<uint32_t>();
+        }
 
         // Parse path patterns
         if (hdwalletConfig.contains("path_patters") && hdwalletConfig["path_patters"].is_array() && !hdwalletConfig["path_patters"].empty())
@@ -190,16 +210,26 @@ struct Config::Impl
 
         if (configJson.contains("pointsPerThread") && configJson["pointsPerThread"].is_number_unsigned())
         {
-            hunter.pointsPerThread = configJson["pointsPerThread"];
+            pointsPerThread = configJson["pointsPerThread"].get<uint32_t>();
         }
         else
         {
-            BOOST_LOG_TRIVIAL(warning) << "using default 'pointsPerThread' value: " << hunter.pointsPerThread;
+            BOOST_LOG_TRIVIAL(warning) << "using default 'pointsPerThread' value: " << pointsPerThread;
+        }
+
+        if (configJson.contains("blockSize") && configJson["blockSize"].is_number_unsigned())
+        {
+            blockSize = configJson["blockSize"].get<uint32_t>();
+        }
+
+        if (configJson.contains("gridSize") && configJson["gridSize"].is_number_unsigned())
+        {
+            gridSize = configJson["gridSize"].get<uint32_t>();
         }
 
         if (configJson.contains("keysNumberToGenerate") && configJson["keysNumberToGenerate"].is_number_unsigned())
         {
-            hunter.keysNumberToGenerate = configJson["keysNumberToGenerate"];
+            hunter.keysNumberToGenerate = configJson["keysNumberToGenerate"].get<uint32_t>();
         }
         else
         {
@@ -209,40 +239,40 @@ struct Config::Impl
         if (configJson.contains("forcePrivateXPart") && configJson["forcePrivateXPart"].is_boolean() && configJson["forcePrivateXPart"] == true)
         {
             hunter.forcePrivateXPart = true;
-            if (configJson.contains("privateXPart") && configJson["privateXPart"].is_number_integer())
+            if (configJson.contains("privateXPart") && configJson["privateXPart"].is_number_unsigned())
             {
-                hunter.privateXPart = configJson["privateXPart"];
+                hunter.privateXPart = configJson["privateXPart"].get<uint32_t>();
             }
         }
 
-        if (configJson.contains("privateYOffset") && configJson["privateYOffset"].is_number_integer())
+        if (configJson.contains("privateYOffset") && configJson["privateYOffset"].is_number_unsigned())
         {
-            hunter.privateYOffset = configJson["privateYOffset"];
+            hunter.privateYOffset = configJson["privateYOffset"].get<uint32_t>();
         }
 
-        if (configJson.contains("publicKeyCompressionTypeToCheck") && configJson["publicKeyCompressionTypeToCheck"].is_number_integer())
+        if (configJson.contains("publicKeyCompressionTypeToCheck") && configJson["publicKeyCompressionTypeToCheck"].is_number_unsigned())
         {
-            if (int compressionType = configJson["publicKeyCompressionTypeToCheck"]; compressionType >= 0 && compressionType <= 2)
+            if (uint32_t compressionType = configJson["publicKeyCompressionTypeToCheck"].get<uint32_t>(); compressionType >= 0 && compressionType <= 2)
             {
-                hunter.publicKeyCompressionTypeToCheck = compressionType;
+                publicKeyCompressionTypeToCheck = compressionType;
             }
             else
             {
-                BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'publicKeyCompressionTypeToCheck' must be 0 (UNCOMPRESSED), 1 (COMPRESSED), or 2 (BOTH), using default value: " << hunter.publicKeyCompressionTypeToCheck;
+                BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: 'publicKeyCompressionTypeToCheck' must be 0 (UNCOMPRESSED), 1 (COMPRESSED), or 2 (BOTH), using default value: " << publicKeyCompressionTypeToCheck;
             }
         }
         else
         {
-            BOOST_LOG_TRIVIAL(warning) << "Using default 'publicKeyCompressionTypeToCheck' value: " << hunter.publicKeyCompressionTypeToCheck;
+            BOOST_LOG_TRIVIAL(warning) << "Using default 'publicKeyCompressionTypeToCheck' value: " << publicKeyCompressionTypeToCheck;
         }
 
         if (configJson.contains("statusCallbackPeriodMs") && configJson["statusCallbackPeriodMs"].is_number_unsigned())
         {
-            hunter.statusCallbackPeriodMs = configJson["statusCallbackPeriodMs"];
+            statusCallbackPeriodMs = configJson["statusCallbackPeriodMs"].get<uint32_t>();
         }
         else
         {
-            BOOST_LOG_TRIVIAL(warning) << "Using default 'statusCallbackPeriodMs' value: " << hunter.statusCallbackPeriodMs;
+            BOOST_LOG_TRIVIAL(warning) << "Using default 'statusCallbackPeriodMs' value: " << statusCallbackPeriodMs;
         }
 
         loadLogConfig();
@@ -338,7 +368,32 @@ bool Config::setCalculationIteration(uint32_t iteration) const
     return mImpl->setValue("iteration", iteration);
 }
 
-std::string Config::jsonStr()
+std::string Config::jsonStr() const
 {
     return mImpl->configJson.dump();
+}
+
+uint32_t Config::statusCallbackPeriodMs() const
+{
+    return mImpl->statusCallbackPeriodMs;
+}
+
+uint32_t Config::publicKeyCompressionTypeToCheck() const
+{
+    return mImpl->publicKeyCompressionTypeToCheck;
+}
+
+uint32_t Config::pointsPerThread() const
+{
+    return mImpl->pointsPerThread;
+}
+
+uint32_t Config::blockSize() const
+{
+    return mImpl->blockSize;
+}
+
+uint32_t Config::gridSize() const
+{
+    return mImpl->gridSize;
 }

@@ -17,7 +17,7 @@ public:
     ECC(ECC&& rhs) noexcept;
     ECC& operator=(ECC&& rhs) noexcept;
 
-    void init(uint32_t pointsPerThread, uint32_t publicKeyCompressionTypeToCheck, uint32_t blockSize = 0) const;
+    void init(uint32_t pointsPerThread, uint32_t publicKeyCompressionTypeToCheck, uint32_t gridSize = 0, uint32_t blockSize = 0) const;
 
     [[nodiscard]] uint32_t getKeysNumberPerIteration() const;
 

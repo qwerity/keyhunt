@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "util/common_host.h"
+#include "common_host.h"
 
 class ResultsProcessor
 {

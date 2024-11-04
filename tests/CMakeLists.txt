@@ -45,6 +45,7 @@ add_executable(http_client_test http_client_test.cpp)
 ####################################################################################################################################################################################
 add_executable(mnemonic_tests mnemonic_tests.cpp test_data.h)
 target_link_libraries(mnemonic_tests PRIVATE util)
+target_link_libraries(mnemonic_tests PRIVATE ecc_cuda)
 target_link_libraries(mnemonic_tests PRIVATE wallycore libsecp256k1)
 
 ####################################################################################################################################################################################

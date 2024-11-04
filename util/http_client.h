@@ -23,9 +23,9 @@ public:
 
     http::status generateToken(std::string& token) const;
     [[nodiscard]] bool hostAlive() const;
-    http::status getNumber(uint32_t& number) const;
-    [[nodiscard]] bool markDone(uint32_t number) const;
-    [[nodiscard]] bool setFound(uint32_t number, const std::string& privateKeyHex) const;
+    http::status getXPartNumber(uint32_t& number) const;
+    [[nodiscard]] bool markXPartDone(const uint32_t number) const;
+    [[nodiscard]] bool setXPartFound(const uint32_t number, const std::string& privateKeyHex) const;
 
 private:
     struct Impl;

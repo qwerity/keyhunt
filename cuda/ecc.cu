@@ -7,8 +7,8 @@
 #include "util/cuda_util.h"
 #include "util/common.h"
 
-// Check public key hash160 compressed/uncompressed/both
-__constant__ int d_publicKeyCompressionTypeToCheck{PointCompressionType::BOTH};
+// Check publickey hash160 compressed/uncompressed/both
+extern __constant__ int d_publicKeyCompressionTypeToCheck;
 
 __constant__ uint32_t d_pointsPerThread{};
 
@@ -55,19 +55,19 @@ struct ECC::Impl
         cudaCheckError(cudaMemcpyToSymbol(d_pointsPerThread, &mPointsPerThread, sizeof(uint32_t)));
     }
 
-    void computeResolutionForMaxOccupancy(const uint32_t pointsPerThread, const uint32_t blockSize = 0)
+    void computeResolutionForMaxOccupancy(const uint32_t pointsPerThread, const uint32_t gridSize, const uint32_t blockSize = 0)
     {
         int minGridSize{};
         int recommendedBlockSize{};
         cudaCheckError(cudaOccupancyMaxPotentialBlockSize(&minGridSize, &recommendedBlockSize, publicKeyGenerationKernel));
 
-        mBlockSize = (blockSize != 0) ? blockSize : recommendedBlockSize;
-
         setPointsPerThread(pointsPerThread);
-        mGridSize = minGridSize;
+
+        mBlockSize = (blockSize != 0) ? blockSize : recommendedBlockSize;
+        mGridSize = (gridSize != 0) ? gridSize : minGridSize;
 
         mKeysNumberPerIteration = mGridSize * mBlockSize * mPointsPerThread;
-        std::fprintf(stderr, "minGridSize: %d, recommendedBlockSize: %d, set blockSize: %u, mKeysNumberPerIteration: %u\n", minGridSize, recommendedBlockSize, mBlockSize, mKeysNumberPerIteration);
+        std::fprintf(stderr, "minGridSize: %d, recommendedBlockSize: %d, set blockSize: %u, mnemonicsPerIteration: %u\n", minGridSize, recommendedBlockSize, mBlockSize, mKeysNumberPerIteration);
     }
 
     [[nodiscard]] uint32_t getIndex(const uint32_t grid, const uint32_t block, const uint32_t idx) const
@@ -81,7 +81,7 @@ struct ECC::Impl
         return base + threadId;
     }
 
-    [[nodiscard]] uint32_t getKeysNumberPerIteration() const
+    [[nodiscard]] inline uint32_t getKeysNumberPerIteration() const
     {
         return mKeysNumberPerIteration;
     }
@@ -136,9 +136,9 @@ struct ECC::Impl
         }, "generatePrivateKeysForXPerIteration"));
     }
 
-    void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t blockSize)
+    void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t gridSize, const uint32_t blockSize)
     {
-        computeResolutionForMaxOccupancy(pointsPerThread, blockSize);
+        computeResolutionForMaxOccupancy(pointsPerThread, gridSize, blockSize);
 
         cudaCheckError(cudaMemcpyToSymbol(d_publicKeyCompressionTypeToCheck, &publicKeyCompressionTypeToCheck, sizeof(uint32_t)));
 
@@ -179,9 +179,9 @@ ECC::~ECC() = default;
 ECC::ECC(ECC&& rhs) noexcept = default;
 ECC& ECC::operator=(ECC &&rhs) noexcept = default;
 
-void ECC::init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t blockSize) const
+void ECC::init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t gridSize, const uint32_t blockSize) const
 {
-    mImpl->init(pointsPerThread, publicKeyCompressionTypeToCheck, blockSize);
+    mImpl->init(pointsPerThread, publicKeyCompressionTypeToCheck, gridSize, blockSize);
 }
 
 uint32_t ECC::getKeysNumberPerIteration() const

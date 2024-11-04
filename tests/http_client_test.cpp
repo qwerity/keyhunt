@@ -24,11 +24,11 @@ static bool setupDone = (globalSetup(), true);
 TEST_CASE("Http client test: get_number")
 {
     uint32_t number1{0};
-    REQUIRE(http::status::ok == clientPtr->getNumber(number1));
+    REQUIRE(http::status::ok == clientPtr->getXPartNumber(number1));
     REQUIRE(number1 > 0);
 
     uint32_t number2{0};
-    REQUIRE(http::status::ok == clientPtr->getNumber(number2));
+    REQUIRE(http::status::ok == clientPtr->getXPartNumber(number2));
     REQUIRE(number2 > 0);
 
     REQUIRE(number1 + 1 == number2);
@@ -37,7 +37,7 @@ TEST_CASE("Http client test: get_number")
 TEST_CASE("Http client test mark_done")
 {
     uint32_t number{2};
-    REQUIRE(true == clientPtr->markDone(number));
+    REQUIRE(true == clientPtr->markXPartDone(number));
     REQUIRE(number > 0);
 }
 
@@ -45,5 +45,5 @@ TEST_CASE("Http client test set_found")
 {
     const std::string privateKeyHex = "test";
     uint32_t number{2};
-    REQUIRE(true == clientPtr->setFound(number, privateKeyHex));
+    REQUIRE(true == clientPtr->setXPartFound(number, privateKeyHex));
 }

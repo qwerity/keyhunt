@@ -66,6 +66,9 @@ set(ECC_SRC
 
     atomic_list.cuh
     atomic_list.cu
+
+    hd_wallet.cu
+    hd_wallet.cuh
 )
 
 add_library(ecc_cuda STATIC ${ECC_SRC} ${SECP256K1_V2_SRC})

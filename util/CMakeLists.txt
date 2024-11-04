@@ -36,6 +36,9 @@ set(SRC_FILES
 
     bitcoin_utils.cpp
     bitcoin_utils.h
+
+    results_processor.cpp
+    results_processor.h
 )
 
 # Define the static library target
@@ -44,5 +47,6 @@ add_library(util STATIC ${SRC_FILES})
 target_link_libraries(util PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(util PRIVATE Boost::log Boost::iostreams)
 target_link_libraries(util PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(util PRIVATE wallycore libsecp256k1)
 
 ####################################################################################################################################################################################

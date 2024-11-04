@@ -28,6 +28,8 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/io_context.hpp>
 
+#include <wally_bip32.h>
+
 namespace beast = boost::beast;
 namespace http = beast::http;
 namespace net = boost::asio;
@@ -230,6 +232,24 @@ namespace utils
         boost::log::add_common_attributes();
 
         boost::log::core::get()->set_filter(boost::log::trivial::severity >= static_cast<boost::log::trivial::severity_level>(log.severity));
+    }
+
+    void statusCallback(const StatusInfo& info)
+    {
+        const std::string speedStr = (info.pointsPerSecond < 0.01) ? "< 0.01 MKey/s" : std::format("{:.3f} MKey/s", info.pointsPerSecond);
+
+        const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L} total)", info.total);
+        const std::string timeStr = std::format("[{:.3f}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
+        const uint64_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
+        const uint64_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
+
+        const std::string statusStr = std::format("[{} | {} | {}/{}MB] [{}/{}] {} {} {}"
+            , info.device, info.deviceName, usedDeviceMemoryMb, totalDeviceMemoryMb
+            , info.iteration, info.totalIterations
+            , speedStr, totalStr, timeStr);
+
+        // fprintf(stderr, "\r%s", statusStr.c_str());
+        BOOST_LOG_TRIVIAL(fatal) << statusStr;
     }
 
     void initOpenssl()
@@ -672,6 +692,113 @@ namespace utils
         }
 
         return true;
+    }
+
+    // Helper function to expand a single pattern into all its combinations
+    std::vector<std::string> bip32ExpandPattern(const std::string& pattern, uint32_t accN, uint32_t addrN)
+    {
+        std::vector<std::string> expanded;
+
+        const std::string accountPlaceholder{"acc"};
+        const uint32_t acc_placeholder_length = accountPlaceholder.size();
+        const uint32_t acc_hardened_placeholder_length = acc_placeholder_length + 1;
+        const std::string addressPlaceholder{"addr"};
+
+        size_t acc_pos = pattern.find(accountPlaceholder);
+        size_t addr_pos = pattern.find(addressPlaceholder);
+
+        if (acc_pos == std::string::npos && addr_pos == std::string::npos)
+        {
+            expanded.push_back(pattern);
+            return expanded;
+        }
+
+        // Handle account expansion
+        std::vector<std::string> acc_expanded;
+        if (acc_pos != std::string::npos)
+        {
+            bool is_hardened = (pattern[acc_pos + acc_placeholder_length] == '\'');
+            const std::string& acc_pattern = pattern;
+            for (uint32_t i = 0; i < accN; ++i)
+            {
+                std::string replacement = std::to_string(i) + (is_hardened ? "'" : "");
+                std::string new_pattern = acc_pattern;
+                new_pattern.replace(acc_pos, is_hardened ? acc_hardened_placeholder_length : acc_placeholder_length, replacement);
+                acc_expanded.push_back(new_pattern);
+            }
+        }
+        else
+        {
+            acc_expanded.push_back(pattern);
+        }
+
+        // Handle address expansion
+        for (const auto& acc_pattern: acc_expanded)
+        {
+            addr_pos = acc_pattern.find(addressPlaceholder);
+            if (addr_pos != std::string::npos)
+            {
+                for (uint32_t i = 0; i < addrN; ++i)
+                {
+                    std::string new_pattern = acc_pattern;
+                    new_pattern.replace(addr_pos, addressPlaceholder.size(), std::to_string(i));
+                    expanded.push_back(new_pattern);
+                }
+            }
+            else
+            {
+                expanded.push_back(acc_pattern);
+            }
+        }
+
+        return expanded;
+    }
+
+    std::vector<uint32_t> bip32GetDerivationVector(const std::string& pattern)
+    {
+        std::vector<uint32_t> path(BIP32_PATH_MAX_LEN);
+        size_t written;
+
+        int result = bip32_path_from_str(pattern.c_str(), 0, 0, 0, path.data(), path.size(), &written);
+
+        if (result != WALLY_OK)
+        {
+            throw std::runtime_error("Failed to parse BIP32 path: " + pattern);
+        }
+
+        path.resize(written);
+        return path;
+    }
+
+    std::vector<std::vector<uint32_t>> bip32GetAllDerivationPaths(const std::vector<std::string>& expanded_patterns)
+    {
+        std::vector<std::vector<uint32_t>> all_paths;
+
+        for (const auto& expanded: expanded_patterns)
+        {
+            all_paths.push_back(bip32GetDerivationVector(expanded));
+        }
+
+        return all_paths;
+    }
+
+    std::vector<std::vector<uint32_t>> bip32GetDerivationPathsFromPatterns(const std::vector<std::string>& derivationPathsPatters, const uint32_t accountsToGenerate, const uint32_t addressesToGenerate, std::vector<std::string>& allExpandedPaths)
+    {
+        // First, expand all patterns
+        for (const auto& pattern: derivationPathsPatters)
+        {
+            auto expanded = utils::bip32ExpandPattern(pattern, accountsToGenerate, addressesToGenerate);
+            allExpandedPaths.insert(allExpandedPaths.end(), expanded.begin(), expanded.end());
+        }
+
+        // Convert expanded paths to vectors of indices
+        return utils::bip32GetAllDerivationPaths(allExpandedPaths);
+    }
+
+    std::vector<std::vector<uint32_t>> bip32GetDerivationPathsFromPatterns(const std::vector<std::string>& derivationPathsPatters, const uint32_t accountsToGenerate, const uint32_t addressesToGenerate)
+    {
+        std::vector<std::string> allExpandedPaths;
+        return bip32GetDerivationPathsFromPatterns(derivationPathsPatters, accountsToGenerate, addressesToGenerate, allExpandedPaths);
     }
 }
 

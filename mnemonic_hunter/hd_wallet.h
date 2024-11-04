@@ -1,6 +1,9 @@
 #pragma once
 
+#include "secp256k1_v2/bip32.cuh"
+
 #include "util/common_host.h"
+#include "util/cuda_util.h"
 
 #include <string>
 #include <memory>
@@ -15,7 +18,7 @@ using bip32Paths = std::set<bip32Path>;
 class HDWallet
 {
 public:
-    HDWallet(const std::shared_ptr<GlobalContext>& context);
+    explicit HDWallet(const std::shared_ptr<GlobalContext>& context, cu::CudaDeviceInfo&& cudaInfo);
     ~HDWallet();
 
     HDWallet(const HDWallet&) = delete;
@@ -23,6 +26,8 @@ public:
 
     HDWallet(HDWallet&& rhs) noexcept;
     HDWallet& operator=(HDWallet&& rhs) noexcept;
+
+    void startSearchPublicHash() const;
 
     static std::vector<uint8_t> generateEntropy(size_t bytes);
     static std::string generateMnemonic(const std::vector<uint8_t>& entropy);

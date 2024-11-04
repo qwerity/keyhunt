@@ -12,13 +12,13 @@
 #define SIZE_HASH160_FRAME      (20)
 #define SIZE32_HASH160_FRAME    (SIZE_HASH160_FRAME / 4)
 
-struct extended_private_key_t
+struct alignas(8 * 8) extended_private_key_t
 {
     uint8_t key[32]{};
     uint8_t chainCode[32]{};
 };
 
-struct extended_public_key_t
+struct alignas(8 * 8) extended_public_key_t
 {
     uint8_t key[64]{};
 };

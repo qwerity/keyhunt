@@ -1,6 +1,6 @@
 #include "results_processor.h"
-#include "util/crypto_util.h"
-#include "util/utils.h"
+#include "crypto_util.h"
+#include "utils.h"
 
 #include <thread>
 #include <format>
@@ -64,7 +64,7 @@ struct ResultsProcessor::Impl
                 // if it is not test: set_found for privateXPart
                 if (!gContext->config.devMode())
                 {
-                    online |= gContext->httpClient->setFound(result.privateXPart, privateStr);
+                    online |= gContext->httpClient->setXPartFound(result.privateXPart, privateStr);
                     utils::backupToTGAsync(resultsStr);
                 }
 

@@ -27,9 +27,6 @@ struct ServerConfig
 
 struct HunterConfig
 {
-    // Cuda key generation params
-    uint32_t pointsPerThread{128};
-
     // Private Keys generation
     uint32_t keysNumberToGenerate{0};
 
@@ -39,16 +36,16 @@ struct HunterConfig
     bool forcePrivateXPart{false};
     uint32_t privateXPart{1};
     uint32_t privateYOffset{0};
-
-    uint32_t publicKeyCompressionTypeToCheck{2};
-
-    uint32_t statusCallbackPeriodMs{1000};
 };
 
 struct HDWalletConfig
 {
     const std::string accountPlaceholder = "acc";
     const std::string addressPlaceholder = "addr";
+
+    bool forceMnemonic{false};
+    std::string mnemonic;
+    uint32_t mnemonicsToGenerate{1000};
 
     std::vector<std::string> derivationPathsPatters{
         "m/addr",
@@ -82,12 +79,18 @@ public:
     [[nodiscard]] bool isPrivateXPartRandom() const;
     void setPrivateXPartRandom() const;
 
-    std::string jsonStr();
+    [[nodiscard]] std::string jsonStr() const;
 
     HunterConfig& hunter();
     ServerConfig& server();
     LogConfig& log();
     HDWalletConfig& hdWallet();
+
+    [[nodiscard]] uint32_t statusCallbackPeriodMs() const;
+    [[nodiscard]] uint32_t publicKeyCompressionTypeToCheck() const;
+    [[nodiscard]] uint32_t pointsPerThread() const;
+    [[nodiscard]] uint32_t blockSize() const;
+    [[nodiscard]] uint32_t gridSize() const;
 
     // hardcoded
     static constexpr const char* aesKey{"CB4BBEDF03DA589798E997D86027DE755F33D226AEF90F395539DA4C08EF65B3"};
