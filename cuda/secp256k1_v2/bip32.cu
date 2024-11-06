@@ -4,7 +4,6 @@
 #include "ripemd160.cuh"
 #include "hmac.cuh"
 #include "sha.cuh"
-#include "utils.cuh"
 
 __device__ void generatePublicFromPrivateKey(const extended_private_key_t* priv, extended_public_key_t* pub)
 {

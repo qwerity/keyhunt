@@ -22,24 +22,3 @@
 #define set_eq(dest,a,b) asm volatile("set.eq.u32.u32 %0, %1, %2;\n\t" : "=r"(dest) : "r"(a), "r"(b))
 
 #define lsbpos(x) (__ffs((x)))
-
-
-__host__ __device__ __forceinline__ uint32_t SWAP32(uint32_t x)
-{
-    return (((x & 0x000000FF) << 24) |
-            ((x & 0x0000FF00) << 8) |
-            ((x & 0x00FF0000) >> 8) |
-            ((x & 0xFF000000) >> 24));
-}
-
-__host__ __device__ __forceinline__ uint64_t SWAP64(uint64_t x)
-{
-    return ((((x & 0x00000000000000FFUL) << 56) |
-             ((x & 0x000000000000FF00UL) << 40) |
-             ((x & 0x0000000000FF0000UL) << 24) |
-             ((x & 0x00000000FF000000UL) << 8)  |
-             ((x & 0x000000FF00000000UL) >> 8)  |
-             ((x & 0x0000FF0000000000UL) >> 24) |
-             ((x & 0x00FF000000000000UL) >> 40) |
-             ((x & 0xFF00000000000000UL) >> 56)));
-}

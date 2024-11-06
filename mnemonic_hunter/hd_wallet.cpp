@@ -3,6 +3,7 @@
 #include "cuda/hd_wallet.cuh"
 #include "cuda/atomic_list.cuh"
 #include "cuda/hash160_lookup.cuh"
+#include "cuda/defines.h"
 
 #include "util/utils.h"
 

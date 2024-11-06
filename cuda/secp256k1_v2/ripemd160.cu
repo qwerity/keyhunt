@@ -1,9 +1,6 @@
 #include "ripemd160.cuh"
 #include "sha.cuh"
-#include "utils.cuh"
-
-#define GET_UINT32_LE(n, b, i) { (n) = ( (uint32_t) (b)[(i)])| ( (uint32_t) (b)[(i) + 1] <<  8 )| ( (uint32_t) (b)[(i) + 2] << 16 ) | ( (uint32_t) (b)[(i) + 3] << 24 );}
-#define PUT_UINT32_LE(n, b, i) { (b)[(i)    ] = (uint8_t) ( ( (n)       ) & 0xFF ); (b)[(i) + 1] = (uint8_t) ( ( (n) >>  8 ) & 0xFF ); (b)[(i) + 2] = (uint8_t) ( ( (n) >> 16 ) & 0xFF ); (b)[(i) + 3] = (uint8_t) ( ( (n) >> 24 ) & 0xFF ); }
+#include "../utils.cuh"
 
 __constant__ constexpr uint8_t ripemd160Padding[64] = {
     0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -209,17 +206,17 @@ __device__ void ripemd160Update(RIPEMD160_CTX* ctx, const uint8_t* input, uint32
     uint32_t left = ctx->total[0] & 0x3F;
     uint32_t fill = 64 - left;
 
-    ctx->total[0] += (uint32_t) inputMaxLen;
+    ctx->total[0] += inputMaxLen;
     ctx->total[0] &= 0xFFFFFFFF;
 
-    if (ctx->total[0] < (uint32_t) inputMaxLen)
+    if (ctx->total[0] < inputMaxLen)
     {
-        ctx->total[1]++;
+        ++ctx->total[1];
     }
 
     if (left && inputMaxLen >= fill)
     {
-        cuda_memcpy((uint8_t*) (ctx->buffer + left), input, fill);
+        cuda_memcpy(ctx->buffer + left, input, fill);
 
         ripemd160Process(ctx, ctx->buffer);
         input += fill;
@@ -236,40 +233,31 @@ __device__ void ripemd160Update(RIPEMD160_CTX* ctx, const uint8_t* input, uint32
 
     if (inputMaxLen > 0)
     {
-        cuda_memcpy((uint8_t*) (ctx->buffer + left), input, inputMaxLen);
+        cuda_memcpy(ctx->buffer + left, input, inputMaxLen);
     }
 }
 
 __device__ void ripemd160Final(RIPEMD160_CTX* ctx, uint32_t output[5])
 {
-    uint32_t last, padN;
-    uint32_t high, low;
     uint8_t msglen[8]{};
 
-    high = (ctx->total[0] >> 29) | (ctx->total[1] << 3);
-    low = (ctx->total[0] << 3);
+    uint32_t high = (ctx->total[0] >> 29) | (ctx->total[1] << 3);
+    uint32_t low = (ctx->total[0] << 3);
 
     PUT_UINT32_LE(low, msglen, 0)
     PUT_UINT32_LE(high, msglen, 4)
 
-    last = ctx->total[0] & 0x3F;
-    padN = (last < 56) ? (56 - last) : (120 - last);
+    uint32_t last = ctx->total[0] & 0x3F;
+    uint32_t padN = (last < 56) ? (56 - last) : (120 - last);
 
     ripemd160Update(ctx, ripemd160Padding, padN);
     ripemd160Update(ctx, msglen, 8);
-
-    //PUT_UINT32_LE(ctx->state[0], output, 0);
-    //PUT_UINT32_LE(ctx->state[1], output, 4);
-    //PUT_UINT32_LE(ctx->state[2], output, 8);
-    //PUT_UINT32_LE(ctx->state[3], output, 12);
-    //PUT_UINT32_LE(ctx->state[4], output, 16);
 
     output[0] = ctx->state[0];
     output[1] = ctx->state[1];
     output[2] = ctx->state[2];
     output[3] = ctx->state[3];
     output[4] = ctx->state[4];
-    //memzero(ctx, sizeof(RIPEMD160_CTX));
 }
 
 __device__ void ripemd160(const uint8_t* msg, uint32_t msg_len, uint32_t hash[5])
@@ -282,7 +270,7 @@ __device__ void ripemd160(const uint8_t* msg, uint32_t msg_len, uint32_t hash[5]
 
 __device__ void hash160(const uint8_t* input, int input_len, uint32_t* output)
 {
-    uint8_t sha256_result[32];
-    sha256((const uint32_t*) input, input_len, (uint32_t*) &sha256_result);
-    ripemd160((const uint8_t*) &sha256_result, 32, output);
+    uint8_t sha256Result[32]{};
+    sha256((const uint32_t*) input, input_len, (uint32_t*) &sha256Result);
+    ripemd160((const uint8_t*) &sha256Result, 32, output);
 }

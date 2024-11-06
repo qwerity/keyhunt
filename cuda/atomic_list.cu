@@ -1,16 +1,19 @@
 #include "atomic_list.cuh"
+#include "defines.h"
+#include "utils.cuh"
 
-#include "util/common.h"
+#include <cstdlib>
+#include <cstring>
 
-static __constant__ void *d_listBuf[1];
-static __constant__ uint32_t *d_listSize[1];
+__constant__ void *d_listBuf[1];
+__constant__ uint32_t *d_listSize[1];
 
 
 __device__ void atomicListAdd(const void *info, const uint32_t size)
 {
     const uint32_t count = atomicAdd(d_listSize[0], 1);
     uint8_t *ptr = static_cast<uint8_t *>(d_listBuf[0]) + count * size;
-    memcpy(ptr, info, size);
+    cuda_memcpy(ptr, static_cast<const uint8_t*>(info), size);
 }
 
 static void setListPtr(void *ptr, uint32_t *numResults)

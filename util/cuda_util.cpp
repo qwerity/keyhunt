@@ -1,8 +1,9 @@
 #include "cuda_util.h"
+#include "common.h"
+
+#include "cuda/defines.h"
 
 #include <cinttypes>
-
-#include "common.h"
 
 namespace cu
 {

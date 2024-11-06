@@ -1,8 +1,8 @@
 #include "hash160_lookup.cuh"
 #include "udevice_vector.cuh"
-#include "ptx.cuh"
+#include "utils.cuh"
 
-#include "util/common.h"
+#include "defines.h"
 
 constexpr uint32_t maxTargetsConstantMem{16};
 

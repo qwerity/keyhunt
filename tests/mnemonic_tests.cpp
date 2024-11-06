@@ -262,8 +262,7 @@ TEST_CASE("CUDA Test WallyCore lib: mnemonic -> hd keys generation", "")
     REQUIRE(derivationPaths.size() == publicKeys.size());
 
     const char* passphrase = "";
-    unsigned char seed[BIP39_SEED_LEN_512];
-    memset(seed, 0, BIP39_SEED_LEN_512);
+    unsigned char seed[BIP39_SEED_LEN_512]{};
 
     // Generate the seed from the mnemonic
     REQUIRE(WALLY_OK ==bip39_mnemonic_to_seed(reinterpret_cast<const char*>(mnemonic), passphrase, seed, BIP39_SEED_LEN_512, nullptr));

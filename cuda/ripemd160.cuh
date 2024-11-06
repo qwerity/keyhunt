@@ -1,18 +1,18 @@
 #pragma once
 
 #include <cuda_runtime.h>
+#include "defines.cuh"
 
-__constant__ constexpr uint32_t d_RIPEMD160_IV[5] = {0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0};
+constexpr uint32_t d_RIPEMD160_IV[5] = {0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0};
 
-__constant__ constexpr uint32_t d_K0 = 0x5a827999;
-__constant__ constexpr uint32_t d_K1 = 0x6ed9eba1;
-__constant__ constexpr uint32_t d_K2 = 0x8f1bbcdc;
-__constant__ constexpr uint32_t d_K3 = 0xa953fd4e;
-
-__constant__ constexpr uint32_t d_K4 = 0x7a6d76e9;
-__constant__ constexpr uint32_t d_K5 = 0x6d703ef3;
-__constant__ constexpr uint32_t d_K6 = 0x5c4dd124;
-__constant__ constexpr uint32_t d_K7 = 0x50a28be6;
+constexpr uint32_t d_RIPEMD160_K0 = 0x5a827999;
+constexpr uint32_t d_RIPEMD160_K1 = 0x6ed9eba1;
+constexpr uint32_t d_RIPEMD160_K2 = 0x8f1bbcdc;
+constexpr uint32_t d_RIPEMD160_K3 = 0xa953fd4e;
+constexpr uint32_t d_RIPEMD160_K4 = 0x7a6d76e9;
+constexpr uint32_t d_RIPEMD160_K5 = 0x6d703ef3;
+constexpr uint32_t d_RIPEMD160_K6 = 0x5c4dd124;
+constexpr uint32_t d_RIPEMD160_K7 = 0x50a28be6;
 
 __device__ __forceinline__ uint32_t rotl(const uint32_t x, const int n)
 {
@@ -53,28 +53,28 @@ __device__ __forceinline__ void FF(uint32_t &a, const uint32_t b, uint32_t &c, c
 
 __device__ __forceinline__ void GG(uint32_t &a, const uint32_t b, uint32_t &c, const uint32_t d, const uint32_t e, const uint32_t x, const uint32_t s)
 {
-    a += G(b, c, d) + x + d_K0;
+    a += G(b, c, d) + x + d_RIPEMD160_K0;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 __device__ __forceinline__ void HH(uint32_t &a, const uint32_t b, uint32_t &c, const uint32_t d, const uint32_t e, const uint32_t x, const uint32_t s)
 {
-    a += H(b, c, d) + x + d_K1;
+    a += H(b, c, d) + x + d_RIPEMD160_K1;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 __device__ __forceinline__ void II(uint32_t &a, const uint32_t b, uint32_t &c, const uint32_t d, const uint32_t e, const uint32_t x, const uint32_t s)
 {
-    a += I(b, c, d) + x + d_K2;
+    a += I(b, c, d) + x + d_RIPEMD160_K2;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 __device__ __forceinline__ void JJ(uint32_t &a, const uint32_t b, uint32_t &c, const uint32_t d, const uint32_t e, const uint32_t x, const uint32_t s)
 {
-    a += J(b, c, d) + x + d_K3;
+    a += J(b, c, d) + x + d_RIPEMD160_K3;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
@@ -88,28 +88,28 @@ __device__ __forceinline__ void FFF(uint32_t &a, const uint32_t b, uint32_t &c, 
 
 __device__ __forceinline__ void GGG(uint32_t &a, const uint32_t b, uint32_t &c, const uint32_t d, const uint32_t e, const uint32_t x, const uint32_t s)
 {
-    a += G(b, c, d) + x + d_K4;
+    a += G(b, c, d) + x + d_RIPEMD160_K4;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 __device__ __forceinline__ void HHH(uint32_t &a, const uint32_t b, uint32_t &c, const uint32_t d, const uint32_t e, const uint32_t x, const uint32_t s)
 {
-    a += H(b, c, d) + x + d_K5;
+    a += H(b, c, d) + x + d_RIPEMD160_K5;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 __device__ __forceinline__ void III(uint32_t &a, const uint32_t b, uint32_t &c, const uint32_t d, const uint32_t e, const uint32_t x, const uint32_t s)
 {
-    a += I(b, c, d) + x + d_K6;
+    a += I(b, c, d) + x + d_RIPEMD160_K6;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }
 
 __device__ __forceinline__ void JJJ(uint32_t &a, const uint32_t b, uint32_t &c, const uint32_t d, const uint32_t e, const uint32_t x, const uint32_t s)
 {
-    a += J(b, c, d) + x + d_K7;
+    a += J(b, c, d) + x + d_RIPEMD160_K7;
     a = rotl(a, s) + e;
     c = rotl(c, 10);
 }

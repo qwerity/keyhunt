@@ -4,8 +4,7 @@
 #include "ecc_helper.cuh"
 #include "functors.cuh"
 
-#include "util/cuda_util.h"
-#include "util/common.h"
+#include "defines.h"
 
 // Check publickey hash160 compressed/uncompressed/both
 extern __constant__ int d_publicKeyCompressionTypeToCheck;

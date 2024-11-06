@@ -2,7 +2,7 @@
 
 #include "defines.cuh"
 #include "sha256.cuh"
-#include "ptx.cuh"
+#include "utils.cuh"
 
 #include <curand_kernel.h>
 

@@ -21,18 +21,6 @@ struct alignas(4 * 8) uint256_t
     uint256_t() = default;
 
     __host__ __device__ __forceinline__
-    uint4* uint4Ptr()
-    {
-        return reinterpret_cast<uint4*>(v);
-    }
-
-    __host__ __device__ __forceinline__
-    const uint4* uint4CPtr() const
-    {
-        return reinterpret_cast<const uint4*>(v);
-    }
-
-    __host__ __device__ __forceinline__
     static void to_uint256(const uint32_t src[8], uint256_t& dst, const Endianness endian = Endianness::LittleEndian)
     {
         if (endian == Endianness::LittleEndian)
@@ -112,22 +100,11 @@ struct alignas(4 * 8) uint256_t
     }
 };
 
-struct alignas(2 * 4 * 8) ecpoint_t
-{
-    uint256_t x;
-    uint256_t y;
-
-    __forceinline__
-    constexpr ecpoint_t() = default;
-
-    // assign as big endian
-    __host__ __device__ __forceinline__
-    ecpoint_t(const uint32_t _x[8], const uint32_t _y[8], const Endianness endian = Endianness::LittleEndian) noexcept : x(_x, endian), y(_y, endian) {}
-};
-
-struct hash160
+constexpr uint32_t hash160Size{20};
+struct alignas(32) hash160
 {
     uint32_t h[5]{};
+    [[maybe_unused]] uint32_t _padding[3]{};
 
     hash160() = default;
 

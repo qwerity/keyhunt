@@ -1,15 +1,12 @@
 #include "secp256k1.cuh"
 #include "secp256k1_constants.cuh"
-#include "utils.cuh"
 
-__device__ int secp256k1_pubkey_load(secp256k1_ge* ge, const uint8_t* pubkey)
+__device__ void secp256k1_pubkey_load(secp256k1_ge* ge, const uint8_t* pubkey)
 {
     secp256k1_fe x, y;
     secp256k1_fe_set_b32(&x, pubkey);
     secp256k1_fe_set_b32(&y, pubkey + 32);
     secp256k1_ge_set_xy(ge, &x, &y);
-
-    return 1;
 }
 
 __device__ void secp256k1_fe_normalize_var(secp256k1_fe* r)
@@ -61,8 +58,7 @@ __device__ void secp256k1_fe_normalize_var(secp256k1_fe* r)
     m &= t8;
 
     /* At most a single final reduction is needed; check if the value is >= the field characteristic */
-    x = (t9 >> 22) | ((t9 == 0x03FFFFFUL) & (m == 0x3FFFFFFUL)
-                      & ((t1 + 0x40UL + ((t0 + 0x3D1UL) >> 26)) > 0x3FFFFFFUL));
+    x = (t9 >> 22) | ((t9 == 0x03FFFFFUL) & (m == 0x3FFFFFFUL) & ((t1 + 0x40UL + ((t0 + 0x3D1UL) >> 26)) > 0x3FFFFFFUL));
 
     if (x)
     {
@@ -147,12 +143,8 @@ __device__ int secp256k1_ec_pubkey_serialize(uint8_t* output, uint32_t outputLen
     cuda_memset(output, 0, outputLen);
 
     secp256k1_ge Q{0};
-    int ret = 0;
-    if (secp256k1_pubkey_load(&Q, pubkey))
-    {
-        ret = secp256k1_eckey_pubkey_serialize(&Q, output);
-    }
-    return ret;
+    secp256k1_pubkey_load(&Q, pubkey);
+    return secp256k1_eckey_pubkey_serialize(&Q, output);
 }
 
 __device__ int secp256k1_scalar_add(secp256k1_scalar* r, const secp256k1_scalar* a, const secp256k1_scalar* b)

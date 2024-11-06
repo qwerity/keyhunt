@@ -1,8 +1,7 @@
 #include "bip39.cuh"
 #include "bip32.cuh"
 #include "sha.cuh"
-#include "utils.cuh"
-#include "../ptx.cuh"
+#include "../utils.cuh"
 
 [[maybe_unused]] __constant__ constexpr uint8_t salt[12] = {'m', 'n', 'e', 'm', 'o', 'n', 'i', 'c', 0, 0, 0, 1}; // "mnemonic\0\0\0\1"
 __constant__ constexpr uint8_t salt_swap[16] = {'c', 'i', 'n', 'o', 'm', 'e', 'n', 'm', 0, 0, 0, 0, 1, 0, 0, 0}; // "cinomenm\0\0\0\0\1\0\0\0"

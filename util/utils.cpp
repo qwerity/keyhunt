@@ -285,7 +285,7 @@ namespace utils
     hash160 toHash160(const std::string& hexString)
     {
         hash160 hash;
-        if (hexString.length() != sizeof(hash160) * 2)
+        if (hexString.length() != hash160Size * 2)
         {
             fprintf(stderr,  "RIPEMD-160 hex string must be exactly 40 characters long!\n");
             return hash;
@@ -338,7 +338,7 @@ namespace utils
 
             const char *data = file.data();
             const size_t fileSize = file.size();
-            constexpr size_t hash160StrSize = 2 * sizeof(hash160);  // Each chunk is 20 bytes (without newlines)
+            constexpr size_t hash160StrSize = 2 * hash160Size;  // Each chunk is 20 bytes (without newlines)
 
             // reserving memory to avoid memory allocation during insertion
             hashSet.reserve(hashSet.size() + fileSize / (hash160StrSize + 1)); // +1 is new line
@@ -369,7 +369,7 @@ namespace utils
             file.close();
 
             BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Read {:L} unique hashes, from: {:L}, ({:.03f}s | {:02}Mb)",
-                                                    hashSet.size(), insertedTargetsCount, timer.elapsedS(), static_cast<double>(sizeof(hash160) * insertedTargetsCount) / MB);
+                                                    hashSet.size(), insertedTargetsCount, timer.elapsedS(), static_cast<double>(hash160Size * insertedTargetsCount) / MB);
         }
         catch(const std::exception& e)
         {
@@ -397,7 +397,7 @@ namespace utils
 
             for (const auto &h: hashSet)
             {
-                ofs.write(reinterpret_cast<const char *>(&h), sizeof(hash160));
+                ofs.write(reinterpret_cast<const char *>(&h), hash160Size);
             }
 
             BOOST_LOG_TRIVIAL(trace) << std::format(std::locale("en_US.UTF-8"), "Written {:L} hashes to {} as a binary, in {:.03f}s | {:.02}Mb",
@@ -435,14 +435,14 @@ namespace utils
             const char *data = file.data();
             size_t fileSize = file.size();
 
-            // Make sure the file size is a multiple of sizeof(hash160)
-            if (fileSize % sizeof(hash160) != 0)
+            // Make sure the file size is a multiple of hash160Size
+            if (fileSize % hash160Size != 0)
             {
                 BOOST_LOG_TRIVIAL(error) << "INVALID Binary! File size is not aligned with hash160 structure!";
                 return false;
             }
 
-            const size_t numEntries = fileSize / sizeof(hash160);
+            const size_t numEntries = fileSize / hash160Size;
 
             BOOST_LOG_TRIVIAL(info) << std::format("Loading RipeMD-160 hashes from: {}, size: {:.2f}Mb", filename, static_cast<double>(fileSize) / MB);
 
@@ -450,7 +450,7 @@ namespace utils
             for (size_t i = 0; i < numEntries; ++i)
             {
                 hash160 h;
-                std::memcpy(&h, data + i * sizeof(hash160), sizeof(hash160));
+                std::memcpy(&h, data + i * hash160Size, hash160Size);
                 hashSet.insert(h);
             }
 

@@ -1,9 +1,8 @@
 #pragma once
 
 #include "secp256k1_defines.cuh"
-#include "utils.cuh"
 #include "bip32.cuh"
-#include "../ptx.cuh"
+#include "../utils.cuh"
 
 __device__ __forceinline__ int secp256k1_scalar_is_zero(const secp256k1_scalar* a)
 {
@@ -103,8 +102,7 @@ __device__ __forceinline__ int secp256k1_fe_set_b32(secp256k1_fe* r, const uint8
     r->n[8] = static_cast<uint32_t>(a[5])                 | (static_cast<uint32_t>(a[4]) << 8)  | (static_cast<uint32_t>(a[3]) << 16)  | (static_cast<uint32_t>(a[2] & 0x3) << 24);
     r->n[9] = static_cast<uint32_t>((a[2] >> 2) & 0x3f)   | (static_cast<uint32_t>(a[1]) << 6)  | (static_cast<uint32_t>(a[0]) << 14);
 
-    return !((r->n[9] == 0x3FFFFFUL) & ((r->n[8] & r->n[7] & r->n[6] & r->n[5] & r->n[4] & r->n[3] & r->n[2]) == 0x3FFFFFFUL)
-          & ((r->n[1] + 0x40UL + ((r->n[0] + 0x3D1UL) >> 26)) > 0x3FFFFFFUL));
+    return !((r->n[9] == 0x3FFFFFUL) & ((r->n[8] & r->n[7] & r->n[6] & r->n[5] & r->n[4] & r->n[3] & r->n[2]) == 0x3FFFFFFUL) & ((r->n[1] + 0x40UL + ((r->n[0] + 0x3D1UL) >> 26)) > 0x3FFFFFFUL));
 }
 
 __device__ __forceinline__ void secp256k1_ge_set_xy(secp256k1_ge* r, const secp256k1_fe* x, const secp256k1_fe* y)
@@ -114,7 +112,7 @@ __device__ __forceinline__ void secp256k1_ge_set_xy(secp256k1_ge* r, const secp2
     r->y = *y;
 }
 
-__device__ int secp256k1_pubkey_load(secp256k1_ge* ge, const uint8_t* pubkey);
+__device__ void secp256k1_pubkey_load(secp256k1_ge* ge, const uint8_t* pubkey);
 
 __device__ __forceinline__ bool secp256k1_ge_is_infinity(const secp256k1_ge* a)
 {

@@ -1,7 +1,7 @@
 #include "sha.cuh"
 #include "sha_defines.cuh"
 #include "sha_constants.cuh"
-#include "../ptx.cuh"
+#include "../utils.cuh"
 
 // 512 bytes
 __constant__ constexpr uint64_t padLong[8] = {highBit(0), highBit(1), highBit(2), highBit(3), highBit(4), highBit(5), highBit(6), highBit(7)};
@@ -57,6 +57,11 @@ __device__ void sha256Process(const uint32_t* W, uint32_t* digest)
 
 __device__ void sha256(const uint32_t* pass, int pass_len, uint32_t* hash)
 {
+    alignas(32) uint32_t State[8] = {
+        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+    };
+
     int plen = pass_len / 4;
     if (mod(pass_len, 4)) 
     {
@@ -68,12 +73,6 @@ __device__ void sha256(const uint32_t* pass, int pass_len, uint32_t* hash)
 
     int loops = plen;
     int curLoop = 0;
-
-    alignas(32) uint32_t State[8] =
-    {
-        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
-    };
 
     while (loops > 0)
     {
@@ -93,15 +92,15 @@ __device__ void sha256(const uint32_t* pass, int pass_len, uint32_t* hash)
         W[0xD] = 0x0;
         W[0xE] = 0x0;
         W[0xF] = 0x0;
-        for (int m = 0; loops != 0 && m < 16; m++)
+        for (int m = 0; loops != 0 && m < 16; ++m)
         {
             W[m] ^= SWAP32(pass[m + (curLoop * 16)]);
-            loops--;
+            --loops;
         }
         if (loops == 0 && mod(pass_len, 64) != 0)
         {
-            uint32_t padding = 0x80 << (((pass_len + 4) - ((pass_len + 4) / 4 * 4)) * 8);
-            int v = mod(pass_len, 64);
+            const uint32_t padding = 0x80 << (((pass_len + 4) - ((pass_len + 4) / 4 * 4)) * 8);
+            const int v = mod(pass_len, 64);
             W[v / 4] |= SWAP32(padding);
             if ((pass_len & 0x3B) != 0x3B)
             {
@@ -109,7 +108,7 @@ __device__ void sha256(const uint32_t* pass, int pass_len, uint32_t* hash)
             }
         }
         sha256Process(W, State);
-        curLoop++;
+        ++curLoop;
     }
     if (mod(plen, 16) == 0)
     {
@@ -131,7 +130,7 @@ __device__ void sha256(const uint32_t* pass, int pass_len, uint32_t* hash)
         W[0xF] = 0x0;
         if ((pass_len & 0x3B) != 0x3B)
         {
-            uint32_t padding = 0x80 << (((pass_len + 4) - ((pass_len + 4) / 4 * 4)) * 8);
+            const uint32_t padding = 0x80 << (((pass_len + 4) - ((pass_len + 4) / 4 * 4)) * 8);
             W[0] |= SWAP32(padding);
         }
         W[0x0F] = pass_len * 8;
@@ -152,8 +151,8 @@ __device__ void sha256(const uint32_t* pass, int pass_len, uint32_t* hash)
 // msg[24] is bytes 193->200 but our message is only 192 bytes
 __device__ void md_pad_128(uint64_t* msg, const uint32_t msgLen_bytes)
 {
-    uint32_t padLongIndex = static_cast<uint32_t>(msgLen_bytes) / 8; // 24
-    uint32_t overhang = (static_cast<uint32_t>(msgLen_bytes) - padLongIndex * 8); // 0
+    const uint32_t padLongIndex = static_cast<uint32_t>(msgLen_bytes) / 8; // 24
+    const uint32_t overhang = (static_cast<uint32_t>(msgLen_bytes) - padLongIndex * 8); // 0
 
     msg[padLongIndex] &= maskLong[overhang]; // msg[24] = msg[24] & 0 -> 0's out this byte
     msg[padLongIndex] |= padLong[overhang]; // msg[24] = msg[24] | 0x1UL << 7 -> sets it to 0x1UL << 7
@@ -162,7 +161,7 @@ __device__ void md_pad_128(uint64_t* msg, const uint32_t msgLen_bytes)
 
     uint32_t i = 0;
     // 27, 28, 29, 30, 31 = 0
-    for (i = padLongIndex + 3; i < 32; i++)
+    for (i = padLongIndex + 3; i < 32; ++i)
     {
         msg[i] = 0;
     }
@@ -174,17 +173,16 @@ __device__ void md_pad_128(uint64_t* msg, const uint32_t msgLen_bytes)
 __device__ void sha512(uint64_t* input, const uint32_t length, uint64_t* hash)
 {
     alignas(32) uint64_t W[80]{};
-
-    md_pad_128(input, length);
-
     alignas(32) uint64_t State[8]
     {
         0x6a09e667f3bcc908UL, 0xbb67ae8584caa73bUL, 0x3c6ef372fe94f82bUL, 0xa54ff53a5f1d36f1UL,
         0x510e527fade682d1UL, 0x9b05688c2b3e6c1fUL, 0x1f83d9abfb41bd6bUL, 0x5be0cd19137e2179UL
     };
 
+    md_pad_128(input, length);
+
     uint64_t a, b, c, d, e, f, g, h;
-    for (int block_i = 0; block_i < 2; block_i++)
+    for (int block_i = 0; block_i < 2; ++block_i)
     {
         W[0] = SWAP64(input[0]);
         W[1] = SWAP64(input[1]);
@@ -245,8 +243,8 @@ __device__ void sha512(uint64_t* input, const uint32_t length, uint64_t* hash)
 
 __device__ void md_pad_128_swap(uint64_t* msg, const uint32_t msgLen_bytes)
 {
-    uint32_t padLongIndex = (msgLen_bytes) / 8;    // 24
-    uint32_t overhang = (msgLen_bytes - padLongIndex * 8); // 0
+    const uint32_t padLongIndex = (msgLen_bytes) / 8;    // 24
+    const uint32_t overhang = (msgLen_bytes - padLongIndex * 8); // 0
     msg[padLongIndex] &= SWAP64(maskLong[overhang]); // msg[24] = msg[24] & 0 -> 0's out this byte
     msg[padLongIndex] |= SWAP64(padLong[overhang]); // msg[24] = msg[24] | 0x1UL << 7 -> sets it to 0x1UL << 7
     msg[padLongIndex + 1] = 0; // msg[25] = 0
@@ -266,17 +264,16 @@ __device__ void md_pad_128_swap(uint64_t* msg, const uint32_t msgLen_bytes)
 __device__ void sha512_swap(uint64_t* input, const uint32_t length, uint64_t* hash)
 {
     uint64_t W[80]{};
-
-    md_pad_128_swap(input, length);
-
     alignas(32) uint64_t State[8]
     {
         0x6a09e667f3bcc908UL, 0xbb67ae8584caa73bUL, 0x3c6ef372fe94f82bUL, 0xa54ff53a5f1d36f1UL,
         0x510e527fade682d1UL, 0x9b05688c2b3e6c1fUL, 0x1f83d9abfb41bd6bUL, 0x5be0cd19137e2179UL
     };
 
+    md_pad_128_swap(input, length);
+
     uint64_t a, b, c, d, e, f, g, h;
-    for (int block_i = 0; block_i < 2; block_i++)
+    for (int block_i = 0; block_i < 2; ++block_i)
     {
         W[0] = input[0];
         W[1] = input[1];
@@ -295,7 +292,7 @@ __device__ void sha512_swap(uint64_t* input, const uint32_t length, uint64_t* ha
         W[14] = input[14];
         W[15] = input[15];
         #pragma unroll
-        for (int i = 16; i < 80; i++)
+        for (int i = 16; i < 80; ++i)
         {
             W[i] = W[i - 16] + little_s0(W[i - 15]) + W[i - 7] + little_s1(W[i - 2]);
         }
