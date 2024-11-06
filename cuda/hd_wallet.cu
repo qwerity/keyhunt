@@ -1,118 +1,10 @@
 #include "hd_wallet.cuh"
+#include "hd_wallet_kernels.cuh"
+#include "ecc_helper.cuh"
 #include "udevice_vector.cuh"
 #include "defines.cuh"
 
-#include "secp256k1_v2/bip39.cuh"
-
 #include "util/common.h"
-
-#include <cstdint>
-
-#include <cuda_runtime.h>
-
-extern __constant__ int d_publicKeyCompressionTypeToCheck;
-
-__constant__ extended_public_key_t* d_publicKeysPtr{};
-
-__constant__ uint32_t* d_flattenedDerivationPathsPtr{};
-__constant__ uint32_t* d_derivationPathsLengthsPtr{};
-__constant__ uint32_t  d_derivationPathsNumber{};
-
-
-struct HDWalletFunctor
-{
-    const uint8_t* mnemonics;
-
-    __host__ __device__
-    explicit HDWalletFunctor(const uint8_t* _mnemonics): mnemonics(_mnemonics)
-    {}
-
-    __device__
-    void operator()(const uint32_t mnemonicIdx) const
-    {
-        // Get pointer to this thread's mnemonic and output area
-        const uint8_t* mnemonic = mnemonics + (mnemonicIdx * SIZE_MNEMONIC_FRAME);
-        extended_public_key_t* threadOutputs = d_publicKeysPtr + (mnemonicIdx * d_derivationPathsNumber);
-
-        // Generate master key once for this mnemonic
-        uint32_t seed[64 / 4]{};
-        extended_private_key_t masterKey;
-        mnemonicToExtendedMasterKey(mnemonic, seed, reinterpret_cast<uint8_t*>(&masterKey));
-
-        // Process all paths for this mnemonic
-        uint32_t pathOffset = 0;
-        for (uint32_t pathIdx = 0; pathIdx < d_derivationPathsNumber; pathIdx++)
-        {
-            extended_private_key_t privateKey = masterKey;  // Start from master key
-            extended_private_key_t tempKey;
-
-            // Derive through current path
-            for (uint32_t i = 0; i < d_derivationPathsLengthsPtr[pathIdx]; ++i)
-            {
-                uint32_t childIndex = d_flattenedDerivationPathsPtr[pathOffset + i];
-                if (childIndex & 0x80000000)
-                {
-                    hardenedPrivateChildFromPrivate(&privateKey, &tempKey, childIndex & 0x7FFFFFFF);
-                }
-                else
-                {
-                    normalPrivateChildFromPrivate(&privateKey, &tempKey, childIndex);
-                }
-                privateKey = tempKey;
-            }
-
-            // Generate public key for this path
-            generatePublicFromPrivateKey(&privateKey, &threadOutputs[pathIdx]);
-
-            // Move to next path
-            pathOffset += d_derivationPathsLengthsPtr[pathIdx];
-        }
-    }
-};
-
-__global__ void hdWalletKernel(const uint8_t* mnemonics, const uint32_t numMnemonics)
-{
-    uint32_t mnemonicIdx = blockDim.x * blockIdx.x + threadIdx.x;
-    //if (mnemonicIdx >= numMnemonics) return;
-
-    // Get pointer to this thread's mnemonic and output area
-    const uint8_t* mnemonic = mnemonics + (mnemonicIdx * SIZE_MNEMONIC_FRAME);
-    extended_public_key_t* mnemonicPublicKeys = d_publicKeysPtr + (mnemonicIdx * d_derivationPathsNumber);
-
-    // Generate master key once for this mnemonic
-    uint32_t seed[64 / 4]{};
-    extended_private_key_t masterKey;
-    mnemonicToExtendedMasterKey(mnemonic, seed, reinterpret_cast<uint8_t*>(&masterKey));
-
-    // Process all paths for this mnemonic
-    uint32_t pathOffset = 0;
-    for (uint32_t pathIdx = 0; pathIdx < d_derivationPathsNumber; ++pathIdx)
-    {
-        extended_private_key_t privateKey = masterKey;  // Start from master key
-        extended_private_key_t tempKey;
-
-        // Derive through current path
-        for (uint32_t i = 0; i < d_derivationPathsLengthsPtr[pathIdx]; ++i)
-        {
-            uint32_t childIndex = d_flattenedDerivationPathsPtr[pathOffset + i];
-            if (childIndex & 0x80000000)
-            {
-                hardenedPrivateChildFromPrivate(&privateKey, &tempKey, childIndex & 0x7FFFFFFF);
-            }
-            else
-            {
-                normalPrivateChildFromPrivate(&privateKey, &tempKey, childIndex);
-            }
-            privateKey = tempKey;
-        }
-
-        // Generate public key for this path
-        generatePublicFromPrivateKey(&privateKey, &mnemonicPublicKeys[pathIdx]);
-
-        // Move to next path
-        pathOffset += d_derivationPathsLengthsPtr[pathIdx];
-    }
-}
 
 struct CUHDWallet::Impl
 {
@@ -124,6 +16,8 @@ struct CUHDWallet::Impl
 
     thrust::udevice_vector<extended_public_key_t> d_publicKeys;
     thrust::udevice_vector<uint8_t> d_mnemonics;
+    thrust::udevice_vector<uint32_t> d_mnemonicsSeeds;
+    thrust::udevice_vector<extended_private_key_t> d_mnemonicsSeedsMasterKeys;
 
     std::vector<std::vector<uint32_t>> h_derivationPaths;
     thrust::udevice_vector<uint32_t> d_flattenedDerivationPaths;
@@ -168,7 +62,16 @@ struct CUHDWallet::Impl
     void allocateMnemonicsDeviceMemory()
     {
         const uint32_t mnemonicsNumber = getMnemonicsPerIteration();
-        d_mnemonics.resize(mnemonicsNumber * SIZE_MNEMONIC_FRAME);
+        d_mnemonics.resize(mnemonicsNumber * SIZE_MNEMONIC_FRAME_12);
+
+        d_mnemonicsSeeds.resize(mnemonicsNumber * (64 / 4));
+
+        const uint32_t* d_mnemonicsSeedsRawPtr = thrust::raw_pointer_cast(d_mnemonicsSeeds.data());
+        cudaCheckError(cudaMemcpyToSymbol(d_mnemonicsSeedsPtr, &d_mnemonicsSeedsRawPtr, sizeof(uint32_t *)));
+
+        d_mnemonicsSeedsMasterKeys.resize(mnemonicsNumber);
+        const extended_private_key_t* d_mnemonicsSeedsMasterKeysRawPtr = thrust::raw_pointer_cast(d_mnemonicsSeedsMasterKeys.data());
+        cudaCheckError(cudaMemcpyToSymbol(d_mnemonicsSeedsMasterKeysPtr, &d_mnemonicsSeedsMasterKeysRawPtr, sizeof(extended_private_key_t *)));
     }
 
     void allocateDerivationPathsDeviceMemory(const std::vector<std::vector<uint32_t>>& derivationPaths)
@@ -229,18 +132,46 @@ struct CUHDWallet::Impl
         constexpr uint32_t mSharedMemSize{0};
         const auto* d_mnemonicsPtr = thrust::raw_pointer_cast(d_mnemonics.data());
 
-        thrust::copy(mnemonics, mnemonics + mnemonicsNumber * SIZE_MNEMONIC_FRAME, d_mnemonics.begin());
+        thrust::copy(mnemonics, mnemonics + mnemonicsNumber * SIZE_MNEMONIC_FRAME_12, d_mnemonics.begin());
 
         cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
         {
-            hdWalletKernel<<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(d_mnemonicsPtr, mnemonicsNumber);
+            hdWalletKernel<<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(d_mnemonicsPtr);
         }, "hdWalletKernel"));
+
+//        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
+//        {
+//            checkHashKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+//        }, "checkHashKernel"));
+    }
+
+    void generatePublicKeysForMnemonics2(const uint8_t* mnemonics, const uint32_t mnemonicsNumber)
+    {
+        constexpr uint32_t mSharedMemSize{0};
+        const auto* d_mnemonicsPtr = thrust::raw_pointer_cast(d_mnemonics.data());
+
+        thrust::copy(mnemonics, mnemonics + mnemonicsNumber * SIZE_MNEMONIC_FRAME_12, d_mnemonics.begin());
+
+        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
+        {
+            mnemonicsToExtendedMasterKeys<<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(d_mnemonicsPtr);
+        }, "mnemonicsToExtendedMasterKeys"));
+
+        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
+        {
+            extendedMasterKeysToDerivatedPublicKeys<<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>();
+        }, "extendedMasterKeysToDerivatedPublicKeys"));
+
+//        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
+//        {
+//            checkHashKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(d_mnemonicsSeedsMasterKeysPtr);
+//        }, "checkHashKernel"));
     }
 
     void generatePublicKeysForMnemonicsThrust(const uint8_t* mnemonics, const uint32_t mnemonicsNumber)
     {
         // Create device vectors
-        thrust::copy(mnemonics, mnemonics + mnemonicsNumber * SIZE_MNEMONIC_FRAME, d_mnemonics.begin());
+        thrust::copy(mnemonics, mnemonics + mnemonicsNumber * SIZE_MNEMONIC_FRAME_12, d_mnemonics.begin());
 
         const auto* d_mnemonicsPtr = thrust::raw_pointer_cast(d_mnemonics.data());
         cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
@@ -271,7 +202,7 @@ void CUHDWallet::init(const std::vector<std::vector<uint32_t>>& derivationPaths,
 
 void CUHDWallet::generatePublicKeysForMnemonics(const uint8_t* mnemonics, uint32_t mnemonicsNumber) const
 {
-    mImpl->generatePublicKeysForMnemonics(mnemonics, mnemonicsNumber);
+    mImpl->generatePublicKeysForMnemonics2(mnemonics, mnemonicsNumber);
 }
 
 void CUHDWallet::generatePublicKeysForMnemonicsThrust(const uint8_t* mnemonics, uint32_t mnemonicsNumber) const

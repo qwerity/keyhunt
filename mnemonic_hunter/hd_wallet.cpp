@@ -130,7 +130,7 @@ struct HDWallet::Impl
             std::vector<uint8_t> entropy = HDWallet::generateEntropy(BIP39_ENTROPY_LEN_128);
 
             std::string mnemonic = HDWallet::generateMnemonic(entropy);
-            mnemonic.resize(SIZE_MNEMONIC_FRAME);
+            mnemonic.resize(SIZE_MNEMONIC_FRAME_12);
 
             mnemonics.insert(mnemonics.end(), mnemonic.begin(), mnemonic.end());
         }
@@ -163,11 +163,11 @@ struct HDWallet::Impl
                 t.start();
                 std::vector<uint8_t> mnemonics;
                 generateMnemonics(mnemonicsPerIteration, mnemonics);
-                BOOST_LOG_TRIVIAL(info) << std::format("generateMnemonics: {}ms {}s", t.elapsedMs(), t.elapsedS());
+                BOOST_LOG_TRIVIAL(trace) << std::format("generateMnemonics: {}ms {}s", t.elapsedMs(), t.elapsedS());
 
                 t.start();
                 cuhdWallet->generatePublicKeysForMnemonics(mnemonics.data(), mnemonicsPerIteration);
-                BOOST_LOG_TRIVIAL(info) << std::format("generatePublicKeysForMnemonics: {}ms {}s", t.elapsedMs(), t.elapsedS());
+                BOOST_LOG_TRIVIAL(trace) << std::format("generatePublicKeysForMnemonics: {}ms {}s", t.elapsedMs(), t.elapsedS());
             }
 
             pushResultsToQueue(mnemonicsPerIteration, iteration);
@@ -202,11 +202,7 @@ struct HDWallet::Impl
         cuhdWallet->init(derivationPaths, gContext->config.publicKeyCompressionTypeToCheck(), gContext->config.gridSize(), gContext->config.blockSize());
         BOOST_LOG_TRIVIAL(trace) << std::format("[{}] init: {} ms", cudaInfo.id, t.elapsedMs());
 
-        do
-        {
-            startSearchPublicHashForMnemonics();
-        }
-        while (!stopFlag && !gContext->config.hdWallet().forceMnemonic); // if force mnemonic is set, one iteration is enough
+        startSearchPublicHashForMnemonics();
     }
 };
 

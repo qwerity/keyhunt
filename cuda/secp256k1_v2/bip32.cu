@@ -51,8 +51,8 @@ __device__ void bip49_publicKeyToHash160(extended_public_key_t* pub, uint32_t* h
 
 __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t hardenedChildNumber)
 {
-    alignas(8 * 8) uint32_t hmacSHA512Result[64 / 4]{};
-    uint8_t hmacInput[40]{}; //37 bytes
+    alignas(32) uint32_t hmacSHA512Result[64 / 4]{};
+    alignas(8) uint8_t hmacInput[40]{}; //37 bytes
 
     for (int x = 0; x < 32; x++)
     {
@@ -65,7 +65,7 @@ __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* pa
     hmacInput[36] = *(reinterpret_cast<uint8_t*>(&hardenedChildNumber));
     hmacSHA512(reinterpret_cast<const uint32_t*>(&parent->chainCode[0]), reinterpret_cast<uint32_t*>(&hmacInput), reinterpret_cast<uint32_t*>(&hmacSHA512Result));
 
-    uint8_t sk[32]{};
+    alignas(16) uint8_t sk[32]{};
     cuda_memcpy(reinterpret_cast<uint8_t*>(&sk), reinterpret_cast<const uint8_t*>(&hmacSHA512Result), 32);
 
     secp256k1_ec_seckey_tweak_add(reinterpret_cast<uint8_t*>(&sk), reinterpret_cast<const uint8_t*>(&parent->key));
@@ -79,12 +79,12 @@ __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* pa
 
 __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t normalChildNumber)
 {
-    alignas(8 * 8) uint32_t hmacSHA512Result[64 / 4]{};
+    alignas(32) uint32_t hmacSHA512Result[64 / 4]{};
 
     extended_public_key_t pub;
     generatePublicFromPrivateKey(parent, &pub);
 
-    uint8_t hmacInput[40]{}; //37 bytes
+    alignas(8) uint8_t hmacInput[40]{}; //37 bytes
     serialized_public_key(&pub, reinterpret_cast<uint8_t*>(&hmacInput));
 
     hmacInput[33] = 0;
@@ -95,7 +95,7 @@ __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* pare
 
     hmacSHA512(reinterpret_cast<const uint32_t*>(&parent->chainCode[0]), reinterpret_cast<uint32_t*>(&hmacInput), reinterpret_cast<uint32_t*>(&hmacSHA512Result));
 
-    uint8_t sk[32]{};
+    alignas(16) uint8_t sk[32]{};
     cuda_memcpy(reinterpret_cast<uint8_t*>(&sk), reinterpret_cast<const uint8_t*>(&hmacSHA512Result), 32);
 
     secp256k1_ec_seckey_tweak_add(reinterpret_cast<uint8_t*>(&sk), reinterpret_cast<const uint8_t*>(&parent->key[0]));

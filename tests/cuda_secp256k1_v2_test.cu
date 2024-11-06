@@ -17,7 +17,7 @@ int main()
 
     constexpr uint8_t mnemonic_[] = "tennis hero student waste adapt where fall call amused mandate hat panel";
 
-    thrust::host_vector<uint8_t> mnemonic(SIZE_MNEMONIC_FRAME, 0);
+    thrust::host_vector<uint8_t> mnemonic(SIZE_MNEMONIC_FRAME_12, 0);
     thrust::copy(mnemonic_, mnemonic_ + sizeof(mnemonic_), mnemonic.begin());
 
     thrust::device_vector<uint32_t> d_seed(64 / 4);

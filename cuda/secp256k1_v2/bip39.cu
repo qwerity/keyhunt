@@ -4,15 +4,15 @@
 #include "utils.cuh"
 #include "../ptx.cuh"
 
-[[maybe_unused]] __constant__ constexpr uint8_t salt[12] = {109, 110, 101, 109, 111, 110, 105, 99, 0, 0, 0, 1};
-__constant__ constexpr uint8_t salt_swap[16] = {99, 105, 110, 111, 109, 101, 110, 109, 0, 0, 0, 0, 1, 0, 0, 0};
-[[maybe_unused]] __constant__ constexpr uint8_t key[12] = {0x42, 0x69, 0x74, 0x63, 0x6f, 0x69, 0x6e, 0x20, 0x73, 0x65, 0x65, 0x64};
-__constant__ constexpr uint8_t key_swap[16] = {0x20, 0x6e, 0x69, 0x6f, 0x63, 0x74, 0x69, 0x42, 0, 0, 0, 0, 0x64, 0x65, 0x65, 0x73};
+[[maybe_unused]] __constant__ constexpr uint8_t salt[12] = {'m', 'n', 'e', 'm', 'o', 'n', 'i', 'c', 0, 0, 0, 1}; // "mnemonic\0\0\0\1"
+__constant__ constexpr uint8_t salt_swap[16] = {'c', 'i', 'n', 'o', 'm', 'e', 'n', 'm', 0, 0, 0, 0, 1, 0, 0, 0}; // "cinomenm\0\0\0\0\1\0\0\0"
+[[maybe_unused]] __constant__ constexpr uint8_t key[12] = {'B', 'i', 't', 'c', 'o', 'i', 'n', ' ', 's', 'e', 'e', 'd'}; // "Bitcoin seed"
+__constant__ constexpr uint8_t key_swap[16] = {' ', 'n', 'i', 'o', 'c', 't', 'i', 'B', 0, 0, 0, 0, 'd', 'e', 'e', 's'}; // " nioctiBseed"
 
 __device__ void mnemonicToExtendedMasterKey(const uint8_t* mnemonic, uint32_t* seed, uint8_t* extendedMasterKey)
 {
-    uint32_t ipad[512 / 4]{}; // 512 bytes = 128 uint32_t blocks
-    uint32_t opad[512 / 4]{};
+    alignas(32) uint32_t ipad[512 / 4]{}; // 512 bytes = 128 uint32_t blocks
+    alignas(32) uint32_t opad[512 / 4]{};
 
     #pragma unroll
     for (int x = 0; x < 120 / 8; x++) // 15
@@ -51,6 +51,7 @@ __device__ void mnemonicToExtendedMasterKey(const uint8_t* mnemonic, uint32_t* s
     {
         seed[x] = ipad[128 / 4 + x];
     }
+    #pragma unroll
     for (int x = 1; x < 2048; x++)
     {
         sha512_swap(reinterpret_cast<uint64_t*>(ipad), 192, reinterpret_cast<uint64_t*>(&opad[128 / 4]));

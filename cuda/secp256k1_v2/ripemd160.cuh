@@ -3,11 +3,12 @@
 #include <cuda_runtime.h>
 #include <cstdint>
 
-struct RIPEMD160_CTX
+struct alignas(32) RIPEMD160_CTX
 {
     uint32_t total[2]{};
     uint32_t state[5]{};
     uint8_t buffer[64]{};
+    [[maybe_unused]] uint8_t _padding[4]{};  // Padding to make the total size 96 bytes
 };
 
 __device__ void ripemd160Init(RIPEMD160_CTX* ctx);

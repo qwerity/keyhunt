@@ -248,8 +248,8 @@ TEST_CASE("CUDA Test WallyCore lib: mnemonic -> hd keys generation", "")
     std::unique_ptr cuhdWallet(std::make_unique<CUHDWallet>());
     std::vector<extended_public_key_t> publicKeys;
 
-    constexpr uint8_t mnemonic[SIZE_MNEMONIC_FRAME] = "tennis hero student waste adapt where fall call amused mandate hat panel";
-    std::vector<uint8_t> mnemonics(SIZE_MNEMONIC_FRAME, 0);
+    constexpr uint8_t mnemonic[SIZE_MNEMONIC_FRAME_12] = "tennis hero student waste adapt where fall call amused mandate hat panel";
+    std::vector<uint8_t> mnemonics(SIZE_MNEMONIC_FRAME_12, 0);
     std::copy_n(mnemonic, sizeof(mnemonic), mnemonics.begin());
 
     HDWalletConfig config;
