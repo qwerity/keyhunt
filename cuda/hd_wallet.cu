@@ -2,9 +2,8 @@
 #include "hd_wallet_kernels.cuh"
 #include "ecc_helper.cuh"
 #include "udevice_vector.cuh"
-#include "defines.cuh"
 
-#include "util/common.h"
+#include "defines.h"
 
 struct CUHDWallet::Impl
 {
@@ -15,6 +14,7 @@ struct CUHDWallet::Impl
     uint32_t mnemonicsPerIteration{mGridSize * mBlockSize};
 
     thrust::udevice_vector<extended_public_key_t> d_publicKeys;
+    thrust::udevice_vector<extended_private_key_t> d_privateKeys;
     thrust::udevice_vector<uint8_t> d_mnemonics;
     thrust::udevice_vector<uint32_t> d_mnemonicsSeeds;
     thrust::udevice_vector<extended_private_key_t> d_mnemonicsSeedsMasterKeys;
@@ -50,13 +50,17 @@ struct CUHDWallet::Impl
         std::fprintf(stderr, "minGridSize: %d, recommendedBlockSize: %d, set blockSize: %u, gridSize: %u, mnemonicsPerIteration: %u\n", minGridSize, recommendedBlockSize, mBlockSize, mGridSize, mnemonicsPerIteration);
     }
 
-    void allocatePublicKeysDeviceMemory(const uint32_t derivationPathsNumber)
+    void allocatePrivateAndPublicKeysDeviceMemory(const uint32_t derivationPathsNumber)
     {
         const uint32_t mnemonicsNumber = getMnemonicsPerIteration();
         d_publicKeys.resize(mnemonicsNumber * derivationPathsNumber);
+        d_privateKeys.resize(mnemonicsNumber * derivationPathsNumber);
 
         const extended_public_key_t* d_publicKeysRawPtr = thrust::raw_pointer_cast(d_publicKeys.data());
         cudaCheckError(cudaMemcpyToSymbol(d_publicKeysPtr, &d_publicKeysRawPtr, sizeof(extended_public_key_t *)));
+
+        const extended_private_key_t* d_privateKeysRawPtr = thrust::raw_pointer_cast(d_privateKeys.data());
+        cudaCheckError(cudaMemcpyToSymbol(d_privateKeysPtr, &d_privateKeysRawPtr, sizeof(extended_public_key_t *)));
     }
 
     void allocateMnemonicsDeviceMemory()
@@ -116,7 +120,7 @@ struct CUHDWallet::Impl
         allocateMnemonicsDeviceMemory();
 
         // Allocate space for public keys on device
-        allocatePublicKeysDeviceMemory(derivationPaths.size());
+        allocatePrivateAndPublicKeysDeviceMemory(derivationPaths.size());
     }
 
     void getPublicKeys(std::vector<extended_public_key_t>& publicKeys)
@@ -162,10 +166,10 @@ struct CUHDWallet::Impl
             extendedMasterKeysToDerivatedPublicKeys<<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>();
         }, "extendedMasterKeysToDerivatedPublicKeys"));
 
-//        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
-//        {
-//            checkHashKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(d_mnemonicsSeedsMasterKeysPtr);
-//        }, "checkHashKernel"));
+        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
+        {
+            checkExtendedPublicHashKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>();
+        }, "checkHashKernel"));
     }
 
     void generatePublicKeysForMnemonicsThrust(const uint8_t* mnemonics, const uint32_t mnemonicsNumber)
@@ -215,7 +219,7 @@ uint32_t CUHDWallet::getMnemonicsPerIteration() const
     return mImpl->getMnemonicsPerIteration();
 }
 
-void CUHDWallet::getPublicKeys(std::vector<extended_public_key_t>& publicKeys)
+void CUHDWallet::getPublicKeys(std::vector<extended_public_key_t>& publicKeys) const
 {
     return mImpl->getPublicKeys(publicKeys);
 }

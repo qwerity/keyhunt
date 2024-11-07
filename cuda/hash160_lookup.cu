@@ -183,14 +183,14 @@ __device__ void doRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5])
     }
 }
 
-__device__ bool checkBloomFilter(const hash160& hash)
+__device__ bool checkBloomFilter(const uint32_t hash[5])
 {
     bool foundMatch = true;
 
     #pragma unroll
-    for (unsigned int i : hash.h)
+    for (uint32_t i = 0; i < 5; ++i)
     {
-        const uint32_t idx = i & d_BloomFilterMask;
+        const uint32_t idx = hash[i] & d_BloomFilterMask;
         const uint32_t f = d_BloomFilterPtr[idx / 32];
         if ((f & (0x01 << (idx % 32))) == 0)
         {
@@ -200,15 +200,20 @@ __device__ bool checkBloomFilter(const hash160& hash)
     return foundMatch;
 }
 
-__device__ bool checkBloomFilter64(const hash160& hash)
+__device__ bool checkBloomFilter(const hash160& hash)
+{
+    return checkBloomFilter(hash.h);
+}
+
+__device__ bool checkBloomFilter64(const uint32_t hash[5])
 {
     bool foundMatch = true;
     uint64_t idx[5];
-    idx[0] = (static_cast<uint64_t>(hash.h[0]) << 32 | hash.h[1]) & d_BloomFilterMask64;
-    idx[1] = (static_cast<uint64_t>(hash.h[2]) << 32 | hash.h[3]) & d_BloomFilterMask64;
-    idx[2] = (static_cast<uint64_t>(hash.h[0] ^ hash.h[1]) << 32 | (hash.h[1] ^ hash.h[2])) & d_BloomFilterMask64;
-    idx[3] = (static_cast<uint64_t>(hash.h[2] ^ hash.h[3]) << 32 | (hash.h[3] ^ hash.h[4])) & d_BloomFilterMask64;
-    idx[4] = (static_cast<uint64_t>(hash.h[0] ^ hash.h[3]) << 32 | (hash.h[1] ^ hash.h[3])) & d_BloomFilterMask64;
+    idx[0] = (static_cast<uint64_t>(hash[0]) << 32 | hash[1]) & d_BloomFilterMask64;
+    idx[1] = (static_cast<uint64_t>(hash[2]) << 32 | hash[3]) & d_BloomFilterMask64;
+    idx[2] = (static_cast<uint64_t>(hash[0]        ^ hash[1]) << 32 | (hash[1] ^ hash[2])) & d_BloomFilterMask64;
+    idx[3] = (static_cast<uint64_t>(hash[2]        ^ hash[3]) << 32 | (hash[3] ^ hash[4])) & d_BloomFilterMask64;
+    idx[4] = (static_cast<uint64_t>(hash[0]        ^ hash[3]) << 32 | (hash[1] ^ hash[3])) & d_BloomFilterMask64;
 
     #pragma unroll
     for (unsigned long long i : idx)
@@ -222,7 +227,12 @@ __device__ bool checkBloomFilter64(const hash160& hash)
     return foundMatch;
 }
 
-__device__ bool checkHash(const hash160& hash)
+__device__ bool checkBloomFilter64(const hash160& hash)
+{
+    return checkBloomFilter64(hash.h);
+}
+
+__device__ bool checkHash(const uint32_t hash[5])
 {
     if (d_UseBloomFilter == 1)
     {
@@ -242,10 +252,15 @@ __device__ bool checkHash(const hash160& hash)
         #pragma unroll
         for (uint32_t i = 0; i < 5; ++i)
         {
-            equal &= (hash.h[i] == d_TargetHash[j][i]);
+            equal &= (hash[i] == d_TargetHash[j][i]);
         }
         foundMatch |= equal;
     }
 
     return foundMatch;
+}
+
+__device__ bool checkHash(const hash160& hash)
+{
+    return checkHash(hash.h);
 }

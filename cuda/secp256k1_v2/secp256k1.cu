@@ -122,7 +122,7 @@ __device__ int secp256k1_scalar_set_b32_seckey(secp256k1_scalar* r, const uint8_
     return (!overflow) & (!secp256k1_scalar_is_zero(r));
 }
 
-__device__ int secp256k1_eckey_pubkey_serialize(secp256k1_ge* elem, uint8_t* pub)
+__device__ int secp256k1_eckey_compressed_pubkey_serialize(secp256k1_ge* elem, uint8_t* pub)
 {
     if (secp256k1_ge_is_infinity(elem))
     {
@@ -138,13 +138,13 @@ __device__ int secp256k1_eckey_pubkey_serialize(secp256k1_ge* elem, uint8_t* pub
     return 1;
 }
 
-__device__ int secp256k1_ec_pubkey_serialize(uint8_t* output, uint32_t outputLen, const uint8_t* pubkey)
+__device__ int secp256k1_ec_compressed_pubkey_serialize(uint8_t* output, uint32_t outputLen, const uint8_t* pubkey)
 {
     cuda_memset(output, 0, outputLen);
 
-    secp256k1_ge Q{0};
+    secp256k1_ge Q{};
     secp256k1_pubkey_load(&Q, pubkey);
-    return secp256k1_eckey_pubkey_serialize(&Q, output);
+    return secp256k1_eckey_compressed_pubkey_serialize(&Q, output);
 }
 
 __device__ int secp256k1_scalar_add(secp256k1_scalar* r, const secp256k1_scalar* a, const secp256k1_scalar* b)

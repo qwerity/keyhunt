@@ -22,7 +22,7 @@ public:
 
     [[nodiscard]] uint32_t getMnemonicsPerIteration() const;
 
-    void getPublicKeys(std::vector<extended_public_key_t>& publicKeys);
+    void getPublicKeys(std::vector<extended_public_key_t>& publicKeys) const;
 
 private:
     struct Impl;

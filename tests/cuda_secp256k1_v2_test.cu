@@ -29,11 +29,12 @@ int main()
     thrust::device_vector<uint8_t> d_m0_hardened_child(sizeof(extended_private_key_t));
     thrust::device_vector<extended_public_key_t> d_m0_child_pub(1);
 
-    thrust::device_vector<uint32_t> d_hash160_bytes(5);
+    thrust::device_vector<uint32_t> d_compressedHash160_bytes(5);
+    thrust::device_vector<uint32_t> d_uncompressedHash160_bytes(5);
 
     mnemonicToHash160<<<1, 1>>>(thrust::raw_pointer_cast(d_mnemonic.data()), thrust::raw_pointer_cast(d_masterExKey.data()), thrust::raw_pointer_cast(d_seed.data()),
                                 thrust::raw_pointer_cast(d_m0_child.data()), thrust::raw_pointer_cast(d_m00_child.data()), thrust::raw_pointer_cast(d_m0_hardened_child.data()), 0,
-                                thrust::raw_pointer_cast(d_m0_child_pub.data()), thrust::raw_pointer_cast(d_hash160_bytes.data()));
+                                thrust::raw_pointer_cast(d_m0_child_pub.data()), thrust::raw_pointer_cast(d_uncompressedHash160_bytes.data()), thrust::raw_pointer_cast(d_compressedHash160_bytes.data()));
     cudaDeviceSynchronize();
 
     cout << "mnemonic: " << mnemonic_ << endl;
@@ -104,12 +105,20 @@ int main()
         cerr << "m/0 pub is wrong\n";
     }
 
-    thrust::host_vector<uint32_t> hash160_bytes = d_hash160_bytes;
-    const auto m0_hash160_bytesStr = utils::toHex(hash160_bytes.data(), 5);
-    cout << "m/0 hash160_bytes: " << m0_hash160_bytesStr << endl;
-    if ("2487e5b2c039c635a819b05a01cdf3e92d266293" != utils::toHex(hash160_bytes.data(), 5))
+    thrust::host_vector<uint32_t> compressedHash160_bytes = d_compressedHash160_bytes;
+    const auto m0_compressedHash160_bytesStr = utils::toHex(compressedHash160_bytes.data(), 5);
+    cout << "m/0 compressedHash160_bytes: " << m0_compressedHash160_bytesStr << endl;
+    if ("2487e5b2c039c635a819b05a01cdf3e92d266293" != m0_compressedHash160_bytesStr)
     {
-        cerr << "m/0 hash160_bytes is wrong\n";
+        cerr << "m/0 compressedHash160_bytes is wrong\n";
+    }
+
+    thrust::host_vector<uint32_t> uncompressedHash160_bytes = d_uncompressedHash160_bytes;
+    const auto m0_uncompressedHash160_bytesStr = utils::toHex(uncompressedHash160_bytes.data(), 5);
+    cout << "m/0 uncompressedHash160_bytes: " << m0_uncompressedHash160_bytesStr << endl;
+    if ("465712d191fdaeb536b3c7f624c6a16862d44855" != m0_uncompressedHash160_bytesStr)
+    {
+        cerr << "m/0 uncompressedHash160_bytes is wrong\n";
     }
 
     return 0;

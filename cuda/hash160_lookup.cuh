@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <memory>
 
+__device__ bool checkHash(const uint32_t hash[5]);
 __device__ bool checkHash(const hash160& hash);
 __device__ void doRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5]);
 

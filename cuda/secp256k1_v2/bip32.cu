@@ -10,17 +10,38 @@ __device__ void generatePublicFromPrivateKey(const extended_private_key_t* priv,
     secp256k1_ec_pubkey_create(pub->key, &priv->key[0]);
 }
 
-__device__ void publicKeyToHash160(extended_public_key_t* pub, uint32_t* hash160_bytes)
+__device__ void compressedPublicKeyToHash160(const extended_public_key_t* pub, uint32_t* compressedHashBytes)
 {
-    uint8_t serializedPublicKey[36]{};
-    serialized_public_key(pub, &serializedPublicKey[0]);
-    hash160(&serializedPublicKey[0], 33, hash160_bytes);
+    uint8_t serializedPublicKey[33 + 3]{};
+    serialized_compressed_public_key(pub, &serializedPublicKey[0]);
+    hash160(&serializedPublicKey[0], 33, compressedHashBytes);
 }
 
-__device__ void bip49_publicKeyToHash160(extended_public_key_t* pub, uint32_t* hash160_bytes)
+__device__ void publicKeyToHash160(const extended_public_key_t* pub, uint32_t* uncompressedHashBytes, uint32_t* compressedHashBytes)
 {
-    uint8_t serializedPublicKey[36]{};
-    serialized_public_key(pub, &serializedPublicKey[0]);
+    // + 3 needed for sha, as it is operating with uint32_t (4 bytes) portions
+    uint8_t serializedPublicKey[65 + 3]{};
+
+    secp256k1_ge Q{};
+    secp256k1_pubkey_load(&Q, pub->key);
+
+    secp256k1_fe_normalize_var(&Q.x);
+    secp256k1_fe_normalize_var(&Q.y);
+    secp256k1_fe_get_b32(&serializedPublicKey[1], &Q.x);
+
+    serializedPublicKey[0] = secp256k1_fe_is_odd(&Q.y) ? SECP256K1_TAG_PUBKEY_ODD : SECP256K1_TAG_PUBKEY_EVEN;
+    hash160(&serializedPublicKey[0], 33, compressedHashBytes);
+
+    serializedPublicKey[0] = SECP256K1_TAG_PUBKEY_UNCOMPRESSED;
+    secp256k1_fe_get_b32(&serializedPublicKey[32 + 1], &Q.y);
+
+    hash160(&serializedPublicKey[0], 65, uncompressedHashBytes);
+}
+
+__device__ void bip49_publicKeyToHash160(extended_public_key_t* pub, uint32_t* hash160Bytes)
+{
+    uint8_t serializedPublicKey[33 + 3]{};
+    serialized_compressed_public_key(pub, &serializedPublicKey[0]);
 
     uint8_t sha256Result[32]{};
     sha256(reinterpret_cast<const uint32_t*>(serializedPublicKey), 33, reinterpret_cast<uint32_t*>(&sha256Result));
@@ -45,7 +66,7 @@ __device__ void bip49_publicKeyToHash160(extended_public_key_t* pub, uint32_t* h
 
     ripemd160Init(&ctx);
     ripemd160Update(&ctx, sha256Result, 32);
-    ripemd160Final(&ctx, (uint32_t*) hash160_bytes);
+    ripemd160Final(&ctx, (uint32_t*) hash160Bytes);
 }
 
 __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t hardenedChildNumber)
@@ -53,10 +74,7 @@ __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* pa
     alignas(32) uint32_t hmacSHA512Result[64 / 4]{};
     alignas(8) uint8_t hmacInput[40]{}; //37 bytes
 
-    for (int x = 0; x < 32; x++)
-    {
-        hmacInput[x + 1] = parent->key[x];
-    }
+    cuda_memcpy(hmacInput + 1, parent->key, 32);
     hmacInput[33] = 0x80;
     hmacInput[34] = 0;
 
@@ -69,10 +87,7 @@ __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* pa
 
     secp256k1_ec_seckey_tweak_add(reinterpret_cast<uint8_t*>(&sk), reinterpret_cast<const uint8_t*>(&parent->key));
 
-    for (int x = 0; x < 32; ++x)
-    {
-        child->key[x] = sk[x];
-    }
+    cuda_memcpy(child->key, sk, 32);
     cuda_memcpy_offset(reinterpret_cast<uint8_t*>(&child->chainCode), reinterpret_cast<uint8_t*>(&hmacSHA512Result), 32, 32);
 }
 
@@ -84,7 +99,7 @@ __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* pare
     generatePublicFromPrivateKey(parent, &pub);
 
     alignas(8) uint8_t hmacInput[40]{}; //37 bytes
-    serialized_public_key(&pub, reinterpret_cast<uint8_t*>(&hmacInput));
+    serialized_compressed_public_key(&pub, reinterpret_cast<uint8_t*>(&hmacInput));
 
     hmacInput[33] = 0;
     hmacInput[34] = 0;
@@ -106,14 +121,15 @@ __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* pare
     cuda_memcpy_offset(&child->chainCode[0], reinterpret_cast<const uint8_t*>(&hmacSHA512Result), 32, 32);
 }
 
-__global__ void mnemonicToHash160(const uint8_t* mnemonic, uint8_t* masterExKey, uint32_t* seed, uint8_t* childKey, uint8_t* childChildKey, uint8_t* hardenedChildKey, uint16_t childNumber, extended_public_key_t* childPublicKey, uint32_t* hash160_bytes)
+__global__ void mnemonicToHash160(const uint8_t* mnemonic, uint8_t* masterExKey, uint32_t* seed, uint8_t* childKey, uint8_t* childChildKey, uint8_t* hardenedChildKey,
+                                  uint16_t childNumber, extended_public_key_t* childPublicKey, uint32_t* uncompressedHash160Bytes, uint32_t* compressedHash160Bytes)
 {
     mnemonicToExtendedMasterKey(mnemonic, seed, masterExKey);
     hardenedPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(masterExKey), reinterpret_cast<extended_private_key_t*>(hardenedChildKey), childNumber);
     normalPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(masterExKey), reinterpret_cast<extended_private_key_t*>(childKey), childNumber);
     normalPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(childKey), reinterpret_cast<extended_private_key_t*>(childChildKey), childNumber);
     generatePublicFromPrivateKey(reinterpret_cast<const extended_private_key_t*>(childKey), childPublicKey);
-    publicKeyToHash160(childPublicKey, hash160_bytes);
+    publicKeyToHash160(childPublicKey, uncompressedHash160Bytes, compressedHash160Bytes);
 }
 
 __constant__ uint32_t dev_num_bytes_find[1];
@@ -121,7 +137,7 @@ __constant__ uint32_t dev_generate_path[10];
 __constant__ uint32_t dev_num_paths[1];
 __constant__ uint32_t dev_num_childs[1];
 __constant__ int16_t dev_static_words_indices[12];
-__device__ void generatePublicsForMnemonicByPaths(const uint8_t* mnemonic, const extended_private_key_t* masterKey)
+__device__ void generatePublicKeysForMnemonicByPaths(const uint8_t* mnemonic, const extended_private_key_t* masterKey)
 {
     extended_private_key_t target_key;
     extended_private_key_t target_key_fo_pub;

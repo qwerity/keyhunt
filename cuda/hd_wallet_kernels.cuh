@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 #include <cstdint>
 
+#include "common_kernels.cuh"
 #include "secp256k1_v2/bip39.cuh"
 
 extern __constant__ int d_publicKeyCompressionTypeToCheck;
@@ -11,6 +12,7 @@ __constant__ uint32_t* d_mnemonicsSeedsPtr{};
 __constant__ extended_private_key_t* d_mnemonicsSeedsMasterKeysPtr{};
 
 __constant__ extended_public_key_t* d_publicKeysPtr{};
+__constant__ extended_private_key_t* d_privateKeysPtr{};
 
 __constant__ uint32_t* d_flattenedDerivationPathsPtr{};
 __constant__ uint32_t* d_derivationPathsLengthsPtr{};
@@ -91,7 +93,7 @@ __global__ void extendedMasterKeysToDerivatedPublicKeys()
     uint32_t pathOffset = 0;
     for (uint32_t pathIdx = 0; pathIdx < d_derivationPathsNumber; ++pathIdx)
     {
-        extended_private_key_t privateKey = d_mnemonicsSeedsMasterKeysPtr[idx];  // Start from master key
+        d_privateKeysPtr[idx] = d_mnemonicsSeedsMasterKeysPtr[idx];  // Start from master key
 
         // Derive through current path
         for (uint32_t i = 0; i < d_derivationPathsLengthsPtr[pathIdx]; ++i)
@@ -99,16 +101,16 @@ __global__ void extendedMasterKeysToDerivatedPublicKeys()
             uint32_t childIndex = d_flattenedDerivationPathsPtr[pathOffset + i];
             if (childIndex & 0x80000000)
             {
-                hardenedPrivateChildFromPrivate(&privateKey, &privateKey, childIndex & 0x7FFFFFFF);
+                hardenedPrivateChildFromPrivate(d_privateKeysPtr + idx, d_privateKeysPtr + idx, childIndex & 0x7FFFFFFF);
             }
             else
             {
-                normalPrivateChildFromPrivate(&privateKey, &privateKey, childIndex);
+                normalPrivateChildFromPrivate(d_privateKeysPtr + idx, d_privateKeysPtr + idx, childIndex);
             }
         }
 
         // Generate public key for this path
-        generatePublicFromPrivateKey(&privateKey, &mnemonicPublicKeys[pathIdx]);
+        generatePublicFromPrivateKey(d_privateKeysPtr + idx, mnemonicPublicKeys + pathIdx);
 
         // Move to next path
         pathOffset += d_derivationPathsLengthsPtr[pathIdx];
@@ -154,5 +156,34 @@ __global__ void hdWalletKernel(const uint8_t* mnemonics)
 
         // Move to next path
         pathOffset += d_derivationPathsLengthsPtr[pathIdx];
+    }
+}
+
+__global__ void checkExtendedPublicHashKernel()
+{
+    const uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const extended_private_key_t *privateKey = d_privateKeysPtr + idx;
+    const extended_public_key_t  *publicKey = d_publicKeysPtr + (idx * d_derivationPathsNumber);
+
+    uint32_t uncompressedHash160Bytes[5];
+    uint32_t compressedHash160Bytes[5];
+
+    publicKeyToHash160(publicKey, uncompressedHash160Bytes, compressedHash160Bytes);
+
+    if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+    {
+        if (checkHash(compressedHash160Bytes))
+        {
+            setResultFound(idx, true, privateKey->key, publicKey->key, compressedHash160Bytes);
+        }
+    }
+
+    if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+    {
+        if (checkHash(uncompressedHash160Bytes))
+        {
+            setResultFound(idx, false, privateKey->key, publicKey->key, uncompressedHash160Bytes);
+        }
     }
 }

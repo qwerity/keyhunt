@@ -36,7 +36,7 @@ __device__ __forceinline__ void hashPublicKeyCompressed(const uint256_t& x, cons
     ripemd160sha256NoFinal(hash, digestOut);
 }
 
-__device__ __forceinline__ void setResultFound(const uint32_t idx, const bool compressed, const uint256_t& privateKey, const uint256_t& publicX, const uint32_t digest[5])
+__device__ __forceinline__ void setResultFound(const uint32_t idx, const bool compressed, const uint8_t privateKey[32], const uint8_t publicKey[64], const uint32_t digest[5])
 {
     Hash160SearchResult r;
     r.block = blockIdx.x;
@@ -44,13 +44,22 @@ __device__ __forceinline__ void setResultFound(const uint32_t idx, const bool co
     r.idx = idx;
     r.compressed = compressed;
 
+    auto* privateKeyU = reinterpret_cast<const uint32_t*>(privateKey);
+    auto* publicKeyU = reinterpret_cast<const uint32_t*>(publicKey);
+
     #pragma unroll
     for (uint32_t i = 0; i < 8; ++i)
     {
-        r.privateKey[i] = SWAP32(privateKey[i]);
-        r.publicXKey[i] = SWAP32(publicX[i]);
+        r.privateKey[i] = SWAP32(privateKeyU[i]);
+        r.publicXKey[i] = SWAP32(publicKeyU[i]);
+//        r.publicYKey[i] = SWAP32(publicKeyU[i + 8]);
     }
     doRMD160FinalRound(digest, r.digest);
 
     atomicListAdd(&r, sizeof(r));
+}
+
+__device__ __forceinline__ void setResultFound(const uint32_t idx, const bool compressed, const uint256_t& privateKey, const uint256_t& publicX, const uint32_t digest[5])
+{
+    setResultFound(idx, compressed, reinterpret_cast<const uint8_t*>(privateKey.v), reinterpret_cast<const uint8_t*>(publicX.v), digest);
 }

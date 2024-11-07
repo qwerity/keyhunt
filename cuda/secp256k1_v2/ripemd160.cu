@@ -270,7 +270,7 @@ __device__ void ripemd160(const uint8_t* msg, uint32_t msg_len, uint32_t hash[5]
 
 __device__ void hash160(const uint8_t* input, int input_len, uint32_t* output)
 {
-    uint8_t sha256Result[32]{};
-    sha256((const uint32_t*) input, input_len, (uint32_t*) &sha256Result);
-    ripemd160((const uint8_t*) &sha256Result, 32, output);
+    uint8_t sha256Result[32];
+    sha256(reinterpret_cast<const uint32_t*>(input), input_len, reinterpret_cast<uint32_t*>(&sha256Result));
+    ripemd160(sha256Result, 32, output);
 }

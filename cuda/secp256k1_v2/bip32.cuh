@@ -29,8 +29,9 @@ struct alignas(32) extended_public_key_t
 
 __device__ void generatePublicFromPrivateKey(const extended_private_key_t* priv, extended_public_key_t* pub);
 
-__device__ void publicKeyToHash160(extended_public_key_t* pub, uint32_t* hash160_bytes);
-__device__ void bip49_publicKeyToHash160(extended_public_key_t* pub, uint32_t* hash160_bytes);
+__device__ void compressedPublicKeyToHash160(const extended_public_key_t* pub, uint32_t* compressedHashBytes);
+__device__ void publicKeyToHash160(const extended_public_key_t* pub, uint32_t* uncompressedHashBytes, uint32_t* compressedHashBytes);
+__device__ void bip49_publicKeyToHash160(extended_public_key_t* pub, uint32_t* hash160Bytes);
 
 __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t hardenedChildNumber);
 __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t normalChildNumber);
@@ -38,4 +39,4 @@ __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* pare
 /// for test purposes
 __global__ void mnemonicToHash160(const uint8_t* mnemonic, uint8_t* masterExKey, uint32_t* seed,
                                   uint8_t* childKey, uint8_t* childChildKey, uint8_t* hardenedChildKey, uint16_t childNumber,
-                                  extended_public_key_t* childPublicKey, uint32_t* hash160_bytes);
+                                  extended_public_key_t* childPublicKey, uint32_t* uncompressedHash160Bytes, uint32_t* compressedHash160Bytes);

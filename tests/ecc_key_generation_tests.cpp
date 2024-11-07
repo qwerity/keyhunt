@@ -48,3 +48,8 @@ TEST_CASE("check private key generation", "")
         }
     }
 }
+
+TEST_CASE("check public key generation", "")
+{
+    printf("TODO: add tests for checking public keys");
+}

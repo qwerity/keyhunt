@@ -164,11 +164,11 @@ __device__ __forceinline__ void secp256k1_fe_get_b32(uint8_t* r, const secp256k1
 
 __device__ void secp256k1_scalar_set_b32(secp256k1_scalar* r, const uint8_t* b32, int* overflow);
 __device__ int secp256k1_scalar_set_b32_seckey(secp256k1_scalar* r, const uint8_t* bin);
-__device__ int secp256k1_ec_pubkey_serialize(uint8_t* output, uint32_t outputLen, const uint8_t* pubkey);
+__device__ int secp256k1_ec_compressed_pubkey_serialize(uint8_t* output, uint32_t outputLen, const uint8_t* pubkey);
 
-__device__ __forceinline__ void serialized_public_key(extended_public_key_t* pub, uint8_t* serialized_key)
+__device__ __forceinline__ void serialized_compressed_public_key(const extended_public_key_t* pub, uint8_t* serialized_key)
 {
-    secp256k1_ec_pubkey_serialize(serialized_key, 33, pub->key);
+    secp256k1_ec_compressed_pubkey_serialize(serialized_key, 33, pub->key);
 }
 
 __device__ int secp256k1_scalar_add(secp256k1_scalar* r, const secp256k1_scalar* a, const secp256k1_scalar* b);

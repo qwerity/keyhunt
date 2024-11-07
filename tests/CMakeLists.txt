@@ -36,8 +36,8 @@ endif()
 add_executable(aes_enc_test aes_enc_test.cpp)
 
 ####################################################################################################################################################################################
-add_executable(private_key_generation_tests private_key_generation_tests.cpp)
-target_link_libraries(private_key_generation_tests PRIVATE ecc_cuda)
+add_executable(ecc_key_generation_tests ecc_key_generation_tests.cpp)
+target_link_libraries(ecc_key_generation_tests PRIVATE ecc_cuda)
 
 ####################################################################################################################################################################################
 add_executable(http_client_test http_client_test.cpp)
