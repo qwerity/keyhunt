@@ -54,7 +54,7 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
             hashPublicKeyCompressed(publicX, readUInt256LSW(d_publicKeyYPtr, i), hash160.h);
             if (checkHash(hash160))
             {
-                setResultFound(index, true, privateKey, publicX, hash160.h);
+                setResultFound(index, true, privateKey, hash160.h);
             }
         }
 
@@ -66,7 +66,7 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
             hashPublicKey(publicX, publicY, hash160.h);
             if (checkHash(hash160))
             {
-                setResultFound(index, false, privateKey, publicX, hash160.h);
+                setResultFound(index, false, privateKey, hash160.h);
             }
         }
     }

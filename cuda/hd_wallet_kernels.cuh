@@ -175,7 +175,7 @@ __global__ void checkExtendedPublicHashKernel()
     {
         if (checkHash(compressedHash160Bytes))
         {
-            setResultFound(idx, true, privateKey->key, publicKey->key, compressedHash160Bytes);
+            setResultFound(idx, true, privateKey->key, compressedHash160Bytes);
         }
     }
 
@@ -183,7 +183,7 @@ __global__ void checkExtendedPublicHashKernel()
     {
         if (checkHash(uncompressedHash160Bytes))
         {
-            setResultFound(idx, false, privateKey->key, publicKey->key, uncompressedHash160Bytes);
+            setResultFound(idx, false, privateKey->key, uncompressedHash160Bytes);
         }
     }
 }
