@@ -253,10 +253,32 @@ TEST_CASE("CUDA Test WallyCore lib: mnemonic -> hd keys generation", "")
     std::copy_n(mnemonic, sizeof(mnemonic), mnemonics.begin());
 
     HDWalletConfig config;
+    config.derivationPathsPatters = {
+        "m/addr"
+        ,"m/acc/addr"
+        ,"m/acc/0/addr"
+        ,"m/acc'/addr"
+        ,"m/acc'/0/addr"
+        ,"m/44'/acc'/0/addr"
+        ,"m/44'/0'/acc'/0/addr"
+        ,"m/44'/145'/acc'/0/addr"
+        ,"m/44'/156'/acc'/0/addr"
+        ,"m/44'/236'/acc'/0/addr"
+        ,"m/44'/999'/acc'/0/addr"
+        ,"m/49'/0'/acc'/0/addr"
+        ,"m/49'/145'/acc'/0/addr"
+        ,"m/49'/156'/acc'/0/addr"
+        ,"m/49'/236'/acc'/0/addr"
+        ,"m/49'/999'/acc'/0/addr"
+        ,"m/84'/0'/acc'/0/addr"
+        ,"m/86'/0'/acc'/0/addr"
+    };
+    config.accountsToGenerate = 2;
+    config.addressesToGenerate = 2;
     std::vector<std::string> allExpandedPaths;
     std::vector<std::vector<uint32_t>> derivationPaths = utils::bip32GetDerivationPathsFromPatterns(config.derivationPathsPatters, config.accountsToGenerate, config.addressesToGenerate, allExpandedPaths);
 
-    cuhdWallet->init(derivationPaths, 2, 1, 1);
+    cuhdWallet->init2(derivationPaths, config.accountsToGenerate, config.addressesToGenerate, 2, 1, 1);
     cuhdWallet->generatePublicKeysForMnemonics(mnemonics.data(), 1);
     cuhdWallet->getPublicKeys(publicKeys);
     REQUIRE(derivationPaths.size() == publicKeys.size());
@@ -286,6 +308,8 @@ TEST_CASE("CUDA Test WallyCore lib: mnemonic -> hd keys generation", "")
         std::string expectedPublicKeyStr = utils::toHex(key.pub_key, EC_PUBLIC_KEY_LEN);
         compressPublicKey(publicKeys[i].key, compressed);
         std::string actualPublicKeyStr = utils::toHex(compressed, sizeof(compressed));
+
+        // std::cout << std::format("i: {} | {}\nexpected:\t{}\nactual  :\t{}\n", i, allExpandedPaths[i], expectedPublicKeyStr, actualPublicKeyStr);
         REQUIRE(actualPublicKeyStr == expectedPublicKeyStr);
     }
 }

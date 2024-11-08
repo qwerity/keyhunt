@@ -108,7 +108,7 @@ int main()
         {
             // For using concrete CUDA device
             auto cudaInfo = cu::cudaInit(cudaDeviceId);
-            HDWallet hdWallet(context, std::move(cudaInfo));
+            const HDWallet hdWallet(context, std::move(cudaInfo));
             hdWallet.startSearchPublicHash();
 
             // Signal that the thread has finished

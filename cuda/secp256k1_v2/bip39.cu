@@ -15,31 +15,31 @@ __device__ void mnemonicToExtendedMasterKey(const uint8_t* mnemonic, uint32_t* s
     alignas(32) uint32_t opad[512 / 4]{};
 
     #pragma unroll
-    for (int x = 0; x < 120 / 8; x++) // 15
+    for (uint32_t x = 0; x < 120 / 8; ++x) // 15
     {
         *(reinterpret_cast<uint64_t*>(ipad) + x) = 0x3636363636363636ULL ^ SWAP64(*(reinterpret_cast<const uint64_t*> (mnemonic) + x));
     }
 
     #pragma unroll
-    for (int x = 0; x < 120 / 8; x++)
+    for (uint32_t x = 0; x < 120 / 8; ++x)
     {
         *(reinterpret_cast<uint64_t*>(opad) + x) = 0x5C5C5C5C5C5C5C5CULL ^ SWAP64(*(reinterpret_cast<const uint64_t*>(mnemonic) + x));
     }
 
     #pragma unroll
-    for (int x = 120 / 4; x < 128 / 4; x++)
+    for (uint32_t x = 120 / 4; x < 128 / 4; ++x)
     {
         ipad[x] = 0x36363636;
     }
 
     #pragma unroll
-    for (int x = 120 / 4; x < 128 / 4; x++)
+    for (uint32_t x = 120 / 4; x < 128 / 4; ++x)
     {
         opad[x] = 0x5C5C5C5C;
     }
 
     #pragma unroll
-    for (int x = 0; x < 16 / 4; x++)
+    for (uint32_t x = 0; x < 16 / 4; ++x)
     {
         ipad[x + 128 / 4] = *(reinterpret_cast<const uint32_t*>(&salt_swap) + x);
     }
@@ -47,49 +47,49 @@ __device__ void mnemonicToExtendedMasterKey(const uint8_t* mnemonic, uint32_t* s
     sha512_swap(reinterpret_cast<uint64_t*>(opad), 192, reinterpret_cast<uint64_t*>(&ipad[128 / 4]));
 
     #pragma unroll
-    for (int x = 0; x < 64 / 4; x++)
+    for (uint32_t x = 0; x < 64 / 4; ++x)
     {
         seed[x] = ipad[128 / 4 + x];
     }
     #pragma unroll
-    for (int x = 1; x < 2048; x++)
+    for (uint32_t x = 1; x < 2048; ++x)
     {
         sha512_swap(reinterpret_cast<uint64_t*>(ipad), 192, reinterpret_cast<uint64_t*>(&opad[128 / 4]));
         sha512_swap(reinterpret_cast<uint64_t*>(opad), 192, reinterpret_cast<uint64_t*>(&ipad[128 / 4]));
 
         #pragma unroll
-        for (int i = 0; i < 64 / 4; i++)
+        for (uint32_t i = 0; i < SIZE32_SEED; i++)
         {
             seed[i] = seed[i] ^ ipad[128 / 4 + i];
         }
     }
 
     #pragma unroll
-    for (int x = 0; x < 16 / 4; x++)
+    for (uint32_t x = 0; x < 16 / 4; ++x)
     {
         ipad[x] = 0x36363636 ^ *(reinterpret_cast<const uint32_t*>(&key_swap) + x);
     }
 
     #pragma unroll
-    for (int x = 0; x < 16 / 4; x++)
+    for (uint32_t x = 0; x < 16 / 4; ++x)
     {
         opad[x] = 0x5C5C5C5C ^ *(reinterpret_cast<const uint32_t*>(&key_swap) + x);
     }
 
     #pragma unroll
-    for (int x = 16 / 4; x < 128 / 4; x++)
+    for (uint32_t x = 16 / 4; x < 128 / 4; ++x)
     {
         ipad[x] = 0x36363636;
     }
 
     #pragma unroll
-    for (int x = 16 / 4; x < 128 / 4; x++)
+    for (uint32_t x = 16 / 4; x < 128 / 4; ++x)
     {
         opad[x] = 0x5C5C5C5C;
     }
 
     #pragma unroll
-    for (int x = 0; x < 64 / 4; x++)
+    for (uint32_t x = 0; x < SIZE32_SEED; ++x)
     {
         ipad[x + 128 / 4] = seed[x];
     }
@@ -98,7 +98,7 @@ __device__ void mnemonicToExtendedMasterKey(const uint8_t* mnemonic, uint32_t* s
     sha512_swap(reinterpret_cast<uint64_t*>(opad), 192, reinterpret_cast<uint64_t*>(&ipad[128 / 4]));
 
     #pragma unroll
-    for (int x = 0; x < 128 / 8; x++)
+    for (uint32_t x = 0; x < 128 / 8; ++x)
     {
         *(reinterpret_cast<uint64_t*>(&ipad[128 / 4]) + x) = SWAP64(*(reinterpret_cast<uint64_t*>(&ipad[128 / 4]) + x));
     }

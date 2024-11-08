@@ -72,7 +72,7 @@ __device__ void bip49_publicKeyToHash160(const extended_public_key_t* pub, uint3
 
 __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t hardenedChildNumber)
 {
-    alignas(32) uint32_t hmacSHA512Result[64 / 4]{};
+    alignas(32) uint32_t hmacSHA512Result[SIZE32_SHA512_HMAC]{};
     alignas(8) uint8_t hmacInput[40]{}; //37 bytes
 
     cuda_memcpy(hmacInput + 1, parent->key, 32);
@@ -94,7 +94,7 @@ __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* pa
 
 __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t normalChildNumber)
 {
-    alignas(32) uint32_t hmacSHA512Result[64 / 4]{};
+    alignas(32) uint32_t hmacSHA512Result[SIZE32_SHA512_HMAC]{};
 
     extended_public_key_t pub;
     generatePublicFromPrivateKey(parent, &pub);

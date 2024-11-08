@@ -126,6 +126,12 @@ namespace cu
         // Use a larger portion of shared memory for L1 cache
         cudaCheckError(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
 
+        // Set desired fetch granularity in bytes
+        // cudaCheckError(cudaDeviceSetLimit(cudaLimitMaxL2FetchGranularity, 128));
+
+        // Reserve 1 MB of L2 cache
+        // cudaCheckError(cudaDeviceSetLimit(cudaLimitPersistingL2CacheSize, 1 * 1024 * 1024));
+
         return getDeviceInfo(cudaDeviceId);
     }
 }

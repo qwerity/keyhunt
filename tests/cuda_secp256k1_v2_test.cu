@@ -20,7 +20,7 @@ int main()
     thrust::host_vector<uint8_t> mnemonic(SIZE_MNEMONIC_FRAME_12, 0);
     thrust::copy(mnemonic_, mnemonic_ + sizeof(mnemonic_), mnemonic.begin());
 
-    thrust::device_vector<uint32_t> d_seed(64 / 4);
+    thrust::device_vector<uint32_t> d_seed(SIZE32_SEED);
     thrust::device_vector<uint8_t> d_masterExKey(sizeof(extended_private_key_t));
     thrust::device_vector<uint8_t> d_mnemonic = mnemonic;
 

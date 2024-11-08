@@ -11,6 +11,10 @@
 #define SIZE64_MNEMONIC_FRAME       (SIZE_MNEMONIC_FRAME_12 / 2)
 #define SIZE_HASH160_FRAME          (20)
 #define SIZE32_HASH160_FRAME        (SIZE_HASH160_FRAME / 4)
+#define SIZE_SHA512_HMAC            (64)
+#define SIZE32_SHA512_HMAC          (64 / 4)
+#define SIZE32_SEED                 SIZE32_SHA512_HMAC
+
 
 struct alignas(32) extended_private_key_t
 {

@@ -150,12 +150,13 @@ struct HDWallet::Impl
         const uint32_t totalKeysToGenerate = totalMnemonicsToProcess * derivationPaths.size();
 
         const uint32_t mnemonicsPerIteration = cuhdWallet->getMnemonicsPerIteration();
+        const uint32_t publicKeysPerIteration = mnemonicsPerIteration * derivationPaths.size();
         const uint32_t iterationsCount = totalMnemonicsToProcess / mnemonicsPerIteration;
         const uint32_t remainder = totalMnemonicsToProcess - (iterationsCount * mnemonicsPerIteration);
         const uint32_t finalIterationsCount = iterationsCount + (remainder > 0 ? 1 : 0);
 
-        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] HDWallet: total iterations: {:L} totalMnemonicsToProcess: {:L}, mnemonicsPerIteration: {:L}, totalKeysToGenerate: {:L}",
-                                                cudaInfo.id, finalIterationsCount, totalMnemonicsToProcess, mnemonicsPerIteration, totalKeysToGenerate);
+        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] HDWallet: total iterations: {:L} totalMnemonicsToProcess: {:L}, mnemonicsPerIteration: {:L}, publicKeysPerIteration: {:L}, totalKeysToGenerate: {:L}",
+                                                cudaInfo.id, finalIterationsCount, totalMnemonicsToProcess, mnemonicsPerIteration, publicKeysPerIteration, totalKeysToGenerate);
 
         utils::Timer timer;
         uint32_t iteration{0};
@@ -204,7 +205,7 @@ struct HDWallet::Impl
         BOOST_LOG_TRIVIAL(trace) << std::format("[{}] resultAtomicList.init: {} ms", cudaInfo.id, t.elapsedMs());
 
         t.start();
-        cuhdWallet->init(derivationPaths, gContext->config.publicKeyCompressionTypeToCheck(), gContext->config.gridSize(), gContext->config.blockSize());
+        cuhdWallet->init2(derivationPaths, config.accountsToGenerate, config.addressesToGenerate, gContext->config.publicKeyCompressionTypeToCheck(), gContext->config.gridSize(), gContext->config.blockSize());
         BOOST_LOG_TRIVIAL(trace) << std::format("[{}] init: {} ms", cudaInfo.id, t.elapsedMs());
 
         startSearchPublicHashForMnemonics();
