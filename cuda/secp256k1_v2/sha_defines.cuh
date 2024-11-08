@@ -45,7 +45,12 @@
 #define SHA256_STEP(F0a, F1a, a, b, c, d, e, f, g, h, x, K) { h += K; h += x; h += S3 (e); h += F1a (e,f,g); d += h; h += S2 (a); h += F0a (a,b,c); }
 #define SHA256_EXPAND(x, y, z, w) (S1 (x) + y + S0 (z) + w)
 
-#define SHA512_STEP(a, b, c, d, e, f, g, h, x, K) { h += K + SHA512_S1(e) + SHAF1(e, f, g) + x; d += h; h += SHA512_S0(a) + SHAF0(a, b, c);}
+#define SHA512_STEP(a, b, c, d, e, f, g, h, x, K) \
+    { \
+        h += K + SHA512_S1(e) + SHAF1(e, f, g) + x; \
+        d += h; \
+        h += SHA512_S0(a) + SHAF0(a, b, c); \
+    }
 #define ROUND_STEP_SHA512(i) { \
     SHA512_STEP(a, b, c, d, e, f, g, h, W[i + 0], k_sha512[i +  0]); \
     SHA512_STEP(h, a, b, c, d, e, f, g, W[i + 1], k_sha512[i +  1]); \

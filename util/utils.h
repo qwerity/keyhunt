@@ -62,11 +62,6 @@ namespace utils
     bool appendToFileOnNewLine(const std::string &fileName, const std::string &s);
 
     inline uint32_t endian(uint32_t x) { return (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24); }
-    inline uint64_t endian64(uint64_t x)
-    {
-        return (x << 56) | ((x << 40) & 0x00ff000000000000) | ((x << 24) & 0x0000ff0000000000) | ((x << 8)  & 0x000000ff00000000) |
-              ((x >> 8) & 0x00000000ff000000) | ((x >> 24) & 0x0000000000ff0000) | ((x >> 40) & 0x000000000000ff00) | (x >> 56);
-    }
 
     std::string toHex(const uint32_t* arr, uint32_t size);
     std::string toHex(const std::vector<uint8_t>& data);

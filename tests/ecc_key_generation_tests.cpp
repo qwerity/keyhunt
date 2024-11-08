@@ -1,11 +1,11 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch_all.hpp>
 
-#include "util/common.h"
 #include "util/crypto_util.h"
 #include "util/utils.h"
 
 #include "cuda/ecc.cuh"
+#include "cuda/defines.h"
 
 TEST_CASE("check private key generation", "")
 {
@@ -29,8 +29,8 @@ TEST_CASE("check private key generation", "")
             uint32_t msg[16]{};
             uint32_t digest[8]{};
 
-            msg[0] = utils::endian(privateXPart);
-            msg[1] = utils::endian(i + (iteration * keysNumberPerIteration));
+            msg[0] = SWAP32(privateXPart);
+            msg[1] = SWAP32(i + (iteration * keysNumberPerIteration));
             msg[2] = 0x80000000;
             msg[15] = 8 * sizeof(uint2);
 

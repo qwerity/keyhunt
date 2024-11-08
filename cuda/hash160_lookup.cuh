@@ -7,7 +7,6 @@
 
 __device__ bool checkHash(const uint32_t hash[5]);
 __device__ bool checkHash(const hash160& hash);
-__device__ void doRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5]);
 
 class Hash160Lookup
 {
@@ -21,7 +20,7 @@ public:
     Hash160Lookup(Hash160Lookup&& rhs) noexcept;
     Hash160Lookup& operator=(Hash160Lookup&& rhs) noexcept;
 
-    void setTargets(const std::unordered_set<hash160> &hash160Targets);
+    void setTargets(const std::unordered_set<hash160> &hash160Targets) const;
 
 private:
     struct Impl;

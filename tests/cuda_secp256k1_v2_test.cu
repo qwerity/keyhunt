@@ -1,5 +1,5 @@
 #include "cuda/secp256k1_v2/bip32.cuh"
-#include "cuda/secp256k1_v2/sha.cuh"
+#include "cuda/defines.h"
 
 #include "util/utils.h"
 #include "util/cuda_util.h"
@@ -43,7 +43,7 @@ int main()
     auto* seedPtr = reinterpret_cast<uint64_t*>(seed.data());
     for (uint32_t i = 0; i < seed.size() / 2; ++i)
     {
-        seedPtr[i] = utils::endian64(seedPtr[i]);
+        seedPtr[i] = SWAP64(seedPtr[i]);
     }
     const auto seedStr = utils::toHex(seed.data(), seed.size());
     cout << "seed:" << seedStr << endl;
@@ -74,20 +74,20 @@ int main()
         cerr << "m/0' priv key is wrong\n";
     }
 
-    thrust::host_vector<uint8_t> m0_child = d_m0_child;
-    const auto m0PrivKeyStr = utils::toHex(m0_child.data(), 32);
-    cout << "m/0 priv key: " << m0PrivKeyStr << endl;
-    if ("c25ec8d53730cf453fa516cfe9ee4995c39318e0595dbcb15e4d877bde1a8630" != m0PrivKeyStr)
-    {
-        cerr << "m/0 priv key is wrong\n";
-    }
-
     thrust::host_vector<uint8_t> m00_child = d_m00_child;
     const auto m00PrivKeyStr = utils::toHex(m00_child.data(), 32);
     cout << "m/0/0 priv key: " << m00PrivKeyStr << endl;
     if ("fee4d626b71f5f88d3d36fcd17e00096eebccaa045b373d1c286acd4c35137dc" != m00PrivKeyStr)
     {
         cerr << "m/0/0 priv key is wrong\n";
+    }
+
+    thrust::host_vector<uint8_t> m0_child = d_m0_child;
+    const auto m0PrivKeyStr = utils::toHex(m0_child.data(), 32);
+    cout << "m/0 priv key: " << m0PrivKeyStr << endl;
+    if ("c25ec8d53730cf453fa516cfe9ee4995c39318e0595dbcb15e4d877bde1a8630" != m0PrivKeyStr)
+    {
+        cerr << "m/0 priv key is wrong\n";
     }
 
     const auto m0ChainCodeStr = utils::toHex(m0_child.data() + 32, 32);

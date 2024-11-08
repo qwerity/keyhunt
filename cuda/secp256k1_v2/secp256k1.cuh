@@ -2,7 +2,8 @@
 
 #include "secp256k1_defines.cuh"
 #include "bip32.cuh"
-#include "../utils.cuh"
+#include "../defines.h"
+
 
 __device__ __forceinline__ int secp256k1_scalar_is_zero(const secp256k1_scalar* a)
 {

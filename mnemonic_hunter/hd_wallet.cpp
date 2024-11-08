@@ -1,8 +1,8 @@
 #include "hd_wallet.h"
 
-#include "cuda/hd_wallet.cuh"
-#include "cuda/atomic_list.cuh"
 #include "cuda/hash160_lookup.cuh"
+#include "cuda/atomic_list.cuh"
+#include "cuda/hd_wallet.cuh"
 #include "cuda/defines.h"
 
 #include "util/utils.h"
@@ -96,10 +96,7 @@ struct HDWallet::Impl
                 continue;
             }
 
-            for (uint32_t k{0}; k < 5; ++k)
-            {
-                results[i].digest[k] = utils::endian(results[i].digest[k]);
-            }
+            SWAP32_HASH160(results[i].digest, results[i].digest);
 
             results[i].iteration = iteration;
             results[i].privateXPart = privateXPart;
@@ -123,16 +120,23 @@ struct HDWallet::Impl
         BOOST_LOG_TRIVIAL(trace) << std::format("[{}] pushResultsToQueue2: {} ms", cudaInfo.id, t.elapsedMs());
     }
 
-    static void generateMnemonics(const uint32_t mnemonicsNumber, std::vector<uint8_t>& mnemonics)
+    void generateMnemonics(const uint32_t mnemonicsNumber, std::vector<uint8_t>& mnemonics) const
     {
         for (uint32_t i = 0; i < mnemonicsNumber; ++i)
         {
-            // Specify entropy length for mnemonic (128 bits for 12 words, 256 bits for 24 words)
-            std::vector<uint8_t> entropy = HDWallet::generateEntropy(BIP39_ENTROPY_LEN_128);
+            std::string mnemonic;
+            if (gContext->config.hdWallet().forceMnemonic)
+            {
+                mnemonic = gContext->config.hdWallet().mnemonic;
+            }
+            else
+            {
+                // Specify entropy length for mnemonic (128 bits for 12 words, 256 bits for 24 words)
+                const std::vector<uint8_t> entropy = HDWallet::generateEntropy(BIP39_ENTROPY_LEN_128);
+                mnemonic = HDWallet::generateMnemonic(entropy);
+            }
 
-            std::string mnemonic = HDWallet::generateMnemonic(entropy);
             mnemonic.resize(SIZE_MNEMONIC_FRAME_12);
-
             mnemonics.insert(mnemonics.end(), mnemonic.begin(), mnemonic.end());
         }
     }

@@ -118,13 +118,22 @@ struct Config::Impl
         // Parse path patterns
         if (hdwalletConfig.contains("path_patters") && hdwalletConfig["path_patters"].is_array() && !hdwalletConfig["path_patters"].empty())
         {
+            std::vector<std::string> patterns;
             for (const auto& pattern : hdwalletConfig["path_patters"])
             {
                 if (pattern.is_string() && !pattern.empty())
                 {
                     const auto& pathStr = pattern.get<std::string>();
-                    hdWallet.derivationPathsPatters.push_back(pathStr);
+                    patterns.push_back(pathStr);
                 }
+            }
+            if (!patterns.empty())
+            {
+                hdWallet.derivationPathsPatters = patterns;
+            }
+            else 
+            {
+                BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: hd_wallet.path_patters using default patters";
             }
         }
         else

@@ -18,7 +18,6 @@ public:
 
     void init(const std::vector<std::vector<uint32_t>>& derivationPaths, uint32_t publicKeyCompressionTypeToCheck, uint32_t gridSize = 0, uint32_t blockSize = 0) const;
     void generatePublicKeysForMnemonics(const uint8_t* mnemonics, uint32_t numMnemonics) const;
-    void generatePublicKeysForMnemonicsThrust(const uint8_t* mnemonics, uint32_t mnemonicsNumber) const;
 
     [[nodiscard]] uint32_t getMnemonicsPerIteration() const;
 

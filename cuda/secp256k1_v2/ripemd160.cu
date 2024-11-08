@@ -1,5 +1,7 @@
 #include "ripemd160.cuh"
 #include "sha.cuh"
+
+#include "../ripemd160_constants.cuh"
 #include "../utils.cuh"
 
 __constant__ constexpr uint8_t ripemd160Padding[64] = {
@@ -12,17 +14,18 @@ __constant__ constexpr uint8_t ripemd160Padding[64] = {
 __device__ void ripemd160Init(RIPEMD160_CTX* ctx)
 {
     //cuda_memset((uint8_t*)ctx, 0, sizeof(RIPEMD160_CTX));
-    for (int i = 0; i < 64 / 4; i++)
+    for (int i = 0; i < 64 / 4; ++i)
     {
         *(uint32_t*) ((uint32_t*) ctx->buffer + i) = 0;
     }
     ctx->total[0] = 0;
     ctx->total[1] = 0;
-    ctx->state[0] = 0x67452301;
-    ctx->state[1] = 0xEFCDAB89;
-    ctx->state[2] = 0x98BADCFE;
-    ctx->state[3] = 0x10325476;
-    ctx->state[4] = 0xC3D2E1F0;
+
+    ctx->state[0] = RIPEMD160_IV0;
+    ctx->state[1] = RIPEMD160_IV1;
+    ctx->state[2] = RIPEMD160_IV2;
+    ctx->state[3] = RIPEMD160_IV3;
+    ctx->state[4] = RIPEMD160_IV4;
 }
 
 __device__ void ripemd160Process(RIPEMD160_CTX* ctx, const uint8_t data[64])
@@ -60,8 +63,16 @@ __device__ void ripemd160Process(RIPEMD160_CTX* ctx, const uint8_t data[64])
 
 #define S(x, n) ( ( x << n ) | ( x >> (32 - n) ) )
 
-#define P(a, b, c, d, e, r, s, f, k) { a += f( b, c, d ) + X[r] + k; a = S( a, s ) + e; c = S( c, 10 ); }
-#define P2(a, b, c, d, e, r, s, rp, sp) { P( a, b, c, d, e, r, s, F, K ); P( a ## p, b ## p, c ## p, d ## p, e ## p, rp, sp, Fp, Kp ); }
+#define P(a, b, c, d, e, r, s, f, k) \
+    { \
+        a += f( b, c, d ) + X[r] + k;\
+        a = S( a, s ) + e; c = S( c, 10 ); \
+    }
+#define P2(a, b, c, d, e, r, s, rp, sp) \
+    { \
+        P( a, b, c, d, e, r, s, F, K ); \
+        P( a ## p, b ## p, c ## p, d ## p, e ## p, rp, sp, Fp, Kp ); \
+    }
 
 #define F   F1
 #define K   0x00000000

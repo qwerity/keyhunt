@@ -1,5 +1,6 @@
 #include "hash160_lookup.cuh"
 #include "udevice_vector.cuh"
+#include "ripemd160_constants.cuh"
 #include "utils.cuh"
 
 #include "defines.h"
@@ -18,29 +19,19 @@ __constant__ uint64_t d_BloomFilterMask64{};
 
 namespace
 {
-    void undoRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5])
-    {
-        constexpr uint32_t iv[5] = {0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0};
-        for (int i = 0; i < 5; i++)
-        {
-            hOut[i] = SWAP32(hIn[i]) - iv[(i + 1) % 5];
-        }
-    }
-
     /**
     * Copies the target hashes to constant memory
     */
     void setTargetConstantMemory(const std::unordered_set<hash160> &targets)
     {
         const size_t count = targets.size();
-        uint32_t h[5];
         uint32_t i{0};
 
         for (const auto& target : targets)
         {
-            undoRMD160FinalRound(target.h, h);
+            uint32_t h[5];
+            SWAP32_HASH160(target.h, h);
             cudaCheckError(cudaMemcpyToSymbol(d_TargetHash, h, sizeof(uint32_t) * 5, i * sizeof(uint32_t) * 5));
-
             ++i;
         }
         cudaCheckError(cudaMemcpyToSymbol(d_NumTargetHashes, &count, sizeof(uint32_t)));
@@ -65,8 +56,8 @@ namespace
         for (const auto& target : targets)
         {
             uint32_t h[5];
-            undoRMD160FinalRound(target.h, h);
-            for (unsigned int j : h)
+            SWAP32_HASH160(target.h, h);
+            for (const uint32_t j : h)
             {
                 const uint32_t idx = j & mask;
                 filter[idx / 32] |= (0x01 << (idx % 32));
@@ -78,17 +69,17 @@ namespace
     {
         for (const auto& target : targets)
         {
-            uint32_t hash[5];
             uint64_t idx[5];
-            undoRMD160FinalRound(target.h, hash);
+            uint32_t hash[5];
+            SWAP32_HASH160(target.h, hash);
 
             idx[0] = (static_cast<uint64_t>(hash[0]) << 32 | hash[1]) & mask;
             idx[1] = (static_cast<uint64_t>(hash[2]) << 32 | hash[3]) & mask;
-            idx[2] = (static_cast<uint64_t>(hash[0] ^ hash[1]) << 32 | (hash[1] ^ hash[2])) & mask;
-            idx[3] = (static_cast<uint64_t>(hash[2] ^ hash[3]) << 32 | (hash[3] ^ hash[4])) & mask;
-            idx[4] = (static_cast<uint64_t>(hash[0] ^ hash[3]) << 32 | (hash[1] ^ hash[3])) & mask;
+            idx[2] = (static_cast<uint64_t>(hash[0]        ^ hash[1]) << 32 | (hash[1] ^ hash[2])) & mask;
+            idx[3] = (static_cast<uint64_t>(hash[2]        ^ hash[3]) << 32 | (hash[3] ^ hash[4])) & mask;
+            idx[4] = (static_cast<uint64_t>(hash[0]        ^ hash[3]) << 32 | (hash[1] ^ hash[3])) & mask;
 
-            for (unsigned long long i : idx)
+            for (const uint64_t& i : idx)
             {
                 filter[i / 32] |= (0x01 << (i % 32));
             }
@@ -167,20 +158,9 @@ Hash160Lookup& Hash160Lookup::operator=(Hash160Lookup &&rhs) noexcept = default;
 /**
 * Copies the target hashes to either constant memory, or the bloom filter depending on how many targets there are
 */
-void Hash160Lookup::setTargets(const std::unordered_set<hash160>& hash160Targets)
+void Hash160Lookup::setTargets(const std::unordered_set<hash160>& hash160Targets) const
 {
     mImpl->setTargets(hash160Targets);
-}
-
-__device__ void doRMD160FinalRound(const uint32_t hIn[5], uint32_t hOut[5])
-{
-    constexpr uint32_t iv[5] = {0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0};
-
-    #pragma unroll
-    for (int i = 0; i < 5; i++)
-    {
-        hOut[i] = SWAP32(hIn[i] + iv[(i + 1) % 5]);
-    }
 }
 
 __device__ bool checkBloomFilter(const uint32_t hash[5])

@@ -22,6 +22,10 @@ namespace cu
         devInfo.multiProcessorCount = properties.multiProcessorCount;
         devInfo.maxThreadsPerMultiProcessor = properties.maxThreadsPerMultiProcessor;
         devInfo.totalConstMem = properties.totalConstMem;
+        devInfo.sharedMemPerBlock = properties.sharedMemPerBlock;
+        devInfo.sharedMemPerBlockOptin = properties.sharedMemPerBlockOptin;
+        devInfo.sharedMemPerMultiprocessor = properties.sharedMemPerMultiprocessor;
+        devInfo.reservedSharedMemPerBlock = properties.reservedSharedMemPerBlock;
         devInfo.warpSize = properties.warpSize;
         devInfo.maxThreadsPerBlock = properties.maxThreadsPerBlock;
         devInfo.persistingL2CacheMaxSize = properties.persistingL2CacheMaxSize;
@@ -101,6 +105,10 @@ namespace cu
         std::fprintf(stderr, "warpSize: %d\n", info.warpSize);
         std::fprintf(stderr, "Memory: %" PRIu64 "MB\n", info.mem / MB);
         std::fprintf(stderr, "totalConstMem: %zd\n", info.totalConstMem);
+        std::fprintf(stderr, "sharedMemPerBlock: %zd\n", info.sharedMemPerBlock);
+        std::fprintf(stderr, "sharedMemPerBlockOptin: %zd\n", info.sharedMemPerBlockOptin);
+        std::fprintf(stderr, "sharedMemPerMultiprocessor: %zd\n", info.sharedMemPerMultiprocessor);
+        std::fprintf(stderr, "reservedSharedMemPerBlock: %zd\n", info.reservedSharedMemPerBlock);
         std::fprintf(stderr, "multiProcessorCount: %d\n", info.multiProcessorCount);
         std::fprintf(stderr, "maxThreadsPerMultiProcessor: %d\n", info.maxThreadsPerMultiProcessor);
         std::fprintf(stderr, "globalL1CacheSupported: %d\n", info.globalL1CacheSupported);

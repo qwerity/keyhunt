@@ -3,10 +3,9 @@
 #include "atomic_list.cuh"
 #include "ripemd160.cuh"
 #include "sha256.cuh"
-#include "utils.cuh"
 #include "hash160_lookup.cuh"
 
-#include "util/common.h"
+#include "defines.h"
 
 __device__ __forceinline__ void hashPublicKey(const uint256_t& x, const uint256_t& y, uint32_t *digestOut)
 {
@@ -19,7 +18,7 @@ __device__ __forceinline__ void hashPublicKey(const uint256_t& x, const uint256_
     {
         hash[i] = SWAP32(hash[i]);
     }
-    ripemd160sha256NoFinal(hash, digestOut);
+    ripemd160sha256(hash.v, digestOut);
 }
 
 __device__ __forceinline__ void hashPublicKeyCompressed(const uint256_t& x, const uint32_t yParity, uint32_t *digestOut)
@@ -33,7 +32,7 @@ __device__ __forceinline__ void hashPublicKeyCompressed(const uint256_t& x, cons
     {
         hash[i] = SWAP32(hash[i]);
     }
-    ripemd160sha256NoFinal(hash, digestOut);
+    ripemd160sha256(hash.v, digestOut);
 }
 
 __device__ __forceinline__ void setResultFound(const uint32_t idx, const bool compressed, const uint8_t privateKey[32], const uint32_t digest[5])
@@ -51,7 +50,8 @@ __device__ __forceinline__ void setResultFound(const uint32_t idx, const bool co
     {
         r.privateKey[i] = SWAP32(privateKeyU[i]);
     }
-    doRMD160FinalRound(digest, r.digest);
+
+    SWAP32_HASH160(digest, r.digest);
 
     atomicListAdd(&r, sizeof(r));
 }

@@ -3,6 +3,7 @@
 #include "common.h"
 #include "config.h"
 #include "http_client.h"
+#include "cuda/defines.h"
 #include "cuda/defines.cuh"
 
 #include <boost/lockfree/queue.hpp>

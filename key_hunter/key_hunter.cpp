@@ -5,9 +5,9 @@
 
 #include <boost/log/trivial.hpp>
 
+#include "cuda/hash160_lookup.cuh"
 #include "cuda/atomic_list.cuh"
 #include "cuda/ecc.cuh"
-#include "cuda/hash160_lookup.cuh"
 #include "cuda/defines.h"
 
 #include "util/utils.h"
@@ -102,10 +102,7 @@ struct KeyHunter::Impl
                 continue;
             }
 
-            for (uint32_t k{0}; k < 5; ++k)
-            {
-                results[i].digest[k] = utils::endian(results[i].digest[k]);
-            }
+            SWAP32_HASH160(results[i].digest, results[i].digest);
 
             results[i].iteration = iteration;
             results[i].privateXPart = privateXPart;

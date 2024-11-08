@@ -1,8 +1,8 @@
 #pragma once
 
 #include "defines.cuh"
+#include "defines.h"
 #include "sha256.cuh"
-#include "utils.cuh"
 
 #include <curand_kernel.h>
 
@@ -20,6 +20,7 @@ struct PrivateKeyForXWithRandomYFunctor
         uint2 p;
         p.x = SWAP32(xPart);
         p.y = SWAP32(i + yPartIncrementBy);
+        //p.y = 0; // For test
 
         uint256_t digest;
         sha256PrivateKeyBase(p, digest);

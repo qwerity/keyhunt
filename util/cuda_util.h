@@ -17,6 +17,10 @@ namespace cu
         int multiProcessorCount{};
         int maxThreadsPerMultiProcessor{};
         size_t totalConstMem{};
+        size_t sharedMemPerBlock{};
+        size_t sharedMemPerBlockOptin{};
+        size_t sharedMemPerMultiprocessor{};
+        size_t reservedSharedMemPerBlock{};
         int warpSize{};
         int cores{};
         uint64_t mem{};

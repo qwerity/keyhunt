@@ -1,5 +1,6 @@
 #include "secp256k1.cuh"
 #include "secp256k1_constants.cuh"
+#include "../utils.cuh"
 
 __device__ void secp256k1_pubkey_load(secp256k1_ge* ge, const uint8_t* pubkey)
 {
@@ -931,9 +932,11 @@ __device__ void secp256k1_ecmult_gen(secp256k1_gej* r, secp256k1_scalar* gn)
 
     secp256k1_gej_set_infinity(r);
 
+    #pragma unroll
     for (uint32_t j = 0; j < ECMULT_GEN_PREC_N; ++j)
     {
         const uint32_t bits = secp256k1_scalar_get_bits(gn, j * ECMULT_GEN_PREC_B, ECMULT_GEN_PREC_B);
+        #pragma unroll
         for (uint32_t i = 0; i < ECMULT_GEN_PREC_G; ++i)
         {
             uint32_t mask0 = (i == bits) + ~0u;

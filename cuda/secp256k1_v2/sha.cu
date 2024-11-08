@@ -1,7 +1,7 @@
 #include "sha.cuh"
 #include "sha_defines.cuh"
 #include "sha_constants.cuh"
-#include "../utils.cuh"
+#include "../defines.h"
 
 // 512 bytes
 __constant__ constexpr uint64_t padLong[8] = {highBit(0), highBit(1), highBit(2), highBit(3), highBit(4), highBit(5), highBit(6), highBit(7)};

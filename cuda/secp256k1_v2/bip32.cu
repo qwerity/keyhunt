@@ -4,6 +4,7 @@
 #include "ripemd160.cuh"
 #include "hmac.cuh"
 #include "sha.cuh"
+#include "utils.cuh"
 
 __device__ void generatePublicFromPrivateKey(const extended_private_key_t* priv, extended_public_key_t* pub)
 {
@@ -38,7 +39,7 @@ __device__ void publicKeyToHash160(const extended_public_key_t* pub, uint32_t* u
     hash160(&serializedPublicKey[0], 65, uncompressedHashBytes);
 }
 
-__device__ void bip49_publicKeyToHash160(extended_public_key_t* pub, uint32_t* hash160Bytes)
+__device__ void bip49_publicKeyToHash160(const extended_public_key_t* pub, uint32_t* hash160Bytes)
 {
     uint8_t serializedPublicKey[33 + 3]{};
     serialized_compressed_public_key(pub, &serializedPublicKey[0]);
@@ -54,7 +55,7 @@ __device__ void bip49_publicKeyToHash160(extended_public_key_t* pub, uint32_t* h
     ////uint8_t hash[24];
     serializedPublicKey[0] = 0;
     serializedPublicKey[1] = 0x14;
-    for (int i = 0; i < 20; i++)
+    for (uint32_t i = 0; i < 20; ++i)
     {
         serializedPublicKey[i + 2] = sha256Result[i];
     }
@@ -114,10 +115,7 @@ __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* pare
 
     secp256k1_ec_seckey_tweak_add(reinterpret_cast<uint8_t*>(&sk), reinterpret_cast<const uint8_t*>(&parent->key[0]));
 
-    for (int x = 0; x < 32; x++)
-    {
-        child->key[x] = sk[x];
-    }
+    cuda_memcpy(child->key, sk, 32);
     cuda_memcpy_offset(&child->chainCode[0], reinterpret_cast<const uint8_t*>(&hmacSHA512Result), 32, 32);
 }
 
