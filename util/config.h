@@ -1,4 +1,7 @@
 #pragma once
+
+#include "cuda/hd_wallet_defines.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -40,8 +43,9 @@ struct HunterConfig
 
 struct HDWalletConfig
 {
-    const std::string accountPlaceholder = "acc";
-    const std::string addressPlaceholder = "addr";
+    HDWalletGenerationMode generationMode{HDWalletGenerationMode::MnemonicMasterKey};
+
+    std::string mnemonicMasterKeyProvider{"tcp://localhost:5555"};
 
     bool forceMnemonic{false};
     std::string mnemonic;
@@ -72,19 +76,18 @@ public:
     Config(const Config& other) = delete;
     Config& operator=(const Config& other) = delete;
 
-    [[nodiscard]] bool setPrivateKeyXPart(uint32_t xPart) const;
-    [[nodiscard]] bool setCalculationIteration(uint32_t iteration) const;
     [[nodiscard]] bool isLoaded() const;
     [[nodiscard]] bool devMode() const;
-    [[nodiscard]] bool isPrivateXPartRandom() const;
-    void setPrivateXPartRandom() const;
+    void setDevMode(bool enable) const;
+    [[nodiscard]] bool dataGenerationIsRandom() const;
+    void setRandomGeneration(bool enable) const;
 
     [[nodiscard]] std::string jsonStr() const;
 
-    HunterConfig& hunter();
-    ServerConfig& server();
-    LogConfig& log();
-    HDWalletConfig& hdWallet();
+    [[nodiscard]] HunterConfig& hunter() const;
+    [[nodiscard]] ServerConfig& server() const;
+    [[nodiscard]] LogConfig& log() const;
+    [[nodiscard]] HDWalletConfig& hdWallet() const;
 
     [[nodiscard]] uint32_t statusCallbackPeriodMs() const;
     [[nodiscard]] uint32_t publicKeyCompressionTypeToCheck() const;

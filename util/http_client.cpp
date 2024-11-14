@@ -184,8 +184,7 @@ struct HttpClient::Impl
 
         // Container to hold the response
         http::response<http::dynamic_body> response;
-        http::status responseCode = get(target, response);
-        if (http::status::ok != responseCode)
+        if (http::status::ok != get(target, response))
         {
             return false;
         }

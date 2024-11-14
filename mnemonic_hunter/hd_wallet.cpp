@@ -7,7 +7,6 @@
 
 #include "util/utils.h"
 
-#include <wally_bip32.h>
 #include <wally_bip39.h>
 
 #include <random>
@@ -22,6 +21,7 @@ struct HDWallet::Impl
 
     std::unique_ptr<CUHDWallet> cuhdWallet;
 
+    std::vector<std::string> expandedDerivationPaths;
     std::vector<std::vector<uint32_t>> derivationPaths;
 
     std::atomic<bool> stopFlag{false};
@@ -54,7 +54,7 @@ struct HDWallet::Impl
             const double periodElapsedTimeS = static_cast<double>(periodElapsedTimeMS) / 1000.0;
 
             StatusInfo info;
-            info.pointsPerSecond = (static_cast<double>(periodMnemonicsNumber) / periodElapsedTimeS) / 1e6; // Mpoints per second
+            info.dataPerSecond = (static_cast<double>(periodMnemonicsNumber) / periodElapsedTimeS) / 1e6; // mega points per second
             info.seconds = periodElapsedTimeS;
             info.total = mnemonicsPerIteration * iteration;
             info.totalTime = totalTime;
@@ -62,6 +62,7 @@ struct HDWallet::Impl
             info.deviceName = cudaInfo.name;
             info.iteration = iteration;
             info.totalIterations = totalIterations;
+            info.derivationsPerIteration = expandedDerivationPaths.size();
             cudaCheckError(cudaMemGetInfo(&info.freeDeviceMemory, &info.totalDeviceMemory));
 
             gContext->statusCallback(info);
@@ -73,36 +74,31 @@ struct HDWallet::Impl
 
     void pushResultsToQueue(const uint32_t keysNumberPerIteration, const uint32_t iteration) const
     {
-        uint32_t privateXPart{0};
-
-        utils::Timer t;
+        const utils::Timer t;
         const uint32_t count = resultAtomicList.size();
 
-        std::vector<Hash160SearchResult> results;
-        results.resize(count);
+        std::vector<Hash160MnemonicSearchCudaResult> cudaResults;
+        cudaResults.resize(count);
 
-        resultAtomicList.read(results.data(), count);
+        resultAtomicList.read(cudaResults.data(), count);
         resultAtomicList.clear();
 
         uint32_t falsePositiveCount{0};
         for (uint32_t i = 0; i < count; ++i)
         {
-            results[i].cudaDeviceId = cudaInfo.id;
+            cudaResults[i].cudaDeviceId = cudaInfo.id;
 
             // recheck the false-positive
-            if (!gContext->hash160Targets.contains(hash160(results[i].digest)))
+            if (!gContext->hash160Targets.contains(hash160(cudaResults[i].digest)))
             {
                 ++falsePositiveCount;
                 continue;
             }
 
-            SWAP32_HASH160(results[i].digest, results[i].digest);
+            SWAP32_HASH160(cudaResults[i].digest, cudaResults[i].digest);
 
-            results[i].iteration = iteration;
-            results[i].privateXPart = privateXPart;
-            results[i].privateYPart = (iteration * keysNumberPerIteration) + results[i].idx;
-
-            while (!gContext->hash160SearchResultsQueue->push(results[i]))
+            Hash160MnemonicSearchResult result(cudaResults[i], expandedDerivationPaths[cudaResults[i].derivedPathIndex]);
+            while (!gContext->mnemonicMasterKeyHash160SearchResultsQueue->push(result))
             {
                 if (stopFlag)
                     return;
@@ -117,31 +113,28 @@ struct HDWallet::Impl
             BOOST_LOG_TRIVIAL(trace) << "False positives count: " << falsePositiveCount;
         }
 
-        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] pushResultsToQueue2: {} ms", cudaInfo.id, t.elapsedMs());
+        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] pushResultsToQueue: {} ms", cudaInfo.id, t.elapsedMs());
     }
 
     void generateMnemonics(const uint32_t mnemonicsNumber, std::vector<uint8_t>& mnemonics) const
     {
+        std::vector<uint8_t> entropy(BIP39_ENTROPY_LEN_128);
         for (uint32_t i = 0; i < mnemonicsNumber; ++i)
         {
-            std::string mnemonic;
-            if (gContext->config.hdWallet().forceMnemonic)
+            if (gContext->config.devMode() && gContext->config.dataGenerationIsRandom())
             {
-                mnemonic = gContext->config.hdWallet().mnemonic;
+                utils::generateEntropy(entropy);
+                utils::generateMnemonic(entropy, mnemonics.data() + i);
             }
-            else
+            else if (gContext->config.devMode())
             {
-                // Specify entropy length for mnemonic (128 bits for 12 words, 256 bits for 24 words)
-                const std::vector<uint8_t> entropy = HDWallet::generateEntropy(BIP39_ENTROPY_LEN_128);
-                mnemonic = HDWallet::generateMnemonic(entropy);
+                const std::string& mnemonic = gContext->config.hdWallet().mnemonic;
+                strncpy_s(reinterpret_cast<char *>(mnemonics.data() + i * SIZE_MNEMONIC_FRAME_12), SIZE_MNEMONIC_FRAME_12, mnemonic.c_str(), mnemonic.size());
             }
-
-            mnemonic.resize(SIZE_MNEMONIC_FRAME_12);
-            mnemonics.insert(mnemonics.end(), mnemonic.begin(), mnemonic.end());
         }
     }
 
-    void startSearchPublicHashForMnemonics() const
+    void startSearchPublicHashFromMnemonics() const
     {
         const auto& config = gContext->config.hdWallet();
 
@@ -149,7 +142,7 @@ struct HDWallet::Impl
         const uint32_t totalMnemonicsToProcess = (mnemonicsToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : mnemonicsToGenerate;
         const uint32_t totalKeysToGenerate = totalMnemonicsToProcess * derivationPaths.size();
 
-        const uint32_t mnemonicsPerIteration = cuhdWallet->getMnemonicsPerIteration();
+        const uint32_t mnemonicsPerIteration = cuhdWallet->getMaxDataPerIteration();
         const uint32_t publicKeysPerIteration = mnemonicsPerIteration * derivationPaths.size();
         const uint32_t iterationsCount = totalMnemonicsToProcess / mnemonicsPerIteration;
         const uint32_t remainder = totalMnemonicsToProcess - (iterationsCount * mnemonicsPerIteration);
@@ -157,6 +150,8 @@ struct HDWallet::Impl
 
         BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] HDWallet: total iterations: {:L} totalMnemonicsToProcess: {:L}, mnemonicsPerIteration: {:L}, publicKeysPerIteration: {:L}, totalKeysToGenerate: {:L}",
                                                 cudaInfo.id, finalIterationsCount, totalMnemonicsToProcess, mnemonicsPerIteration, publicKeysPerIteration, totalKeysToGenerate);
+
+        std::vector<uint8_t> mnemonics(mnemonicsPerIteration * SIZE_MNEMONIC_FRAME_12, 0);
 
         utils::Timer timer;
         uint32_t iteration{0};
@@ -167,13 +162,12 @@ struct HDWallet::Impl
                 utils::Timer t;
 
                 t.start();
-                std::vector<uint8_t> mnemonics;
                 generateMnemonics(mnemonicsPerIteration, mnemonics);
                 BOOST_LOG_TRIVIAL(trace) << std::format("generateMnemonics: {}ms {}s", t.elapsedMs(), t.elapsedS());
 
                 t.start();
-                cuhdWallet->generatePublicKeysForMnemonics(mnemonics.data(), mnemonicsPerIteration);
-                BOOST_LOG_TRIVIAL(trace) << std::format("generatePublicKeysForMnemonics: {}ms {}s", t.elapsedMs(), t.elapsedS());
+                cuhdWallet->searchPublicHashFromMnemonics(mnemonics.data(), mnemonicsPerIteration);
+                BOOST_LOG_TRIVIAL(trace) << std::format("generatePublicKeys: {}ms {}s", t.elapsedMs(), t.elapsedS());
             }
 
             pushResultsToQueue(mnemonicsPerIteration, iteration);
@@ -188,6 +182,79 @@ struct HDWallet::Impl
         BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] HDWallet: done, generated: {:L} keys", cudaInfo.id, mnemonicsPerIteration * finalIterationsCount * derivationPaths.size());
     }
 
+    void getMnemonicMasterKeys(const uint32_t masterKeysNumber, std::vector<HDExtendedPrivateKey>& masterKeys) const
+    {
+        for (uint32_t i = 0; i < masterKeysNumber && !stopFlag; ++i)
+        {
+            gContext->mnemonicMasterKeysQueue->pop(masterKeys[i]);
+        }
+    }
+
+    void startSearchPublicHashForMnemonicsMasterKeys() const
+    {
+        const auto& config = gContext->config.hdWallet();
+
+        const uint32_t mnemonicsToGenerate = config.mnemonicsToGenerate;
+        const uint32_t totalMnemonicsToProcess = (mnemonicsToGenerate == 0) ? std::numeric_limits<uint32_t>::max() : mnemonicsToGenerate;
+        const uint32_t totalKeysToGenerate = totalMnemonicsToProcess * derivationPaths.size();
+
+        const uint32_t mnemonicsPerIteration = cuhdWallet->getMaxDataPerIteration();
+        const uint32_t publicKeysPerIteration = mnemonicsPerIteration * derivationPaths.size();
+        const uint32_t iterationsCount = totalMnemonicsToProcess / mnemonicsPerIteration;
+        const uint32_t remainder = totalMnemonicsToProcess - (iterationsCount * mnemonicsPerIteration);
+        const uint32_t finalIterationsCount = iterationsCount + (remainder > 0 ? 1 : 0);
+
+        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] HDWallet: total iterations: {:L} totalMnemonicsToProcess: {:L}, mnemonicsPerIteration: {:L}, publicKeysPerIteration: {:L}, totalKeysToGenerate: {:L}",
+                                                cudaInfo.id, finalIterationsCount, totalMnemonicsToProcess, mnemonicsPerIteration, publicKeysPerIteration, totalKeysToGenerate);
+
+        utils::Timer timer;
+        uint32_t iteration{0};
+
+        std::vector<uint8_t> mnemonics(mnemonicsPerIteration * SIZE_MNEMONIC_FRAME_12);
+
+        while (!stopFlag && iteration < finalIterationsCount)
+        {
+            timer.start();
+            {
+                utils::Timer t;
+
+                if (gContext->config.dataGenerationIsRandom())
+                {
+                    t.start();
+                    utils::generateMnemonics(mnemonics, 12);
+                    BOOST_LOG_TRIVIAL(trace) << std::format("utils::generateMnemonics: {}ms {}s", t.elapsedMs(), t.elapsedS());
+                    t.start();
+                    cuhdWallet->masterKeysFromMnemonics(mnemonics);
+                    BOOST_LOG_TRIVIAL(trace) << std::format("cuhdWallet->masterKeysFromMnemonics: {}ms {}s", t.elapsedMs(), t.elapsedS());
+
+                    t.start();
+                    cuhdWallet->searchPublicHashFromMnemonicsMasterKeys();
+                    BOOST_LOG_TRIVIAL(trace) << std::format("searchPublicHashForMnemonicsMasterKeys: {}ms {}s", t.elapsedMs(), t.elapsedS());
+                }
+                else
+                {
+                    std::vector<HDExtendedPrivateKey> masterKeys(mnemonicsPerIteration);
+
+                    t.start();
+                    getMnemonicMasterKeys(mnemonicsPerIteration, masterKeys);
+                    BOOST_LOG_TRIVIAL(trace) << std::format("getMnemonicMasterKeys: {}ms {}s", t.elapsedMs(), t.elapsedS());
+
+                    t.start();
+                    cuhdWallet->searchPublicHashFromMnemonicsMasterKeys(masterKeys);
+                    BOOST_LOG_TRIVIAL(trace) << std::format("searchPublicHashForMnemonicsMasterKeys: {}ms {}s", t.elapsedMs(), t.elapsedS());
+                }
+            }
+
+            pushResultsToQueue(mnemonicsPerIteration, iteration);
+
+            ++iteration;
+
+            signalStatusInfo(mnemonicsPerIteration, iteration, finalIterationsCount, timer.elapsedMs());
+        }
+
+        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] HDWallet: done, generated: {:L} keys", cudaInfo.id, mnemonicsPerIteration * finalIterationsCount * derivationPaths.size());
+    }
+
     void startSearchPublicHash()
     {
         utils::Timer t;
@@ -198,17 +265,22 @@ struct HDWallet::Impl
         BOOST_LOG_TRIVIAL(trace) << std::format("[{}] hash160Lookup.setTargets: {} ms", cudaInfo.id, t.elapsedMs());
 
         const auto& config = gContext->config.hdWallet();
-        derivationPaths = utils::bip32GetDerivationPathsFromPatterns(config.derivationPathsPatters, config.accountsToGenerate, config.addressesToGenerate);
 
-        t.start();
-        resultAtomicList.init(sizeof(Hash160SearchResult), 256);
-        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] resultAtomicList.init: {} ms", cudaInfo.id, t.elapsedMs());
+        derivationPaths = utils::bip32GetDerivationPathsFromPatterns(config.derivationPathsPatters, config.accountsToGenerate, config.addressesToGenerate, expandedDerivationPaths);
+        cuhdWallet->init(config.generationMode, derivationPaths, config.accountsToGenerate, config.addressesToGenerate,
+                         gContext->config.publicKeyCompressionTypeToCheck(), gContext->config.gridSize(), gContext->config.blockSize());
 
-        t.start();
-        cuhdWallet->init2(derivationPaths, config.accountsToGenerate, config.addressesToGenerate, gContext->config.publicKeyCompressionTypeToCheck(), gContext->config.gridSize(), gContext->config.blockSize());
-        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] init: {} ms", cudaInfo.id, t.elapsedMs());
+        // should be called after cuhdWallet->init to have valid cuhdWallet->getMaxDataPerIteration()
+        resultAtomicList.init(sizeof(Hash160MnemonicSearchCudaResult), cuhdWallet->getMaxDataPerIteration());
 
-        startSearchPublicHashForMnemonics();
+        if (config.generationMode == HDWalletGenerationMode::MnemonicMasterKey)
+        {
+            startSearchPublicHashForMnemonicsMasterKeys();
+        }
+        else
+        {
+            startSearchPublicHashFromMnemonics();
+        }
     }
 };
 
@@ -217,52 +289,6 @@ HDWallet::~HDWallet() = default;
 
 HDWallet::HDWallet(HDWallet&& rhs) noexcept = default;
 HDWallet& HDWallet::operator=(HDWallet &&rhs) noexcept = default;
-
-// Function to generate entropy of desired bit length (multiples of 32)
-std::vector<uint8_t> HDWallet::generateEntropy(size_t bytes)
-{
-    // Ensure bytes is a multiple of 32
-    if ((bytes * 8) % 32 != 0)
-    {
-        BOOST_LOG_TRIVIAL(error) << "Entropy bit length must be a multiple of 32.";
-        return {};
-    }
-
-    std::vector<uint8_t> entropy(bytes);
-
-    std::random_device rd;
-    std::mt19937_64 rng(rd()); // 64-bit Mersenne Twister RNG
-
-    for (size_t i = 0; i < bytes; i += 8)
-    {
-        // Generate 64-bit random value
-        uint64_t randomValue = rng();
-        for (size_t j = 0; j < 8 && i + j < bytes; ++j)
-        {
-            entropy[i + j] = (randomValue >> (8 * j)) & 0xFF;
-        }
-    }
-
-    return entropy;
-}
-
-// Function to convert entropy to a BIP39 mnemonic
-std::string HDWallet::generateMnemonic(const std::vector<uint8_t>& entropy)
-{
-    char* mnemonic = nullptr;
-
-    // Convert entropy to BIP39 mnemonic
-    if (bip39_mnemonic_from_bytes(nullptr, entropy.data(), entropy.size(), &mnemonic) != WALLY_OK)
-    {
-        BOOST_LOG_TRIVIAL(error) << "Failed to generate mnemonic from entropy.";
-        return {};
-    }
-
-    std::string result(mnemonic);
-    wally_free_string(mnemonic); // Free allocated mnemonic string
-
-    return result;
-}
 
 void HDWallet::startSearchPublicHash() const
 {

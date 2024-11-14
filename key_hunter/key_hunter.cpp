@@ -62,7 +62,7 @@ struct KeyHunter::Impl
             const double periodElapsedTimeS = static_cast<double>(periodElapsedTimeMS) / 1000.0;
 
             StatusInfo info;
-            info.pointsPerSecond = (static_cast<double>(periodKeysNumber) / periodElapsedTimeS) / 1e6; // Mpoints per second
+            info.dataPerSecond = (static_cast<double>(periodKeysNumber) / periodElapsedTimeS) / 1e6; // Mpoints per second
             info.seconds = periodElapsedTimeS;
             info.total = keysNumberPerIteration * iteration;
             info.totalTime = totalTime;
@@ -79,7 +79,7 @@ struct KeyHunter::Impl
         }
     }
 
-    void pushResultsToQueue2(const uint32_t privateXPart, const uint32_t keysNumberPerIteration, const uint32_t iteration) const
+    void pushResultsToQueue(const uint32_t privateXPart, const uint32_t keysNumberPerIteration, const uint32_t iteration) const
     {
         utils::Timer t;
         const uint32_t count = resultAtomicList.size();
@@ -123,7 +123,7 @@ struct KeyHunter::Impl
             BOOST_LOG_TRIVIAL(trace) << "False positives count: " << falsePositiveCount;
         }
 
-        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] pushResultsToQueue2: {} ms", cudaInfo.id, t.elapsedMs());
+        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] pushResultsToQueue: {} ms", cudaInfo.id, t.elapsedMs());
     }
 
     void startSearchPublicHashWithPrivateDefinedXRandomY(const uint32_t privateXPart) const
@@ -157,7 +157,7 @@ struct KeyHunter::Impl
             /// TODO(ksh): to be used later
             // gContext->config.setCalculationIteration(iteration);
 
-            pushResultsToQueue2(privateXPart, keysNumberPerIteration, iteration);
+            pushResultsToQueue(privateXPart, keysNumberPerIteration, iteration);
 
             ++iteration;
 
@@ -172,7 +172,7 @@ struct KeyHunter::Impl
     uint32_t getPrivateXPart() const
     {
         uint32_t privateXPart{0};
-        if (gContext->config.isPrivateXPartRandom())
+        if (gContext->config.dataGenerationIsRandom())
         {
             privateXPart = utils::randomUINT32_t();
         }

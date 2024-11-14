@@ -21,13 +21,13 @@ int main()
     thrust::copy(mnemonic_, mnemonic_ + sizeof(mnemonic_), mnemonic.begin());
 
     thrust::device_vector<uint32_t> d_seed(SIZE32_SEED);
-    thrust::device_vector<uint8_t> d_masterExKey(sizeof(extended_private_key_t));
+    thrust::device_vector<uint8_t> d_masterExKey(sizeof(HDExtendedPrivateKey));
     thrust::device_vector<uint8_t> d_mnemonic = mnemonic;
 
-    thrust::device_vector<uint8_t> d_m0_child(sizeof(extended_private_key_t));
-    thrust::device_vector<uint8_t> d_m00_child(sizeof(extended_private_key_t));
-    thrust::device_vector<uint8_t> d_m0_hardened_child(sizeof(extended_private_key_t));
-    thrust::device_vector<extended_public_key_t> d_m0_child_pub(1);
+    thrust::device_vector<uint8_t> d_m0_child(sizeof(HDExtendedPrivateKey));
+    thrust::device_vector<uint8_t> d_m00_child(sizeof(HDExtendedPrivateKey));
+    thrust::device_vector<uint8_t> d_m0_hardened_child(sizeof(HDExtendedPrivateKey));
+    thrust::device_vector<HDExtendedPublicKey> d_m0_child_pub(1);
 
     thrust::device_vector<uint32_t> d_compressedHash160_bytes(5);
     thrust::device_vector<uint32_t> d_uncompressedHash160_bytes(5);
@@ -97,7 +97,7 @@ int main()
         cerr << "m/0 chain code: is wrong\n";
     }
 
-    thrust::host_vector<extended_public_key_t> h_m0_child_pub = d_m0_child_pub;
+    thrust::host_vector<HDExtendedPublicKey> h_m0_child_pub = d_m0_child_pub;
     const auto h_m0_child_pubStr = utils::toHex(h_m0_child_pub.data()->key, 64);
     cout << "m/0 pub: " << h_m0_child_pubStr << endl;
     if ("250897e9364b8a41376ec13b2a38f2102e03616c725bdc9a5628b0bf00b0db99d1acd3d1e8297c4bae55aea7ccf603cf721b1fc00252bb7988d80c3658d4dafb" != h_m0_child_pubStr)

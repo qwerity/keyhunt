@@ -104,5 +104,5 @@ __device__ void mnemonicToExtendedMasterKey(const uint8_t* mnemonic, uint32_t* s
     }
 
     const auto* exMasterPrivateKey = reinterpret_cast<const uint8_t*>(&ipad[128 / 4]);
-    cuda_memcpy(extendedMasterKey, exMasterPrivateKey, sizeof(extended_private_key_t));
+    cuda_memcpy(extendedMasterKey, exMasterPrivateKey, sizeof(HDExtendedPrivateKey));
 }

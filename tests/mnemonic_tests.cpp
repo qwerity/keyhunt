@@ -38,11 +38,10 @@ TEST_CASE("Test WallyCore lib: mnemonic -> hd keys generation", "")
     const char* passphrase = "";
 
     // Buffer for the seed (512 bits = 64 bytes)
-    unsigned char seed[BIP39_SEED_LEN_512];
-    memset(seed, 0, BIP39_SEED_LEN_512);
+    uint8_t seed[BIP39_SEED_LEN_512]{};
 
     // Generate the seed from the mnemonic
-    REQUIRE(WALLY_OK == bip39_mnemonic_to_seed(mnemonic, passphrase, seed, BIP39_SEED_LEN_512, nullptr));
+    REQUIRE(WALLY_OK == bip39_mnemonic_to_seed512(mnemonic, passphrase, seed, BIP39_SEED_LEN_512));
 
     REQUIRE("48a9daa56a2ebd1bcf9d0524fb96ea49217ecbad1fd12a065ad1996b103965826e3f9617dade34c48b927be05e3f5fae8009ac3576bcb7510d4c198b523cc646" == utils::toHex(seed, BIP39_SEED_LEN_512));
 
@@ -246,7 +245,7 @@ TEST_CASE("CUDA Test WallyCore lib: mnemonic -> hd keys generation", "")
     utils::ScopeOutRunner outRunner([](){ wally_cleanup(wallyInitFlags); });
 
     std::unique_ptr cuhdWallet(std::make_unique<CUHDWallet>());
-    std::vector<extended_public_key_t> publicKeys;
+    std::vector<HDExtendedPublicKey> publicKeys;
 
     constexpr uint8_t mnemonic[SIZE_MNEMONIC_FRAME_12] = "tennis hero student waste adapt where fall call amused mandate hat panel";
     std::vector<uint8_t> mnemonics(SIZE_MNEMONIC_FRAME_12, 0);
@@ -278,8 +277,8 @@ TEST_CASE("CUDA Test WallyCore lib: mnemonic -> hd keys generation", "")
     std::vector<std::string> allExpandedPaths;
     std::vector<std::vector<uint32_t>> derivationPaths = utils::bip32GetDerivationPathsFromPatterns(config.derivationPathsPatters, config.accountsToGenerate, config.addressesToGenerate, allExpandedPaths);
 
-    cuhdWallet->init2(derivationPaths, config.accountsToGenerate, config.addressesToGenerate, 2, 1, 1);
-    cuhdWallet->generatePublicKeysForMnemonics(mnemonics.data(), 1);
+    cuhdWallet->init(HDWalletGenerationMode::MnemonicsBTC, derivationPaths, config.accountsToGenerate, config.addressesToGenerate, 2, 1, 1);
+    cuhdWallet->searchPublicHashFromMnemonics(mnemonics.data(), 1);
     cuhdWallet->getPublicKeys(publicKeys);
     REQUIRE(derivationPaths.size() == publicKeys.size());
 

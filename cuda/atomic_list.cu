@@ -5,24 +5,24 @@
 #include <cstdlib>
 #include <cstring>
 
-__constant__ void *d_listBuf[1];
-__constant__ uint32_t *d_listSize[1];
+__constant__ void *d_atomicListBuf[1];
+__constant__ uint32_t *d_atomicListSize[1];
 
 
 __device__ void atomicListAdd(const void *info, const uint32_t size)
 {
-    const uint32_t count = atomicAdd(d_listSize[0], 1);
-    uint8_t *ptr = static_cast<uint8_t *>(d_listBuf[0]) + count * size;
+    const uint32_t count = atomicAdd(d_atomicListSize[0], 1);
+    uint8_t *ptr = static_cast<uint8_t *>(d_atomicListBuf[0]) + count * size;
     cuda_memcpy(ptr, static_cast<const uint8_t*>(info), size);
 }
 
 static void setListPtr(void *ptr, uint32_t *numResults)
 {
-    cudaCheckError(cudaMemcpyToSymbol(d_listBuf, &ptr, sizeof(void *)));
-    cudaCheckError(cudaMemcpyToSymbol(d_listSize, &numResults, sizeof(uint32_t *)));
+    cudaCheckError(cudaMemcpyToSymbol(d_atomicListBuf, &ptr, sizeof(void *)));
+    cudaCheckError(cudaMemcpyToSymbol(d_atomicListSize, &numResults, sizeof(uint32_t *)));
 }
 
-void CudaAtomicList::init(uint32_t itemSize, uint32_t maxItems)
+void CudaAtomicList::init(const uint32_t itemSize, const uint32_t maxItems)
 {
     h_itemSize = itemSize;
 

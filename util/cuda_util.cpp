@@ -5,6 +5,8 @@
 
 #include <cinttypes>
 
+#include <cuda_runtime.h>
+
 namespace cu
 {
     CudaDeviceInfo getDeviceInfo(int device)

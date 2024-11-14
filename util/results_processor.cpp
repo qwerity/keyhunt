@@ -78,6 +78,44 @@ struct ResultsProcessor::Impl
         });
     }
 
+    void startMnemonicsMasterKeyHash160ResultsQueueProcessing()
+    {
+        thread = std::thread([this]
+        {
+            BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor Thread running: " << std::this_thread::get_id();
+
+            while (!stopFlag)
+            {
+                Hash160MnemonicSearchResult result;
+                while (!gContext->mnemonicMasterKeyHash160SearchResultsQueue->pop(result))
+                {
+                    if (stopFlag)
+                    {
+                        return;
+                    }
+
+                    std::this_thread::yield(); // If the queue is empty, yield to avoid busy-wait
+                }
+
+                /// TODO(ksh): commented as it is not needed, only useful for debugging purposes
+                const std::string masterKeyStr{utils::toHex(&result.masterKey.key[0], sizeof(result.masterKey))};
+                const std::string hash160Str{utils::toHex(result.digest, 5)};
+                const std::string compressedStr = result.compressed ? "compressed" : "uncompressed";
+
+                const std::string resultsStr = std::format("[{}][({:<12}, {})| {:<12}], hash160: {}", result.cudaDeviceId, result.derivedPath, masterKeyStr, compressedStr, hash160Str);
+
+                BOOST_LOG_TRIVIAL(fatal) << std::format("[{}] Found match for path: {}", result.cudaDeviceId, result.derivedPath);
+
+                if (!utils::writeEncResultsToFile(aesEnc, "mnemonics_results.enc", resultsStr))
+                {
+                    utils::appendToFileOnNewLine("mnemonics_results.txt", resultsStr);
+                }
+            }
+
+            BOOST_LOG_TRIVIAL(info) << "ResultsProcessor: done";
+        });
+    }
+
     void stop()
     {
         utils::Timer t;
@@ -99,6 +137,11 @@ ResultsProcessor::~ResultsProcessor() = default;
 void ResultsProcessor::startHash160ResultsQueueProcessing() const
 {
     mImpl->startHash160ResultsQueueProcessing();
+}
+
+void ResultsProcessor::startMnemonicsMasterKeyHash160ResultsQueueProcessing() const
+{
+    mImpl->startMnemonicsMasterKeyHash160ResultsQueueProcessing();
 }
 
 void ResultsProcessor::stop() const

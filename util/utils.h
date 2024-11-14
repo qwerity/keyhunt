@@ -14,6 +14,7 @@ namespace secp256k1
     struct uint256;
 }
 
+struct HDExtendedPrivateKey;
 struct StatusInfo;
 struct LogConfig;
 struct hash160;
@@ -65,12 +66,10 @@ namespace utils
 
     std::string toHex(const uint32_t* arr, uint32_t size);
     std::string toHex(const std::vector<uint8_t>& data);
-    std::string toHex(const uint8_t* data, uint32_t len);
+    std::string toHex(const uint8_t* data, uint32_t size);
     std::vector<uint8_t> fromHex(const std::string& hexStr);
 
     void initLogging(const LogConfig& log);
-
-    void statusCallback(const StatusInfo& info);
 
     void initOpenssl();
     void releaseOpenssl();
@@ -91,6 +90,13 @@ namespace utils
 
     bool writeEncResultsToFile(const crypto::AES& aesEnc, const std::string& filename, const std::string& resultsStr);
     bool readEncResults(const crypto::AES& aesEnc, const std::string& filename, std::vector<std::string>& results);
+
+    bool generateEntropy(std::vector<uint8_t>& entropy);
+    bool generateMnemonics(std::vector<uint8_t>& mnemonics, uint32_t wordsNumber = 12);
+    std::string generateMnemonic(const std::vector<uint8_t>& entropy);
+    bool generateMnemonic(const std::vector<uint8_t>& entropy, uint8_t mnemonic[]);
+    bool generateRandomExtendedMasterKey(HDExtendedPrivateKey& masterKey);
+    HDExtendedPrivateKey generateRandomExtendedMasterKey();
 
     // Convert expanded paths to vectors of indices
     std::vector<std::vector<uint32_t>> bip32GetDerivationPathsFromPatterns(const std::vector<std::string>& derivationPathsPatters, uint32_t accountsToGenerate, uint32_t addressesToGenerate, std::vector<std::string>& allExpandedPaths);

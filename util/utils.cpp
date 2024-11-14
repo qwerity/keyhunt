@@ -4,6 +4,7 @@
 #include "config.h"
 #include "http_client.h"
 
+#include "cuda/defines.h"
 #include "cuda/defines.cuh"
 
 #include <future>
@@ -29,6 +30,9 @@
 #include <boost/asio/io_context.hpp>
 
 #include <wally_bip32.h>
+#include <wally_bip39.h>
+#include <wally_crypto.h>
+#include <cuda/secp256k1_v2/bip32.cuh>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -180,19 +184,19 @@ namespace utils
     {
         std::ostringstream oss;
         oss << std::hex << std::setfill('0');
-        for (uint8_t byte : data)
+        for (const uint8_t byte : data)
         {
             oss << std::setw(2) << static_cast<int>(byte);
         }
         return oss.str();
     }
 
-    std::string toHex(const unsigned char* data, uint32_t len)
+    std::string toHex(const uint8_t* data, const uint32_t size)
     {
         std::ostringstream oss;
         oss << std::hex << std::setfill('0');  // Set hex formatting and fill with '0'
 
-        for (uint32_t i = 0; i < len; ++i)
+        for (uint32_t i = 0; i < size; ++i)
         {
             oss << std::setw(2) << static_cast<int>(data[i]);  // Convert byte to hex
         }
@@ -232,24 +236,6 @@ namespace utils
         boost::log::add_common_attributes();
 
         boost::log::core::get()->set_filter(boost::log::trivial::severity >= static_cast<boost::log::trivial::severity_level>(log.severity));
-    }
-
-    void statusCallback(const StatusInfo& info)
-    {
-        const std::string speedStr = (info.pointsPerSecond < 0.01) ? "< 0.01 MKey/s" : std::format("{:.3f} MKey/s", info.pointsPerSecond);
-
-        const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L} total)", info.total);
-        const std::string timeStr = std::format("[{:.3f}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
-        const uint64_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
-        const uint64_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
-
-        const std::string statusStr = std::format("[{} | {} | {}/{}MB] [{}/{}] {} {} {}"
-            , info.device, info.deviceName, usedDeviceMemoryMb, totalDeviceMemoryMb
-            , info.iteration, info.totalIterations
-            , speedStr, totalStr, timeStr);
-
-        // fprintf(stderr, "\r%s", statusStr.c_str());
-        BOOST_LOG_TRIVIAL(fatal) << statusStr;
     }
 
     void initOpenssl()
@@ -694,6 +680,156 @@ namespace utils
         return true;
     }
 
+    // Function to generate entropy of desired bit length (multiples of 32)
+    void generateEntropyInternal(std::mt19937_64& rng, std::vector<uint8_t>& entropy)
+    {
+        for (size_t i = 0; i < entropy.size(); i += 8)
+        {
+            // Generate 64-bit random value
+            const uint64_t randomValue = rng();
+            for (size_t j = 0; j < 8 && i + j < entropy.size(); ++j)
+            {
+                entropy[i + j] = (randomValue >> (8 * j)) & 0xFF;
+            }
+        }
+    }
+
+    // Function to generate entropy of desired bit length (multiples of 32)
+    bool generateEntropy(std::vector<uint8_t>& entropy)
+    {
+        // Ensure bytes is a multiple of 32
+        if ((entropy.size() * 8) % 32 != 0)
+        {
+            BOOST_LOG_TRIVIAL(error) << "Entropy bit length must be a multiple of 32.";
+            return false;
+        }
+
+        std::random_device rd;
+        std::mt19937_64 rng(rd()); // 64-bit Mersenne Twister RNG
+
+        generateEntropyInternal(rng, entropy);
+        return true;
+    }
+
+    // Function to convert entropy to a BIP39 mnemonic
+    std::string generateMnemonic(const std::vector<uint8_t>& entropy)
+    {
+        char* mnemonic = nullptr;
+
+        // Convert entropy to BIP39 mnemonic
+        if (bip39_mnemonic_from_bytes(nullptr, entropy.data(), entropy.size(), &mnemonic) != WALLY_OK)
+        {
+            BOOST_LOG_TRIVIAL(error) << "Failed to generate mnemonic from entropy.";
+            return {};
+        }
+
+        std::string result(mnemonic);
+        wally_free_string(mnemonic); // Free allocated mnemonic string
+
+        return result;
+    }
+
+    bool generateMnemonics(std::vector<uint8_t>& mnemonics, const uint32_t wordsNumber)
+    {
+        const uint32_t entropyBytesNumber = (wordsNumber == 12) ? BIP39_ENTROPY_LEN_128 : BIP39_ENTROPY_LEN_256;
+        const uint32_t mnemonicFrameSize = (wordsNumber == 12) ? SIZE_MNEMONIC_FRAME_12 : SIZE_MNEMONIC_FRAME_24;
+
+        const uint32_t mnemonicsNumber = mnemonics.size() / mnemonicFrameSize;
+
+        std::random_device rd;
+        std::mt19937_64 rng(rd()); // 64-bit Mersenne Twister RNG
+
+        std::vector<uint8_t> entropy(entropyBytesNumber);
+        for (uint32_t i = 0; i < mnemonicsNumber; ++i)
+        {
+            generateEntropyInternal(rng, entropy);
+
+            char* mnemonic = nullptr;
+            ScopeOutRunner outRunner([&]() { wally_free_string(mnemonic); });
+
+            // Convert entropy to BIP39 mnemonic
+            if (bip39_mnemonic_from_bytes(nullptr, entropy.data(), entropy.size(), &mnemonic) != WALLY_OK)
+            {
+                BOOST_LOG_TRIVIAL(error) << "Failed to generate mnemonic from entropy.";
+                return false;
+            }
+
+            strncpy_s(reinterpret_cast<char *>(mnemonics.data() + i * mnemonicFrameSize), mnemonicFrameSize, mnemonic, strlen(mnemonic));
+        }
+
+        return true;
+    }
+
+    // Function to convert entropy to a BIP39 mnemonic
+    bool generateMnemonic(const std::vector<uint8_t>& entropy, uint8_t mnemonic[8 * BIP39_ENTROPY_LEN_128])
+    {
+        char* output = nullptr;
+
+        // Convert entropy to BIP39 mnemonic
+        if (bip39_mnemonic_from_bytes(nullptr, entropy.data(), entropy.size(), &output) != WALLY_OK)
+        {
+            BOOST_LOG_TRIVIAL(error) << "Failed to generate mnemonic from entropy.";
+            return false;
+        }
+
+        strncpy_s(reinterpret_cast<char *>(mnemonic), 8 * BIP39_ENTROPY_LEN_128, output, strlen(output));
+
+        wally_free_string(output); // Free allocated mnemonic string
+
+        return true;
+    }
+
+    bool generateRandomExtendedMasterKey(HDExtendedPrivateKey& masterKey)
+    {
+        char* mnemonic = nullptr;
+        ScopeOutRunner outRunner([&]() { wally_free_string(mnemonic); });
+
+        std::vector<uint8_t> entropy(BIP39_ENTROPY_LEN_128);
+        generateEntropy(entropy);
+
+        // Convert entropy to BIP39 mnemonic
+        if (bip39_mnemonic_from_bytes(nullptr, entropy.data(), entropy.size(), &mnemonic) != WALLY_OK)
+        {
+            BOOST_LOG_TRIVIAL(error) << "Failed to generate mnemonic from entropy.";
+            return false;
+        }
+
+        unsigned char seed[BIP39_SEED_LEN_512]{};
+
+        // Generate the seed from the mnemonic
+        const char* passphrase = "";
+        size_t written{0};
+        if (bip39_mnemonic_to_seed(mnemonic, passphrase, seed, BIP39_SEED_LEN_512, &written) != WALLY_OK)
+        {
+            BOOST_LOG_TRIVIAL(error) << "Failed to generate mnemonic seed.";
+            return false;
+        }
+
+        ext_key root_key{};
+        if (bip32_key_from_seed_custom(seed, BIP39_SEED_LEN_512, BIP32_VER_MAIN_PRIVATE, nullptr, 0, BIP32_FLAG_SKIP_HASH, &root_key) != WALLY_OK)
+        {
+            BOOST_LOG_TRIVIAL(error) << "Failed to generate master extended key.";
+            return false;
+        }
+
+        std::memcpy(root_key.priv_key + 1, masterKey.key, EC_PRIVATE_KEY_LEN);
+        std::memcpy(root_key.chain_code,   masterKey.chainCode, EC_PRIVATE_KEY_LEN);
+
+        return true;
+    }
+
+    // Function to convert entropy to a BIP39 mnemonic
+    HDExtendedPrivateKey generateRandomExtendedMasterKey()
+    {
+        HDExtendedPrivateKey masterKey;
+        if (!generateRandomExtendedMasterKey(masterKey))
+        {
+            return {};
+        }
+
+        return masterKey;
+    }
+
     // Helper function to expand a single pattern into all its combinations
     std::vector<std::string> bip32ExpandPattern(const std::string& pattern, uint32_t accN, uint32_t addrN)
     {
@@ -787,12 +923,12 @@ namespace utils
         // First, expand all patterns
         for (const auto& pattern: derivationPathsPatters)
         {
-            auto expanded = utils::bip32ExpandPattern(pattern, accountsToGenerate, addressesToGenerate);
+            auto expanded = bip32ExpandPattern(pattern, accountsToGenerate, addressesToGenerate);
             allExpandedPaths.insert(allExpandedPaths.end(), expanded.begin(), expanded.end());
         }
 
         // Convert expanded paths to vectors of indices
-        return utils::bip32GetAllDerivationPaths(allExpandedPaths);
+        return bip32GetAllDerivationPaths(allExpandedPaths);
     }
 
     std::vector<std::vector<uint32_t>> bip32GetDerivationPathsFromPatterns(const std::vector<std::string>& derivationPathsPatters, const uint32_t accountsToGenerate, const uint32_t addressesToGenerate)

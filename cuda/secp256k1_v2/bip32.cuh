@@ -1,7 +1,8 @@
 #pragma once
 
+#include "../defines.h"
+
 #include <cuda_runtime.h>
-#include <cstdint>
 
 #define SIZE_MNEMONIC_FRAME_12      (128u)
 #define SIZE_MNEMONIC_FRAME_24      (SIZE_MNEMONIC_FRAME_12 * 2u)
@@ -16,27 +17,16 @@
 #define SIZE32_SEED                 SIZE32_SHA512_HMAC
 
 
-struct alignas(32) extended_private_key_t
-{
-    uint8_t key[32]{};
-    uint8_t chainCode[32]{};
-};
+__device__ void generatePublicFromPrivateKey(const HDExtendedPrivateKey* priv, HDExtendedPublicKey* pub);
 
-struct alignas(32) extended_public_key_t
-{
-    uint8_t key[64]{};
-};
+__device__ void compressedPublicKeyToHash160(const HDExtendedPublicKey* pub, uint32_t* compressedHashBytes);
+__device__ void publicKeyToHash160(const HDExtendedPublicKey* pub, uint32_t* uncompressedHashBytes, uint32_t* compressedHashBytes);
+__device__ void bip49_publicKeyToHash160(const HDExtendedPublicKey* pub, uint32_t* hash160Bytes);
 
-__device__ void generatePublicFromPrivateKey(const extended_private_key_t* priv, extended_public_key_t* pub);
-
-__device__ void compressedPublicKeyToHash160(const extended_public_key_t* pub, uint32_t* compressedHashBytes);
-__device__ void publicKeyToHash160(const extended_public_key_t* pub, uint32_t* uncompressedHashBytes, uint32_t* compressedHashBytes);
-__device__ void bip49_publicKeyToHash160(const extended_public_key_t* pub, uint32_t* hash160Bytes);
-
-__device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t hardenedChildNumber);
-__device__ void normalPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t normalChildNumber);
+__device__ void hardenedPrivateChildFromPrivate(const HDExtendedPrivateKey* parent, HDExtendedPrivateKey* child, uint32_t hardenedChildNumber);
+__device__ void normalPrivateChildFromPrivate(const HDExtendedPrivateKey* parent, HDExtendedPrivateKey* child, uint32_t normalChildNumber);
 
 /// for test purposes
 __global__ void mnemonicToHash160(const uint8_t* mnemonic, uint8_t* masterExKey, uint32_t* seed,
-                                  uint8_t* childKey, uint8_t* childChildKey, uint8_t* hardenedChildKey, uint16_t childNumber,
-                                  extended_public_key_t* childPublicKey, uint32_t* uncompressedHash160Bytes, uint32_t* compressedHash160Bytes);
+                                  uint8_t* childKey, uint8_t* childChildKey, uint8_t* hardenedChildKey, uint32_t childNumber,
+                                  HDExtendedPublicKey* childPublicKey, uint32_t* uncompressedHash160Bytes, uint32_t* compressedHash160Bytes);

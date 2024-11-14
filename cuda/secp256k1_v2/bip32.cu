@@ -6,19 +6,19 @@
 #include "sha.cuh"
 #include "utils.cuh"
 
-__device__ void generatePublicFromPrivateKey(const extended_private_key_t* priv, extended_public_key_t* pub)
+__device__ void generatePublicFromPrivateKey(const HDExtendedPrivateKey* priv, HDExtendedPublicKey* pub)
 {
     secp256k1_ec_pubkey_create(pub->key, &priv->key[0]);
 }
 
-__device__ void compressedPublicKeyToHash160(const extended_public_key_t* pub, uint32_t* compressedHashBytes)
+__device__ void compressedPublicKeyToHash160(const HDExtendedPublicKey* pub, uint32_t* compressedHashBytes)
 {
     uint8_t serializedPublicKey[33 + 3]{};
     serialized_compressed_public_key(pub, &serializedPublicKey[0]);
     hash160(&serializedPublicKey[0], 33, compressedHashBytes);
 }
 
-__device__ void publicKeyToHash160(const extended_public_key_t* pub, uint32_t* uncompressedHashBytes, uint32_t* compressedHashBytes)
+__device__ void publicKeyToHash160(const HDExtendedPublicKey* pub, uint32_t* uncompressedHashBytes, uint32_t* compressedHashBytes)
 {
     // + 3 needed for sha, as it is operating with uint32_t (4 bytes) portions
     uint8_t serializedPublicKey[65 + 3]{};
@@ -39,7 +39,7 @@ __device__ void publicKeyToHash160(const extended_public_key_t* pub, uint32_t* u
     hash160(&serializedPublicKey[0], 65, uncompressedHashBytes);
 }
 
-__device__ void bip49_publicKeyToHash160(const extended_public_key_t* pub, uint32_t* hash160Bytes)
+__device__ void bip49_publicKeyToHash160(const HDExtendedPublicKey* pub, uint32_t* hash160Bytes)
 {
     uint8_t serializedPublicKey[33 + 3]{};
     serialized_compressed_public_key(pub, &serializedPublicKey[0]);
@@ -70,7 +70,7 @@ __device__ void bip49_publicKeyToHash160(const extended_public_key_t* pub, uint3
     ripemd160Final(&ctx, (uint32_t*) hash160Bytes);
 }
 
-__device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t hardenedChildNumber)
+__device__ void hardenedPrivateChildFromPrivate(const HDExtendedPrivateKey* parent, HDExtendedPrivateKey* child, uint32_t hardenedChildNumber)
 {
     alignas(32) uint32_t hmacSHA512Result[SIZE32_SHA512_HMAC]{};
     alignas(8) uint8_t hmacInput[40]{}; //37 bytes
@@ -92,11 +92,11 @@ __device__ void hardenedPrivateChildFromPrivate(const extended_private_key_t* pa
     cuda_memcpy_offset(reinterpret_cast<uint8_t*>(&child->chainCode), reinterpret_cast<uint8_t*>(&hmacSHA512Result), 32, 32);
 }
 
-__device__ void normalPrivateChildFromPrivate(const extended_private_key_t* parent, extended_private_key_t* child, uint16_t normalChildNumber)
+__device__ void normalPrivateChildFromPrivate(const HDExtendedPrivateKey* parent, HDExtendedPrivateKey* child, uint32_t normalChildNumber)
 {
     alignas(32) uint32_t hmacSHA512Result[SIZE32_SHA512_HMAC]{};
 
-    extended_public_key_t pub;
+    HDExtendedPublicKey pub;
     generatePublicFromPrivateKey(parent, &pub);
 
     alignas(8) uint8_t hmacInput[40]{}; //37 bytes
@@ -120,13 +120,13 @@ __device__ void normalPrivateChildFromPrivate(const extended_private_key_t* pare
 }
 
 __global__ void mnemonicToHash160(const uint8_t* mnemonic, uint8_t* masterExKey, uint32_t* seed, uint8_t* childKey, uint8_t* childChildKey, uint8_t* hardenedChildKey,
-                                  uint16_t childNumber, extended_public_key_t* childPublicKey, uint32_t* uncompressedHash160Bytes, uint32_t* compressedHash160Bytes)
+                                  uint32_t childNumber, HDExtendedPublicKey* childPublicKey, uint32_t* uncompressedHash160Bytes, uint32_t* compressedHash160Bytes)
 {
     mnemonicToExtendedMasterKey(mnemonic, seed, masterExKey);
-    hardenedPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(masterExKey), reinterpret_cast<extended_private_key_t*>(hardenedChildKey), childNumber);
-    normalPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(masterExKey), reinterpret_cast<extended_private_key_t*>(childKey), childNumber);
-    normalPrivateChildFromPrivate(reinterpret_cast<const extended_private_key_t*>(childKey), reinterpret_cast<extended_private_key_t*>(childChildKey), childNumber);
-    generatePublicFromPrivateKey(reinterpret_cast<const extended_private_key_t*>(childKey), childPublicKey);
+    hardenedPrivateChildFromPrivate(reinterpret_cast<const HDExtendedPrivateKey*>(masterExKey), reinterpret_cast<HDExtendedPrivateKey*>(hardenedChildKey), childNumber);
+    normalPrivateChildFromPrivate(reinterpret_cast<const HDExtendedPrivateKey*>(masterExKey), reinterpret_cast<HDExtendedPrivateKey*>(childKey), childNumber);
+    normalPrivateChildFromPrivate(reinterpret_cast<const HDExtendedPrivateKey*>(childKey), reinterpret_cast<HDExtendedPrivateKey*>(childChildKey), childNumber);
+    generatePublicFromPrivateKey(reinterpret_cast<const HDExtendedPrivateKey*>(childKey), childPublicKey);
     publicKeyToHash160(childPublicKey, uncompressedHash160Bytes, compressedHash160Bytes);
 }
 
@@ -135,12 +135,12 @@ __constant__ uint32_t dev_generate_path[10];
 __constant__ uint32_t dev_num_paths[1];
 __constant__ uint32_t dev_num_childs[1];
 __constant__ int16_t dev_static_words_indices[12];
-__device__ void generatePublicKeysForMnemonicByPaths(const uint8_t* mnemonic, const extended_private_key_t* masterKey)
+__device__ void generatePublicKeysForMnemonicByPaths(const uint8_t* mnemonic, const HDExtendedPrivateKey* masterKey)
 {
-    extended_private_key_t target_key;
-    extended_private_key_t target_key_fo_pub;
-    extended_private_key_t master_private_fo_extint;
-    extended_public_key_t target_public_key;
+    HDExtendedPrivateKey target_key;
+    HDExtendedPrivateKey target_key_fo_pub;
+    HDExtendedPrivateKey master_private_fo_extint;
+    HDExtendedPublicKey target_public_key;
     
     //______________________________________________________________________________________________________________________
     if (dev_generate_path[0] != 0)

@@ -14,6 +14,7 @@ public:
     ResultsProcessor& operator=(const ResultsProcessor&) = delete;
 
     void startHash160ResultsQueueProcessing() const;
+    void startMnemonicsMasterKeyHash160ResultsQueueProcessing() const;
     void stop() const;
 
 private:

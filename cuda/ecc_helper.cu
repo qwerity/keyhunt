@@ -36,18 +36,19 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
     const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
 
     uint256_t privateKey;
+    uint256_t publicX;
+    uint256_t publicY;
+    hash160 hash160;
 
     #pragma unroll
     for(uint32_t i = 0; i < d_pointsPerThread; ++i)
     {
         readUInt256(privateKeys, i, privateKey);
 
-        uint256_t publicX;
         readUInt256(d_publicKeyXPtr, i, publicX);
 
         const uint32_t base = i * totalThreads;
         const uint32_t index = base + threadId;
-        hash160 hash160;
 
         if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
         {
@@ -60,7 +61,6 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
 
         if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
         {
-            uint256_t publicY;
             readUInt256(d_publicKeyYPtr, i, publicY);
 
             hashPublicKey(publicX, publicY, hash160.h);
@@ -76,8 +76,8 @@ __global__ void publicKeyGenerationKernel(const uint256_t *privateKeys)
 {
     for(uint32_t i = 0; i < d_pointsPerThread; ++i)
     {
-        extended_private_key_t privateExKey;
-        extended_public_key_t publicEXKey;
+        HDExtendedPrivateKey privateExKey;
+        HDExtendedPublicKey publicEXKey;
 
         auto* privateKey = reinterpret_cast<uint256_t*>(privateExKey.key);
         readUInt256(privateKeys, i, *privateKey);

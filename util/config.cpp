@@ -11,8 +11,10 @@ struct Config::Impl
 {
     nlohmann::json configJson;
     std::string jsonConfigFilepath;
+
     bool loaded{false};
-    bool privateXPartRandom{false};
+    bool dataGenerationIsRandom{false};
+    bool devMode{false};
 
     HunterConfig hunter;
     ServerConfig server;
@@ -99,27 +101,42 @@ struct Config::Impl
             return;
         }
 
-        const auto& hdwalletConfig = configJson["hd_wallet"];
+        const auto& hdWalletConfig = configJson["hd_wallet"];
 
-        if (hdwalletConfig.contains("forceMnemonic") && hdwalletConfig["forceMnemonic"].is_boolean() && hdwalletConfig["forceMnemonic"] == true)
+        if (hdWalletConfig.contains("generationMode") && hdWalletConfig["generationMode"].is_number_unsigned())
         {
-            hdWallet.forceMnemonic = true;
-            if (hdwalletConfig.contains("mnemonic") && hdwalletConfig["mnemonic"].is_string() && !hdwalletConfig["mnemonic"].empty())
+            const auto generationMode = static_cast<HDWalletGenerationMode>(hdWalletConfig["generationMode"].get<uint32_t>());
+            if (generationMode < HDWalletGenerationMode::MaxMode)
             {
-                hdWallet.mnemonic = hdwalletConfig["mnemonic"].get<std::string>();
+                hdWallet.generationMode = generationMode;
             }
         }
 
-        if (hdwalletConfig.contains("mnemonicsToGenerate") && hdwalletConfig["mnemonicsToGenerate"].is_number_unsigned())
+        if (hdWalletConfig.contains("forceMnemonic") && hdWalletConfig["forceMnemonic"].is_boolean() && hdWalletConfig["forceMnemonic"] == true)
         {
-            hdWallet.mnemonicsToGenerate = hdwalletConfig["mnemonicsToGenerate"].get<uint32_t>();
+            hdWallet.forceMnemonic = true;
+            if (hdWalletConfig.contains("mnemonic") && hdWalletConfig["mnemonic"].is_string() && !hdWalletConfig["mnemonic"].empty())
+            {
+                hdWallet.mnemonic = hdWalletConfig["mnemonic"].get<std::string>();
+                hdWallet.mnemonic.resize(128);
+            }
+        }
+
+        if (hdWalletConfig.contains("mnemonicMasterKeyProvider") && hdWalletConfig["mnemonicMasterKeyProvider"].is_string() && !hdWalletConfig["mnemonicMasterKeyProvider"].empty())
+        {
+            hdWallet.mnemonicMasterKeyProvider = hdWalletConfig["mnemonicMasterKeyProvider"].get<std::string>();
+        }
+
+        if (hdWalletConfig.contains("mnemonicsToGenerate") && hdWalletConfig["mnemonicsToGenerate"].is_number_unsigned())
+        {
+            hdWallet.mnemonicsToGenerate = hdWalletConfig["mnemonicsToGenerate"].get<uint32_t>();
         }
 
         // Parse path patterns
-        if (hdwalletConfig.contains("path_patters") && hdwalletConfig["path_patters"].is_array() && !hdwalletConfig["path_patters"].empty())
+        if (hdWalletConfig.contains("path_patters") && hdWalletConfig["path_patters"].is_array() && !hdWalletConfig["path_patters"].empty())
         {
             std::vector<std::string> patterns;
-            for (const auto& pattern : hdwalletConfig["path_patters"])
+            for (const auto& pattern : hdWalletConfig["path_patters"])
             {
                 if (pattern.is_string() && !pattern.empty())
                 {
@@ -131,7 +148,7 @@ struct Config::Impl
             {
                 hdWallet.derivationPathsPatters = patterns;
             }
-            else 
+            else
             {
                 BOOST_LOG_TRIVIAL(warning) << "Invalid configuration: hd_wallet.path_patters using default patters";
             }
@@ -141,9 +158,9 @@ struct Config::Impl
             BOOST_LOG_TRIVIAL(warning) << "Using default 'hd_wallet.path_patters' value: " << boost::algorithm::join(hdWallet.derivationPathsPatters, ",");
         }
 
-        if (hdwalletConfig.contains("accounts_to_generate") && hdwalletConfig["accounts_to_generate"].is_number_unsigned())
+        if (hdWalletConfig.contains("accounts_to_generate") && hdWalletConfig["accounts_to_generate"].is_number_unsigned())
         {
-            const auto accounts = hdwalletConfig["accounts_to_generate"].get<uint32_t>();
+            const auto accounts = hdWalletConfig["accounts_to_generate"].get<uint32_t>();
             if (accounts > 0)
             {
                 hdWallet.accountsToGenerate = accounts;
@@ -158,9 +175,9 @@ struct Config::Impl
             BOOST_LOG_TRIVIAL(warning) << "Using default 'hd_wallet.accounts_to_generate' value: " << hdWallet.accountsToGenerate;
         }
 
-        if (hdwalletConfig.contains("addresses_to_generate") && hdwalletConfig["addresses_to_generate"].is_number_unsigned())
+        if (hdWalletConfig.contains("addresses_to_generate") && hdWalletConfig["addresses_to_generate"].is_number_unsigned())
         {
-            const auto addressesToGenerate = hdwalletConfig["addresses_to_generate"].get<uint32_t>();
+            const auto addressesToGenerate = hdWalletConfig["addresses_to_generate"].get<uint32_t>();
             if (addressesToGenerate > 0)
             {
                 hdWallet.addressesToGenerate = addressesToGenerate;
@@ -261,7 +278,7 @@ struct Config::Impl
 
         if (configJson.contains("publicKeyCompressionTypeToCheck") && configJson["publicKeyCompressionTypeToCheck"].is_number_unsigned())
         {
-            if (uint32_t compressionType = configJson["publicKeyCompressionTypeToCheck"].get<uint32_t>(); compressionType >= 0 && compressionType <= 2)
+            if (const uint32_t compressionType = configJson["publicKeyCompressionTypeToCheck"].get<uint32_t>(); compressionType <= 2)
             {
                 publicKeyCompressionTypeToCheck = compressionType;
             }
@@ -317,11 +334,6 @@ struct Config::Impl
 
         return save();
     }
-
-    [[nodiscard]] bool devMode() const
-    {
-        return hunter.forcePrivateXPart || (hunter.keysNumberToGenerate != 0);
-    }
 };
 
 Config::Config(const std::string& configFilepath) : mImpl(std::make_unique<Impl>(configFilepath)) {}
@@ -334,47 +346,42 @@ bool Config::isLoaded() const
 
 bool Config::devMode() const
 {
-    return mImpl->devMode();
+    return mImpl->devMode;
 }
 
-bool Config::isPrivateXPartRandom() const
+void Config::setDevMode(const bool enable) const
 {
-    return mImpl->privateXPartRandom;
+    mImpl->devMode = enable;
 }
 
-void Config::setPrivateXPartRandom() const
+bool Config::dataGenerationIsRandom() const
 {
-    mImpl->privateXPartRandom = true;
+    return mImpl->dataGenerationIsRandom;
 }
 
-HunterConfig& Config::hunter()
+void Config::setRandomGeneration(const bool enable) const
+{
+    mImpl->dataGenerationIsRandom = enable;
+}
+
+HunterConfig& Config::hunter() const
 {
     return mImpl->hunter;
 }
 
-ServerConfig& Config::server()
+ServerConfig& Config::server() const
 {
     return mImpl->server;
 }
 
-LogConfig& Config::log()
+LogConfig& Config::log() const
 {
     return mImpl->log;
 }
 
-HDWalletConfig& Config::hdWallet()
+HDWalletConfig& Config::hdWallet() const
 {
     return mImpl->hdWallet;
-}
-
-bool Config::setPrivateKeyXPart(const uint32_t xPart) const
-{
-    return mImpl->setValue("privateXPart", xPart);
-}
-
-bool Config::setCalculationIteration(uint32_t iteration) const
-{
-    return mImpl->setValue("iteration", iteration);
 }
 
 std::string Config::jsonStr() const

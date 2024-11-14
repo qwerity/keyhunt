@@ -1,6 +1,7 @@
 #pragma once
 
-#include <cuda_runtime.h>
+#include <string>
+#include <cstdint>
 #include <cstdio>
 
 /*################################################################################################################################################################################*/
@@ -17,6 +18,19 @@
         } \
     } \
     while(0)
+
+
+/*################################################################################################################################################################################*/
+struct alignas(32) HDExtendedPrivateKey
+{
+    uint8_t key[32]{};
+    uint8_t chainCode[32]{};
+};
+
+struct alignas(32) HDExtendedPublicKey
+{
+    uint8_t key[64]{};
+};
 
 /*################################################################################################################################################################################*/
 // Big-Endian <-> Little-Endian
@@ -61,7 +75,7 @@ namespace PointCompressionType
 }
 
 /*################################################################################################################################################################################*/
-struct Hash160SearchResult
+struct Hash160Result
 {
     int cudaDeviceId{0};
 
@@ -69,14 +83,37 @@ struct Hash160SearchResult
     uint32_t block{0};
     uint32_t idx{0};
 
+    bool compressed{false};
+    uint32_t digest[5]{};
+};
+
+struct Hash160SearchResult : Hash160Result
+{
     uint32_t iteration{0};
 
     uint32_t privateXPart{0};
     uint32_t privateYPart{0};
 
-    bool compressed{false};
     uint32_t privateKey[8]{};
-    uint32_t digest[5]{};
+};
+
+struct Hash160MnemonicSearchCudaResult : Hash160Result
+{
+    HDExtendedPrivateKey masterKey;
+    uint32_t derivedPathIndex{0};
+};
+
+struct Hash160MnemonicSearchResult : Hash160MnemonicSearchCudaResult
+{
+    Hash160MnemonicSearchResult() = default;
+    Hash160MnemonicSearchResult(const Hash160MnemonicSearchCudaResult& cudaResults, const std::string& derivationPath)
+    {
+        memcpy(this, &cudaResults, sizeof(Hash160MnemonicSearchCudaResult));
+        const size_t copyLen = std::min(derivationPath.size(), sizeof(derivedPath) - 1);
+        memcpy(derivedPath, derivationPath.c_str(), copyLen);
+    }
+
+    char derivedPath[64]{};
 };
 
 /*################################################################################################################################################################################*/

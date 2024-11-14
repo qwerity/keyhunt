@@ -8,21 +8,39 @@
 
 extern __constant__ int d_publicKeyCompressionTypeToCheck;
 
-__constant__ inline uint32_t* d_mnemonicsSeedsPtr{};
-__constant__ inline extended_private_key_t* d_mnemonicsMasterKeysPtr{};
+__constant__ uint32_t* d_mnemonicsSeedsPtr{};
+__constant__ HDExtendedPrivateKey* d_mnemonicsMasterKeysPtr{};
 
-__constant__ inline extended_public_key_t*  d_mnemonicsPublicKeysPtr{};
-__constant__ inline extended_private_key_t* d_mnemonicsPrivateKeysPtr{};
+__constant__ HDExtendedPublicKey*  d_mnemonicsPublicKeysPtr{};
+__constant__ HDExtendedPrivateKey* d_mnemonicsPrivateKeysPtr{};
 
-__constant__ inline uint32_t* d_hdWalletFlattenedDerivationPathsPtr{};
-__constant__ inline uint32_t* d_hdWalletDerivationPathsLengthsPtr{};
-__constant__ inline uint32_t  d_hdWalletDerivationPathsNumber{};
+__constant__ uint32_t* d_hdWalletFlattenedDerivationPathsPtr{};
+__constant__ uint32_t* d_hdWalletDerivationPathsLengthsPtr{};
+__constant__ uint32_t  d_hdWalletDerivationPathsNumber{};
 
-__constant__ inline extended_private_key_t* d_mnemonicsIntermediatePrivateKeysPtr{};
-__constant__ inline uint32_t  d_hdWalletAccountsToGenerate{};
-__constant__ inline uint32_t  d_hdWalletAddressesToGenerate{};
+__constant__ HDExtendedPrivateKey* d_mnemonicsIntermediatePrivateKeysPtr{};
+__constant__ uint32_t  d_hdWalletAccountsToGenerate{};
+__constant__ uint32_t  d_hdWalletAddressesToGenerate{};
 
-__global__ void mnemonicsToExtendedMasterKeys(const uint8_t* mnemonics)
+__device__ __forceinline__ void setResultFound(const uint32_t idx, const bool compressed,
+                                               const HDExtendedPrivateKey* exMasterKey, const uint32_t digest[5],
+                                               const uint32_t derivedPathIndex)
+{
+    Hash160MnemonicSearchCudaResult r;
+    r.block = blockIdx.x;
+    r.thread = threadIdx.x;
+    r.idx = idx;
+    r.compressed = compressed;
+
+    r.masterKey = *exMasterKey;
+    r.derivedPathIndex = derivedPathIndex;
+
+    SWAP32_HASH160(digest, r.digest)
+
+    atomicListAdd(&r, sizeof(r));
+}
+
+__global__ void mnemonicsToExtendedMasterKeysKernel(const uint8_t* mnemonics)
 {
     const uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -31,15 +49,15 @@ __global__ void mnemonicsToExtendedMasterKeys(const uint8_t* mnemonics)
 
     // Generate master key once for this mnemonic
     uint32_t* seed = d_mnemonicsSeedsPtr + idx * SIZE32_SEED;
-    extended_private_key_t* masterKey = d_mnemonicsMasterKeysPtr + idx;
+    HDExtendedPrivateKey* masterKey = d_mnemonicsMasterKeysPtr + idx;
     mnemonicToExtendedMasterKey(mnemonic, seed, reinterpret_cast<uint8_t*>(masterKey));
 }
 
-__global__ void extendedMasterKeysToDerivatedPublicKeys()
+__global__ void extendedMasterKeysToDerivatedPublicKeysKernel()
 {
     const uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-    extended_public_key_t* mnemonicPublicKeys = d_mnemonicsPublicKeysPtr + (idx * d_hdWalletDerivationPathsNumber);
+    HDExtendedPublicKey* mnemonicPublicKeys = d_mnemonicsPublicKeysPtr + (idx * d_hdWalletDerivationPathsNumber);
 
     // Process all paths for this mnemonic
     uint32_t pathOffset = 0;
@@ -75,11 +93,11 @@ __global__ void hdWalletKernel(const uint8_t* mnemonics)
 
     // Get pointer to this thread's mnemonic and output area
     const uint8_t* mnemonic = mnemonics + (idx * SIZE_MNEMONIC_FRAME_12);
-    extended_public_key_t* publicKeys = d_mnemonicsPublicKeysPtr + (idx * d_hdWalletDerivationPathsNumber);
+    HDExtendedPublicKey* publicKeys = d_mnemonicsPublicKeysPtr + (idx * d_hdWalletDerivationPathsNumber);
 
     // Generate master key once for this mnemonic
     uint32_t* seed = d_mnemonicsSeedsPtr + idx * SIZE32_SEED;
-    extended_private_key_t* masterKey = d_mnemonicsMasterKeysPtr + idx;
+    HDExtendedPrivateKey* masterKey = d_mnemonicsMasterKeysPtr + idx;
     mnemonicToExtendedMasterKey(mnemonic, seed, reinterpret_cast<uint8_t*>(masterKey));
 
     // Process all paths for this mnemonic
@@ -110,48 +128,20 @@ __global__ void hdWalletKernel(const uint8_t* mnemonics)
     }
 }
 
-__global__ void checkExtendedPublicHashKernel()
-{
-    const uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
-
-    const extended_private_key_t* privateKey = d_mnemonicsPrivateKeysPtr + idx;
-    const extended_public_key_t*  publicKey = d_mnemonicsPublicKeysPtr + (idx * d_hdWalletDerivationPathsNumber);
-
-    uint32_t uncompressedHash160Bytes[5];
-    uint32_t compressedHash160Bytes[5];
-    publicKeyToHash160(publicKey, uncompressedHash160Bytes, compressedHash160Bytes);
-
-    if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
-    {
-        if (checkHash(compressedHash160Bytes))
-        {
-            setResultFound(idx, true, privateKey->key, compressedHash160Bytes);
-        }
-    }
-
-    if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
-    {
-        if (checkHash(uncompressedHash160Bytes))
-        {
-            setResultFound(idx, false, privateKey->key, uncompressedHash160Bytes);
-        }
-    }
-}
-
 __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
 {
     const uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Get pointer to this thread's mnemonic and output area
     const uint8_t* mnemonic = mnemonics + (idx * SIZE_MNEMONIC_FRAME_12);
-    extended_private_key_t* outPrivateKey = d_mnemonicsPrivateKeysPtr + (idx * d_hdWalletDerivationPathsNumber);
-    extended_public_key_t* outPublicKeys = d_mnemonicsPublicKeysPtr + (idx * d_hdWalletDerivationPathsNumber);
+    HDExtendedPrivateKey* outPrivateKey = d_mnemonicsPrivateKeysPtr + (idx * d_hdWalletDerivationPathsNumber);
+    HDExtendedPublicKey* outPublicKeys = d_mnemonicsPublicKeysPtr + (idx * d_hdWalletDerivationPathsNumber);
 
-    extended_private_key_t* m_privateKeys_int = d_mnemonicsIntermediatePrivateKeysPtr + (idx * d_hdWalletAccountsToGenerate * d_hdWalletAddressesToGenerate);
+    HDExtendedPrivateKey* m_privateKeys_int = d_mnemonicsIntermediatePrivateKeysPtr + (idx * d_hdWalletAccountsToGenerate * d_hdWalletAddressesToGenerate);
 
     // Generate master key once for this mnemonic
     uint32_t* seed = d_mnemonicsSeedsPtr + idx * SIZE32_SEED;
-    extended_private_key_t* outMasterKey = d_mnemonicsMasterKeysPtr + idx;
+    HDExtendedPrivateKey* outMasterKey = d_mnemonicsMasterKeysPtr + idx;
     mnemonicToExtendedMasterKey(mnemonic, seed, reinterpret_cast<uint8_t*>(outMasterKey));
 
     // "m/max(addr, acc)" - private keys
@@ -173,7 +163,7 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
 
     // m/0/0 - tmp_privateKey[0]
     // m/1/0 - tmp_privateKey[addressesToGenerate]
-    extended_private_key_t* tmp_privateKey = outPrivateKey;
+    HDExtendedPrivateKey* tmp_privateKey = outPrivateKey;
 
     // "m/acc/addr"
     #pragma unroll
@@ -239,7 +229,7 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
     outPrivateKey += d_hdWalletAccountsToGenerate * d_hdWalletAddressesToGenerate;
 
     // "m/44'/acc'/0/addr"
-    extended_private_key_t m_44h_privateKeys;
+    HDExtendedPrivateKey m_44h_privateKeys;
     hardenedPrivateChildFromPrivate(outMasterKey, &m_44h_privateKeys, 44);
 
     // "m/44'/acc'
@@ -264,7 +254,7 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
 
 
     // "m/44'/0'/acc'/0/addr"
-    extended_private_key_t m_44h_0h_privateKey;
+    HDExtendedPrivateKey m_44h_0h_privateKey;
     hardenedPrivateChildFromPrivate(&m_44h_privateKeys, &m_44h_0h_privateKey, 0);
 
     // "m/44'/0'/acc'/0
@@ -288,7 +278,7 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
     outPrivateKey += d_hdWalletAccountsToGenerate * d_hdWalletAddressesToGenerate;
 
     // "m/44'/145'/acc'/0/addr"
-    extended_private_key_t m_44h_145h_privateKey;
+    HDExtendedPrivateKey m_44h_145h_privateKey;
     hardenedPrivateChildFromPrivate(&m_44h_privateKeys, &m_44h_145h_privateKey, 145);
 
     // "m/44'/145'/acc'/0
@@ -312,7 +302,7 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
 
 
     // "m/44'/156'/acc'/0/addr"
-    extended_private_key_t m_44h_156h_privateKey;
+    HDExtendedPrivateKey m_44h_156h_privateKey;
     hardenedPrivateChildFromPrivate(&m_44h_privateKeys, &m_44h_156h_privateKey, 156);
 
     // "m/44'/156'/acc'/0
@@ -335,7 +325,7 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
     outPrivateKey += d_hdWalletAccountsToGenerate * d_hdWalletAddressesToGenerate;
 
     // "m/44'/236'/acc'/0/addr"
-    extended_private_key_t m_44h_236h_privateKey;
+    HDExtendedPrivateKey m_44h_236h_privateKey;
     hardenedPrivateChildFromPrivate(&m_44h_privateKeys, &m_44h_236h_privateKey, 236);
 
     // "m/44'/236'/acc'/0
@@ -358,7 +348,7 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
     outPrivateKey += d_hdWalletAccountsToGenerate * d_hdWalletAddressesToGenerate;
 
     // "m/44'/999'/acc'/0/addr"
-    extended_private_key_t m_44h_999h_privateKey;
+    HDExtendedPrivateKey m_44h_999h_privateKey;
     hardenedPrivateChildFromPrivate(&m_44h_privateKeys, &m_44h_999h_privateKey, 999);
 
     // "m/44'/999'/acc'/0
@@ -382,11 +372,11 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
 
 
     // "m/49'/0'/acc'/0/addr"
-    extended_private_key_t m_49h_privateKeys;
+    HDExtendedPrivateKey m_49h_privateKeys;
     hardenedPrivateChildFromPrivate(outMasterKey, &m_49h_privateKeys, 49);
 
     // "m/49'/0'"
-    extended_private_key_t m_49h_0h_privateKeys;
+    HDExtendedPrivateKey m_49h_0h_privateKeys;
     hardenedPrivateChildFromPrivate(&m_49h_privateKeys, &m_49h_0h_privateKeys, 0);
 
     // "m/49'/0'/acc'/0
@@ -410,7 +400,7 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
 
     // "m/49'/145'/acc'/0/addr"
     // "m/49'/145'"
-    extended_private_key_t m_49h_145h_privateKeys;
+    HDExtendedPrivateKey m_49h_145h_privateKeys;
     hardenedPrivateChildFromPrivate(&m_49h_privateKeys, &m_49h_145h_privateKeys, 145);
 
     // "m/49'/145'/acc'/0
@@ -434,7 +424,7 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
 
     // "m/49'/156'/acc'/0/addr"
     // "m/49'/156'"
-    extended_private_key_t m_49h_156h_privateKeys;
+    HDExtendedPrivateKey m_49h_156h_privateKeys;
     hardenedPrivateChildFromPrivate(&m_49h_privateKeys, &m_49h_156h_privateKeys, 156);
 
     // "m/49'/156'/acc'/0
@@ -458,7 +448,7 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
 
     // "m/49'/236'/acc'/0/addr"
     // "m/49'/236'"
-    extended_private_key_t m_49h_236h_privateKeys;
+    HDExtendedPrivateKey m_49h_236h_privateKeys;
     hardenedPrivateChildFromPrivate(&m_49h_privateKeys, &m_49h_236h_privateKeys, 236);
 
     // "m/49'/236'/acc'/0
@@ -482,7 +472,7 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
 
     // "m/49'/999'/acc'/0/addr"
     // "m/49'/999'"
-    extended_private_key_t m_49h_999h_privateKeys;
+    HDExtendedPrivateKey m_49h_999h_privateKeys;
     hardenedPrivateChildFromPrivate(&m_49h_privateKeys, &m_49h_999h_privateKeys, 999);
 
     // "m/49'/999'/acc'/0
@@ -505,11 +495,11 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
     outPrivateKey += d_hdWalletAccountsToGenerate * d_hdWalletAddressesToGenerate;
 
     // "m/84'/0'/acc'/0/addr"
-    extended_private_key_t m_84h_privateKeys;
+    HDExtendedPrivateKey m_84h_privateKeys;
     hardenedPrivateChildFromPrivate(outMasterKey, &m_84h_privateKeys, 84);
 
     // "m/84'/0'"
-    extended_private_key_t m_84h_0h_privateKeys;
+    HDExtendedPrivateKey m_84h_0h_privateKeys;
     hardenedPrivateChildFromPrivate(&m_84h_privateKeys, &m_84h_0h_privateKeys, 0);
 
     // "m/84'/0'/acc'/0
@@ -532,11 +522,11 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
     outPrivateKey += d_hdWalletAccountsToGenerate * d_hdWalletAddressesToGenerate;
 
     // "m/86'/0'/acc'/0/addr"
-    extended_private_key_t m_86h_privateKeys;
+    HDExtendedPrivateKey m_86h_privateKeys;
     hardenedPrivateChildFromPrivate(outMasterKey, &m_86h_privateKeys, 86);
 
     // "m/86'/0'"
-    extended_private_key_t m_86h_0h_privateKeys;
+    HDExtendedPrivateKey m_86h_0h_privateKeys;
     hardenedPrivateChildFromPrivate(&m_86h_privateKeys, &m_86h_0h_privateKeys, 0);
 
     // "m/86'/0'/acc'/0
@@ -557,4 +547,36 @@ __global__ void hdWalletBTCKernel(const uint8_t* mnemonics)
     }
 //    outPublicKeys += accountsToGenerate * addressesToGenerate;
 //    outPrivateKey += accountsToGenerate * addressesToGenerate;
+}
+
+__global__ void checkExtendedPublicHashKernel()
+{
+    const uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    const HDExtendedPrivateKey* privateKey = d_mnemonicsPrivateKeysPtr + idx;
+    const HDExtendedPublicKey* publicKeys = d_mnemonicsPublicKeysPtr + (idx * d_hdWalletDerivationPathsNumber);
+
+    uint32_t uncompressedHash160Bytes[5];
+    uint32_t compressedHash160Bytes[5];
+
+    for (uint32_t pathIndex = 0; pathIndex < d_hdWalletDerivationPathsNumber; ++pathIndex)
+    {
+        publicKeyToHash160(publicKeys + pathIndex, uncompressedHash160Bytes, compressedHash160Bytes);
+
+        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+        {
+            if (checkHash(compressedHash160Bytes))
+            {
+                setResultFound(idx, true, privateKey, compressedHash160Bytes, pathIndex);
+            }
+        }
+
+        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+        {
+            if (checkHash(uncompressedHash160Bytes))
+            {
+                setResultFound(idx, false, privateKey, uncompressedHash160Bytes, pathIndex);
+            }
+        }
+    }
 }

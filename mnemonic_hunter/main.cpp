@@ -1,50 +1,53 @@
 #include "hd_wallet.h"
+#include "zmq_client.h"
+
 #include "util/results_processor.h"
-
 #include "util/utils.h"
-#include "cuda/secp256k1_v2/bip32.cuh"
 
-#include <wally_bip32.h>
-#include <wally_bip39.h>
-#include <wally_crypto.h>
+#include <wally_core.h>
 
 #include <thread>
-#include <format>
 #include <future>
 
 #include <boost/log/trivial.hpp>
 
-using namespace std;
+void statusCallback(const StatusInfo& info)
+{
+    const std::string speedStr = std::format("{:.3f} MKey/s", info.dataPerSecond);
+    const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L}/{:L} total)", info.total, info.derivationsPerIteration * info.total);
+    const std::string timeStr = std::format("[{:.3f}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
+    const uint64_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
+    const uint64_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;
+
+    const std::string statusStr = std::format("[{} | {} | {}/{}MB] [{}/{}] {} {} {}"
+        , info.device, info.deviceName, usedDeviceMemoryMb, totalDeviceMemoryMb
+        , info.iteration, info.totalIterations
+        , speedStr, totalStr, timeStr);
+
+    // fprintf(stderr, "\r%s", statusStr.c_str());
+    BOOST_LOG_TRIVIAL(fatal) << statusStr;
+}
 
 void setupMnemonics(const std::shared_ptr<GlobalContext>& context)
 {
     const HDWalletConfig& hdWallet = context->config.hdWallet();
 
-    const bool devMode = context->config.devMode();
-    BOOST_LOG_TRIVIAL(info) << std::format("{} Mode ON [forceMnemonic: {}]", (devMode ? "Dev" : "Prod"), hdWallet.forceMnemonic);
+    const bool devMode = (hdWallet.forceMnemonic && !hdWallet.mnemonic.empty()) || (hdWallet.mnemonicsToGenerate != 0);
+    context->config.setDevMode(devMode);
+    
+    BOOST_LOG_TRIVIAL(info) << std::format("{} Mode ON [forceMnemonic: {}, mnemonicsToGenerate: {}, test mnemonic: {}]", (devMode ? "Dev" : "Prod"), hdWallet.forceMnemonic, hdWallet.mnemonicsToGenerate, hdWallet.mnemonic);
 
-    if (devMode && hdWallet.forceMnemonic)
+    if (devMode)
     {
-        BOOST_LOG_TRIVIAL(info) << "Using mnemonic: " << hdWallet.mnemonic;
-        return;
-    }
-
-    BOOST_LOG_TRIVIAL(info) <<  std::format("Checking connection with the host ({})...", context->httpClient->hostConfig());
-    const bool hostIsAlive = context->httpClient->hostAlive();
-
-    if (devMode && !hdWallet.forceMnemonic && hostIsAlive)
-    {
-        BOOST_LOG_TRIVIAL(info) << "Host is alive";
-        return;
-    }
-
-    if (!hostIsAlive)
-    {
-        BOOST_LOG_TRIVIAL(info) << "Host is NOT alive";
-    }
-    else
-    {
-        BOOST_LOG_TRIVIAL(info) << "Host is alive";
+        if (hdWallet.forceMnemonic && !hdWallet.mnemonic.empty())
+        {
+            BOOST_LOG_TRIVIAL(info) << "Using mnemonic: " << hdWallet.mnemonic;
+        }
+        else
+        {
+            context->config.setRandomGeneration(true);
+            BOOST_LOG_TRIVIAL(info) << "Will generate random mnemonic";
+        }
     }
 }
 
@@ -57,9 +60,9 @@ int main()
         return 1;
     }
 
-    context->httpClient = std::make_shared<HttpClient>(context->config.server());
-    context->hash160SearchResultsQueue = std::make_shared<Hash160SearchResultsQueue>();
-    context->statusCallback = utils::statusCallback;
+    context->mnemonicMasterKeyHash160SearchResultsQueue = std::make_shared<MnemonicMasterKeyHash160SearchResultsQueue>();
+    context->mnemonicMasterKeysQueue = std::make_shared<MnemonicMasterKeysQueue>();
+    context->statusCallback = statusCallback;
 
     utils::initLogging(context->config.log());
 
@@ -90,7 +93,10 @@ int main()
 
     // Start generation checking and results processing
     const ResultsProcessor resultProcessor(context);
-    resultProcessor.startHash160ResultsQueueProcessing();
+    resultProcessor.startMnemonicsMasterKeyHash160ResultsQueueProcessing();
+
+    const MasterKeysZMQClient masterKeysZmqClient(context);
+    masterKeysZmqClient.start();
 
     const int gpuDevicesCount = cu::getDeviceCount();
     std::vector<std::thread> threads;

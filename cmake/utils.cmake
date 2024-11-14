@@ -95,7 +95,9 @@ function(include_needed_libs)
     find_package(Boost 1.80 REQUIRED COMPONENTS system log_setup log iostreams regex)
     include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
     ################################################################################################################################################################################
-    link_directories(${CMAKE_SOURCE_DIR}/external/wallycore/lib)
-    include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/external/wallycore/include)
+    if(WIN32)
+        link_directories(${CMAKE_SOURCE_DIR}/external/wallycore/lib)
+        include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/external/wallycore/include)
+    endif()
     ################################################################################################################################################################################
 endfunction()
