@@ -1,10 +1,11 @@
 #pragma once
 
 #include <string>
-#include <vector>
 #include <cstdint>
+#include <vector>
 
 struct ext_key;
+struct HDExtendedPrivateKey;
 
 namespace bitcoin
 {
@@ -21,4 +22,13 @@ namespace bitcoin
 
     // Convert private key to WIF (Wallet Import Format)
     std::string privateKeyWIF(const ext_key& key);
+
+    std::string generateMnemonic(const std::vector<uint8_t> &entropy);
+    std::vector<uint8_t> mnemonicToSeed(const std::string &mnemonic, const std::string &passphrase);
+    HDExtendedPrivateKey mnemonicSeedToExMasterKey(const std::vector<uint8_t> &seed);
+    std::string exMasterKeyToXPRV(const HDExtendedPrivateKey& exMasterKey);
+
+    void generateMnemonicExMasterKey(const std::vector<uint8_t> &entropy, HDExtendedPrivateKey& masterKey);
+    HDExtendedPrivateKey generateMnemonicExMasterKey(const std::vector<uint8_t> &entropy);
+    HDExtendedPrivateKey generateRandomExMasterKey(uint32_t entropyBits = 128);
 }
