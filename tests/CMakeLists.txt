@@ -19,6 +19,7 @@ link_libraries(Catch2::Catch2WithMain)
 
 ####################################################################################################################################################################################
 link_libraries(util)
+link_libraries(Boost::log Boost::log_setup Boost::iostreams)
 
 ####################################################################################################################################################################################
 if(UNIX)
@@ -46,7 +47,7 @@ add_executable(http_client_test http_client_test.cpp)
 add_executable(mnemonic_tests mnemonic_tests.cpp test_data.h)
 target_link_libraries(mnemonic_tests PRIVATE util)
 target_link_libraries(mnemonic_tests PRIVATE ecc_cuda)
-target_link_libraries(mnemonic_tests PRIVATE wallycore libsecp256k1)
+target_link_libraries(mnemonic_tests PRIVATE wallycore secp256k1)
 
 ####################################################################################################################################################################################
 add_test(NAME hash_test COMMAND hash_test)

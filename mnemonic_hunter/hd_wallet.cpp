@@ -129,7 +129,8 @@ struct HDWallet::Impl
             else if (gContext->config.devMode())
             {
                 const std::string& mnemonic = gContext->config.hdWallet().mnemonic;
-                strncpy_s(reinterpret_cast<char *>(mnemonics.data() + i * SIZE_MNEMONIC_FRAME_12), SIZE_MNEMONIC_FRAME_12, mnemonic.c_str(), mnemonic.size());
+                std::copy_n(mnemonic.c_str(), mnemonic.size(), reinterpret_cast<char *>(mnemonics.data() + i * SIZE_MNEMONIC_FRAME_12)
+);
             }
         }
     }

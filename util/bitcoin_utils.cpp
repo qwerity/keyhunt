@@ -1,11 +1,11 @@
 #include "bitcoin_utils.h"
 #include "utils.h"
-#include "wally_bip32.h"
 
 #include "cuda/defines.h"
 
 #include "bip/bip39_wordlist_english.h" // Add the BIP-39 wordlist as a header file.
 
+#include <wally_bip32.h>
 #include <wally.hpp>
 
 #include <boost/log/trivial.hpp>

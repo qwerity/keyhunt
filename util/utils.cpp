@@ -754,7 +754,7 @@ namespace utils
                 return false;
             }
 
-            strncpy_s(reinterpret_cast<char *>(mnemonics.data() + i * mnemonicFrameSize), mnemonicFrameSize, mnemonic, strlen(mnemonic));
+            std::copy_n(mnemonic, strlen(mnemonic), mnemonics.data() + i * mnemonicFrameSize);
         }
 
         return true;
@@ -764,6 +764,7 @@ namespace utils
     bool generateMnemonic(const std::vector<uint8_t>& entropy, uint8_t mnemonic[8 * BIP39_ENTROPY_LEN_128])
     {
         char* output = nullptr;
+        ScopeOutRunner outRunner([&]() { wally_free_string(output); });
 
         // Convert entropy to BIP39 mnemonic
         if (bip39_mnemonic_from_bytes(nullptr, entropy.data(), entropy.size(), &output) != WALLY_OK)
@@ -772,10 +773,7 @@ namespace utils
             return false;
         }
 
-        strncpy_s(reinterpret_cast<char *>(mnemonic), 8 * BIP39_ENTROPY_LEN_128, output, strlen(output));
-
-        wally_free_string(output); // Free allocated mnemonic string
-
+        std::copy_n(output, strlen(output), mnemonic);
         return true;
     }
 

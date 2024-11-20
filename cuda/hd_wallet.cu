@@ -61,7 +61,7 @@ struct CUHDWallet::Impl
                 cudaCheckError(cudaOccupancyMaxPotentialBlockSize(&minGridSize, &recommendedBlockSize, extendedMasterKeysToDerivatedPublicKeysKernel));
             break;
             default:
-                printf("CUHDWallet: generation mode is wrong: %d", mGenerationMode);
+                printf("CUHDWallet: generation mode is wrong: %d", static_cast<int>(mGenerationMode));
         }
 
         mBlockSize = (blockSize != 0) ? blockSize : recommendedBlockSize;
@@ -290,7 +290,7 @@ void CUHDWallet::searchPublicHashFromMnemonics(const uint8_t* mnemonics, const u
             mImpl->searchBTCPublicHashFromMnemonics(mnemonics, mnemonicsNumber);
         break;
         default:
-            printf("CUHDWallet: generation mode is wrong: %d", mImpl->mGenerationMode);
+            printf("CUHDWallet: generation mode is wrong: %d", static_cast<int>(mImpl->mGenerationMode));
     }
 }
 

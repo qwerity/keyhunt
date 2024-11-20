@@ -47,6 +47,6 @@ add_library(util STATIC ${SRC_FILES})
 target_link_libraries(util PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(util PRIVATE Boost::log Boost::iostreams)
 target_link_libraries(util PRIVATE OpenSSL::SSL OpenSSL::Crypto)
-target_link_libraries(util PRIVATE wallycore libsecp256k1)
+target_link_libraries(util PRIVATE wallycore secp256k1)
 
 ####################################################################################################################################################################################
