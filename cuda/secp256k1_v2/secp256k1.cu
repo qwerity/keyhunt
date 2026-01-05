@@ -928,7 +928,6 @@ __device__ void secp256k1_pubkey_save(uint8_t* pubkey, secp256k1_ge* ge)
 __device__ void secp256k1_ecmult_gen(secp256k1_gej* r, secp256k1_scalar* gn)
 {
     secp256k1_ge add;
-    secp256k1_ge_storage adds;
 
     secp256k1_gej_set_infinity(r);
 
@@ -936,32 +935,15 @@ __device__ void secp256k1_ecmult_gen(secp256k1_gej* r, secp256k1_scalar* gn)
     for (uint32_t j = 0; j < ECMULT_GEN_PREC_N; ++j)
     {
         const uint32_t bits = secp256k1_scalar_get_bits(gn, j * ECMULT_GEN_PREC_B, ECMULT_GEN_PREC_B);
-        #pragma unroll
-        for (uint32_t i = 0; i < ECMULT_GEN_PREC_G; ++i)
-        {
-            uint32_t mask0 = (i == bits) + ~0u;
-            uint32_t mask1 = ~mask0;
-
-            adds.x.n[0] = (adds.x.n[0] & mask0) | (prec[j][i].x.n[0] & mask1);
-            adds.x.n[1] = (adds.x.n[1] & mask0) | (prec[j][i].x.n[1] & mask1);
-            adds.x.n[2] = (adds.x.n[2] & mask0) | (prec[j][i].x.n[2] & mask1);
-            adds.x.n[3] = (adds.x.n[3] & mask0) | (prec[j][i].x.n[3] & mask1);
-            adds.x.n[4] = (adds.x.n[4] & mask0) | (prec[j][i].x.n[4] & mask1);
-            adds.x.n[5] = (adds.x.n[5] & mask0) | (prec[j][i].x.n[5] & mask1);
-            adds.x.n[6] = (adds.x.n[6] & mask0) | (prec[j][i].x.n[6] & mask1);
-            adds.x.n[7] = (adds.x.n[7] & mask0) | (prec[j][i].x.n[7] & mask1);
-
-            adds.y.n[0] = (adds.y.n[0] & mask0) | (prec[j][i].y.n[0] & mask1);
-            adds.y.n[1] = (adds.y.n[1] & mask0) | (prec[j][i].y.n[1] & mask1);
-            adds.y.n[2] = (adds.y.n[2] & mask0) | (prec[j][i].y.n[2] & mask1);
-            adds.y.n[3] = (adds.y.n[3] & mask0) | (prec[j][i].y.n[3] & mask1);
-            adds.y.n[4] = (adds.y.n[4] & mask0) | (prec[j][i].y.n[4] & mask1);
-            adds.y.n[5] = (adds.y.n[5] & mask0) | (prec[j][i].y.n[5] & mask1);
-            adds.y.n[6] = (adds.y.n[6] & mask0) | (prec[j][i].y.n[6] & mask1);
-            adds.y.n[7] = (adds.y.n[7] & mask0) | (prec[j][i].y.n[7] & mask1);
+        
+        // ПРЯМОЙ ДОСТУП к таблице вместо маскирования всех вариантов
+        // Это убирает 8192 лишних операции маскирования на одно скалярное умножение!
+        secp256k1_ge_from_storage(&add, &prec[j][bits]);
+        
+        // Пропуск нулевых битов экономит ~50% операций (если ~50% битов = 0)
+        if (bits != 0) {
+            secp256k1_gej_add_ge(r, r, &add);
         }
-        secp256k1_ge_from_storage(&add, &adds);
-        secp256k1_gej_add_ge(r, r, &add);
     }
 }
 
