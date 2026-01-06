@@ -66,7 +66,7 @@ There is needed to install following packages to be able to compile
 
 ## Build Win x64
 - Open Terminal in project directory
-- `cmake -G "Visual Studio 16 2019" -A x64 -DCMAKE_CUDA_ARCHITECTURES=86 -S . -B build`
+- `cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_CUDA_ARCHITECTURES=86 -S . -B build`
 - `cmake --build .\build\ --config=Release -j 14 --target cuda-keyhunt-pvk`
 - If all good you can find the binary in `{project directory}/bin` folder
 - Copy the config.json to bin folder and 
