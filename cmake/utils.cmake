@@ -79,7 +79,7 @@ function(include_needed_libs)
     find_package(OpenSSL 3 REQUIRED)
     include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
     #################################################################################################################################################################################
-    find_package(CUDAToolkit 12 EXACT REQUIRED)
+    find_package(CUDAToolkit 13 EXACT REQUIRED)
     include_directories(SYSTEM ${CUDAToolkit_INCLUDE_DIRS})
     ################################################################################################################################################################################
     if(WIN32)
