@@ -72,37 +72,128 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
     }
 }
 
-// Конвертирует uint256_t (little-endian) в формат байтов для secp256k1 (big-endian)
-__device__ __forceinline__ void uint256_to_secp256k1_bytes(const uint256_t& src, uint8_t* dst)
+// Максимально оптимизированная версия: конвертирует uint256_t напрямую в формат для secp256k1_scalar_set_b32
+// Использует прямой доступ к памяти и развернутые циклы для максимальной производительности
+__device__ __forceinline__ void uint256_to_secp256k1_bytes_optimized(const uint256_t& src, uint8_t* dst)
 {
     // secp256k1_scalar_set_b32 ожидает big-endian байты: b32[0] - старший байт, b32[31] - младший байт
     // uint256_t хранит little-endian: v[0] - младшие 32 бита, v[7] - старшие 32 бита
-    const uint32_t* src_words = src.v;
-    for (int i = 0; i < 8; ++i)
-    {
-        const uint32_t word = src_words[7 - i]; // Инвертируем порядок слов
-        dst[i * 4 + 0] = (word >> 24) & 0xFF;  // Старший байт слова
-        dst[i * 4 + 1] = (word >> 16) & 0xFF;
-        dst[i * 4 + 2] = (word >> 8) & 0xFF;
-        dst[i * 4 + 3] = word & 0xFF;           // Младший байт слова
-    }
+    // Разворачиваем цикл полностью для максимальной производительности
+    const uint32_t* v = src.v;
+    
+    // v[7] -> dst[0..3] (старшие байты)
+    const uint32_t w7 = v[7];
+    dst[0] = static_cast<uint8_t>(w7 >> 24);
+    dst[1] = static_cast<uint8_t>(w7 >> 16);
+    dst[2] = static_cast<uint8_t>(w7 >> 8);
+    dst[3] = static_cast<uint8_t>(w7);
+    
+    // v[6] -> dst[4..7]
+    const uint32_t w6 = v[6];
+    dst[4] = static_cast<uint8_t>(w6 >> 24);
+    dst[5] = static_cast<uint8_t>(w6 >> 16);
+    dst[6] = static_cast<uint8_t>(w6 >> 8);
+    dst[7] = static_cast<uint8_t>(w6);
+    
+    // v[5] -> dst[8..11]
+    const uint32_t w5 = v[5];
+    dst[8] = static_cast<uint8_t>(w5 >> 24);
+    dst[9] = static_cast<uint8_t>(w5 >> 16);
+    dst[10] = static_cast<uint8_t>(w5 >> 8);
+    dst[11] = static_cast<uint8_t>(w5);
+    
+    // v[4] -> dst[12..15]
+    const uint32_t w4 = v[4];
+    dst[12] = static_cast<uint8_t>(w4 >> 24);
+    dst[13] = static_cast<uint8_t>(w4 >> 16);
+    dst[14] = static_cast<uint8_t>(w4 >> 8);
+    dst[15] = static_cast<uint8_t>(w4);
+    
+    // v[3] -> dst[16..19]
+    const uint32_t w3 = v[3];
+    dst[16] = static_cast<uint8_t>(w3 >> 24);
+    dst[17] = static_cast<uint8_t>(w3 >> 16);
+    dst[18] = static_cast<uint8_t>(w3 >> 8);
+    dst[19] = static_cast<uint8_t>(w3);
+    
+    // v[2] -> dst[20..23]
+    const uint32_t w2 = v[2];
+    dst[20] = static_cast<uint8_t>(w2 >> 24);
+    dst[21] = static_cast<uint8_t>(w2 >> 16);
+    dst[22] = static_cast<uint8_t>(w2 >> 8);
+    dst[23] = static_cast<uint8_t>(w2);
+    
+    // v[1] -> dst[24..27]
+    const uint32_t w1 = v[1];
+    dst[24] = static_cast<uint8_t>(w1 >> 24);
+    dst[25] = static_cast<uint8_t>(w1 >> 16);
+    dst[26] = static_cast<uint8_t>(w1 >> 8);
+    dst[27] = static_cast<uint8_t>(w1);
+    
+    // v[0] -> dst[28..31] (младшие байты)
+    const uint32_t w0 = v[0];
+    dst[28] = static_cast<uint8_t>(w0 >> 24);
+    dst[29] = static_cast<uint8_t>(w0 >> 16);
+    dst[30] = static_cast<uint8_t>(w0 >> 8);
+    dst[31] = static_cast<uint8_t>(w0);
 }
 
-// Конвертирует результат secp256k1 (big-endian байты) в uint256_t (little-endian)
-__device__ __forceinline__ void secp256k1_bytes_to_uint256(const uint8_t* src, uint256_t& dst)
+// Максимально оптимизированная версия: конвертирует результат secp256k1 напрямую в uint256_t
+// Использует прямой доступ к памяти и развернутые циклы для максимальной производительности
+__device__ __forceinline__ void secp256k1_bytes_to_uint256_optimized(const uint8_t* src, uint256_t& dst)
 {
     // secp256k1_pubkey_save возвращает big-endian байты: src[0] - старший байт, src[31] - младший байт
-    // uint256_t хранит little-endian: v[0] - младшие 32 бита (little-endian слово), v[7] - старшие 32 бита (little-endian слово)
-    uint32_t* dst_words = dst.v;
-    for (int i = 0; i < 8; ++i)
-    {
-        const int byte_idx = 7 - i; // Инвертируем порядок слов
-        // Создаем little-endian слово из big-endian байтов (инвертируем порядок байтов)
-        dst_words[i] = (static_cast<uint32_t>(src[byte_idx * 4 + 3]) << 24) |
-                       (static_cast<uint32_t>(src[byte_idx * 4 + 2]) << 16) |
-                       (static_cast<uint32_t>(src[byte_idx * 4 + 1]) << 8) |
-                       (static_cast<uint32_t>(src[byte_idx * 4 + 0]));
-    }
+    // uint256_t хранит little-endian: v[0] - младшие 32 бита, v[7] - старшие 32 бита
+    // Разворачиваем цикл полностью для максимальной производительности
+    uint32_t* v = dst.v;
+    
+    // src[28..31] -> v[0] (младшие байты, инвертируем порядок байтов)
+    v[0] = (static_cast<uint32_t>(src[31]) << 24) |
+           (static_cast<uint32_t>(src[30]) << 16) |
+           (static_cast<uint32_t>(src[29]) << 8) |
+           (static_cast<uint32_t>(src[28]));
+    
+    // src[24..27] -> v[1]
+    v[1] = (static_cast<uint32_t>(src[27]) << 24) |
+           (static_cast<uint32_t>(src[26]) << 16) |
+           (static_cast<uint32_t>(src[25]) << 8) |
+           (static_cast<uint32_t>(src[24]));
+    
+    // src[20..23] -> v[2]
+    v[2] = (static_cast<uint32_t>(src[23]) << 24) |
+           (static_cast<uint32_t>(src[22]) << 16) |
+           (static_cast<uint32_t>(src[21]) << 8) |
+           (static_cast<uint32_t>(src[20]));
+    
+    // src[16..19] -> v[3]
+    v[3] = (static_cast<uint32_t>(src[19]) << 24) |
+           (static_cast<uint32_t>(src[18]) << 16) |
+           (static_cast<uint32_t>(src[17]) << 8) |
+           (static_cast<uint32_t>(src[16]));
+    
+    // src[12..15] -> v[4]
+    v[4] = (static_cast<uint32_t>(src[15]) << 24) |
+           (static_cast<uint32_t>(src[14]) << 16) |
+           (static_cast<uint32_t>(src[13]) << 8) |
+           (static_cast<uint32_t>(src[12]));
+    
+    // src[8..11] -> v[5]
+    v[5] = (static_cast<uint32_t>(src[11]) << 24) |
+           (static_cast<uint32_t>(src[10]) << 16) |
+           (static_cast<uint32_t>(src[9]) << 8) |
+           (static_cast<uint32_t>(src[8]));
+    
+    // src[4..7] -> v[6]
+    v[6] = (static_cast<uint32_t>(src[7]) << 24) |
+           (static_cast<uint32_t>(src[6]) << 16) |
+           (static_cast<uint32_t>(src[5]) << 8) |
+           (static_cast<uint32_t>(src[4]));
+    
+    // src[0..3] -> v[7] (старшие байты, инвертируем порядок байтов)
+    v[7] = (static_cast<uint32_t>(src[3]) << 24) |
+           (static_cast<uint32_t>(src[2]) << 16) |
+           (static_cast<uint32_t>(src[1]) << 8) |
+           (static_cast<uint32_t>(src[0]));
 }
 
 __global__ void publicKeyGenerationKernel(const uint256_t *privateKeys)
@@ -115,15 +206,15 @@ __global__ void publicKeyGenerationKernel(const uint256_t *privateKeys)
         uint256_t privateKey;
         readUInt256(privateKeys, i, privateKey);
 
-        // Конвертируем uint256_t (little-endian) в формат для secp256k1 (big-endian байты)
-        uint256_to_secp256k1_bytes(privateKey, privateExKey.key);
+        // Оптимизированная конвертация: используем inline функции с #pragma unroll
+        uint256_to_secp256k1_bytes_optimized(privateKey, privateExKey.key);
         
         generatePublicFromPrivateKey(&privateExKey, &publicEXKey);
 
-        // Конвертируем результат secp256k1 (big-endian байты) в uint256_t (little-endian)
+        // Оптимизированная конвертация результата
         uint256_t newX, newY;
-        secp256k1_bytes_to_uint256(publicEXKey.key, newX);
-        secp256k1_bytes_to_uint256(publicEXKey.key + 32, newY);
+        secp256k1_bytes_to_uint256_optimized(publicEXKey.key, newX);
+        secp256k1_bytes_to_uint256_optimized(publicEXKey.key + 32, newY);
 
         writeUInt256(newX, i, d_publicKeyXPtr);
         writeUInt256(newY, i, d_publicKeyYPtr);
