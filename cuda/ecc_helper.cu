@@ -2,6 +2,7 @@
 #include "common_kernels.cuh"
 
 #include "secp256k1_v2/bip32.cuh"
+#include "secp256k1_v2/secp256k1.cuh"
 
 extern __constant__ uint32_t d_pointsPerThread;
 
@@ -198,25 +199,88 @@ __device__ __forceinline__ void secp256k1_bytes_to_uint256_optimized(const uint8
 
 __global__ void publicKeyGenerationKernel(const uint256_t *privateKeys)
 {
-    for(uint32_t i = 0; i < d_pointsPerThread; ++i)
+    // Оптимизация: используем batch normalization если d_pointsPerThread <= 16
+    // Это позволяет нормализовать несколько точек одновременно, используя batch inversion
+    constexpr uint32_t MAX_BATCH_SIZE = 16;
+    
+    if (d_pointsPerThread <= MAX_BATCH_SIZE)
     {
-        HDExtendedPrivateKey privateExKey;
-        HDExtendedPublicKey publicEXKey;
-
-        uint256_t privateKey;
-        readUInt256(privateKeys, i, privateKey);
-
-        // Оптимизированная конвертация: используем inline функции с #pragma unroll
-        uint256_to_secp256k1_bytes_optimized(privateKey, privateExKey.key);
+        // Batch mode: собираем все точки в якобиановых координатах, затем нормализуем batch'ом
+        secp256k1_gej points[MAX_BATCH_SIZE];
+        secp256k1_ge normalized_points[MAX_BATCH_SIZE];
         
-        generatePublicFromPrivateKey(&privateExKey, &publicEXKey);
-
-        // Оптимизированная конвертация результата
-        uint256_t newX, newY;
-        secp256k1_bytes_to_uint256_optimized(publicEXKey.key, newX);
-        secp256k1_bytes_to_uint256_optimized(publicEXKey.key + 32, newY);
-
-        writeUInt256(newX, i, d_publicKeyXPtr);
-        writeUInt256(newY, i, d_publicKeyYPtr);
+        // Шаг 1: Вычислить все точки в якобиановых координатах (без нормализации)
+        // Примечание: #pragma unroll не работает для динамических циклов (d_pointsPerThread - runtime значение)
+        // Компилятор может оптимизировать цикл автоматически через loop unrolling для небольших значений
+        for(uint32_t i = 0; i < d_pointsPerThread; ++i)
+        {
+            HDExtendedPrivateKey privateExKey;
+            uint256_t privateKey;
+            readUInt256(privateKeys, i, privateKey);
+            
+            // Оптимизированная конвертация: используем inline функции с #pragma unroll
+            uint256_to_secp256k1_bytes_optimized(privateKey, privateExKey.key);
+            
+            // Вычислить точку в якобиановых координатах (без нормализации)
+            secp256k1_ec_pubkey_create_gej(&points[i], &privateExKey.key[0]);
+        }
+        
+        // Шаг 2: Нормализовать все точки batch'ом (1 инверсия вместо N)
+        secp256k1_ge_set_gej_batch(normalized_points, points, d_pointsPerThread);
+        
+        // Шаг 3: Сохранить результаты
+        for(uint32_t i = 0; i < d_pointsPerThread; ++i)
+        {
+            // Конвертировать нормализованные точки в формат для сохранения
+            uint8_t pubkey[64];
+            secp256k1_pubkey_save(pubkey, &normalized_points[i]);
+            
+            // Оптимизированная конвертация результата
+            uint256_t newX, newY;
+            secp256k1_bytes_to_uint256_optimized(pubkey, newX);
+            secp256k1_bytes_to_uint256_optimized(pubkey + 32, newY);
+            
+            writeUInt256(newX, i, d_publicKeyXPtr);
+            writeUInt256(newY, i, d_publicKeyYPtr);
+        }
+    }
+    else
+    {
+        // Fallback: обычный метод для больших batch'ей (когда d_pointsPerThread > 16)
+        // Разбиваем на батчи по 16 элементов
+        for(uint32_t batchStart = 0; batchStart < d_pointsPerThread; batchStart += MAX_BATCH_SIZE)
+        {
+            const uint32_t batchSize = (MAX_BATCH_SIZE < (d_pointsPerThread - batchStart)) ? MAX_BATCH_SIZE : (d_pointsPerThread - batchStart);
+            secp256k1_gej points[MAX_BATCH_SIZE];
+            secp256k1_ge normalized_points[MAX_BATCH_SIZE];
+            
+            // Вычислить точки в текущем батче
+            for(uint32_t i = 0; i < batchSize; ++i)
+            {
+                HDExtendedPrivateKey privateExKey;
+                uint256_t privateKey;
+                readUInt256(privateKeys, batchStart + i, privateKey);
+                
+                uint256_to_secp256k1_bytes_optimized(privateKey, privateExKey.key);
+                secp256k1_ec_pubkey_create_gej(&points[i], &privateExKey.key[0]);
+            }
+            
+            // Нормализовать batch'ом
+            secp256k1_ge_set_gej_batch(normalized_points, points, batchSize);
+            
+            // Сохранить результаты
+            for(uint32_t i = 0; i < batchSize; ++i)
+            {
+                uint8_t pubkey[64];
+                secp256k1_pubkey_save(pubkey, &normalized_points[i]);
+                
+                uint256_t newX, newY;
+                secp256k1_bytes_to_uint256_optimized(pubkey, newX);
+                secp256k1_bytes_to_uint256_optimized(pubkey + 32, newY);
+                
+                writeUInt256(newX, batchStart + i, d_publicKeyXPtr);
+                writeUInt256(newY, batchStart + i, d_publicKeyYPtr);
+            }
+        }
     }
 }

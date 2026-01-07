@@ -215,16 +215,26 @@ __device__ __forceinline__ void secp256k1_gej_set_infinity(secp256k1_gej* r)
 
 __device__ __forceinline__ void secp256k1_fe_from_storage(secp256k1_fe* r, const secp256k1_fe_storage* a)
 {
-    r->n[0] = a->n[0] & 0x3FFFFFFUL;
-    r->n[1] = a->n[0] >> 26 | ((a->n[1] << 6) & 0x3FFFFFFUL);
-    r->n[2] = a->n[1] >> 20 | ((a->n[2] << 12) & 0x3FFFFFFUL);
-    r->n[3] = a->n[2] >> 14 | ((a->n[3] << 18) & 0x3FFFFFFUL);
-    r->n[4] = a->n[3] >> 8 | ((a->n[4] << 24) & 0x3FFFFFFUL);
-    r->n[5] = (a->n[4] >> 2) & 0x3FFFFFFUL;
-    r->n[6] = a->n[4] >> 28 | ((a->n[5] << 4) & 0x3FFFFFFUL);
-    r->n[7] = a->n[5] >> 22 | ((a->n[6] << 10) & 0x3FFFFFFUL);
-    r->n[8] = a->n[6] >> 16 | ((a->n[7] << 16) & 0x3FFFFFFUL);
-    r->n[9] = a->n[7] >> 10;
+    // Используем __ldg() для read-only memory - ускоряет доступ через read-only cache
+    const uint32_t n0 = __ldg(&a->n[0]);
+    const uint32_t n1 = __ldg(&a->n[1]);
+    const uint32_t n2 = __ldg(&a->n[2]);
+    const uint32_t n3 = __ldg(&a->n[3]);
+    const uint32_t n4 = __ldg(&a->n[4]);
+    const uint32_t n5 = __ldg(&a->n[5]);
+    const uint32_t n6 = __ldg(&a->n[6]);
+    const uint32_t n7 = __ldg(&a->n[7]);
+    
+    r->n[0] = n0 & 0x3FFFFFFUL;
+    r->n[1] = n0 >> 26 | ((n1 << 6) & 0x3FFFFFFUL);
+    r->n[2] = n1 >> 20 | ((n2 << 12) & 0x3FFFFFFUL);
+    r->n[3] = n2 >> 14 | ((n3 << 18) & 0x3FFFFFFUL);
+    r->n[4] = n3 >> 8 | ((n4 << 24) & 0x3FFFFFFUL);
+    r->n[5] = (n4 >> 2) & 0x3FFFFFFUL;
+    r->n[6] = n4 >> 28 | ((n5 << 4) & 0x3FFFFFFUL);
+    r->n[7] = n5 >> 22 | ((n6 << 10) & 0x3FFFFFFUL);
+    r->n[8] = n6 >> 16 | ((n7 << 16) & 0x3FFFFFFUL);
+    r->n[9] = n7 >> 10;
 }
 
 __device__ __forceinline__ void secp256k1_ge_from_storage(secp256k1_ge* r, const secp256k1_ge_storage* a)
@@ -298,7 +308,23 @@ __device__ __forceinline__ void secp256k1_fe_set_int(secp256k1_fe* r, int a)
 }
 
 __device__ void secp256k1_fe_inv(secp256k1_fe* r, const secp256k1_fe* a);
+/**
+ * Batch inversion using Montgomery's trick
+ * Computes inverses of multiple field elements efficiently.
+ * @param results Output array for inverses
+ * @param inputs Input array of field elements to invert
+ * @param count Number of elements to invert (must be > 0, max 16 for current implementation)
+ */
+__device__ void secp256k1_fe_batch_inv(secp256k1_fe* results, const secp256k1_fe* inputs, int count);
 __device__ void secp256k1_ge_set_gej(secp256k1_ge* r, secp256k1_gej* a);
+/**
+ * Batch version of secp256k1_ge_set_gej using batch inversion optimization
+ * Normalizes multiple points from Jacobian to affine coordinates efficiently.
+ * @param results Output array of affine points
+ * @param points Input array of points in Jacobian coordinates
+ * @param count Number of points to normalize (must be > 0, max 16 for current implementation)
+ */
+__device__ void secp256k1_ge_set_gej_batch(secp256k1_ge* results, secp256k1_gej* points, int count);
 __device__ void secp256k1_gej_add_ge(secp256k1_gej* r, const secp256k1_gej* a, const secp256k1_ge* b);
 __device__ void secp256k1_pubkey_save(uint8_t* pubkey, secp256k1_ge* ge);
 // Глобальная переменная для таблицы (устанавливается из host кода)
@@ -306,3 +332,8 @@ extern __device__ const secp256k1_ge_storage* d_gTable_ptr;
 
 __device__ void secp256k1_ecmult_gen(secp256k1_gej* r, secp256k1_scalar* gn);
 __device__ int secp256k1_ec_pubkey_create(uint8_t* pubkey, const uint8_t* seckey);
+/**
+ * Version of secp256k1_ec_pubkey_create that returns point in Jacobian coordinates
+ * (without normalization). Useful for batch normalization optimization.
+ */
+__device__ int secp256k1_ec_pubkey_create_gej(secp256k1_gej* pj, const uint8_t* seckey);
