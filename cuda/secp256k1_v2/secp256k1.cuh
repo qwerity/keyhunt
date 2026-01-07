@@ -301,5 +301,8 @@ __device__ void secp256k1_fe_inv(secp256k1_fe* r, const secp256k1_fe* a);
 __device__ void secp256k1_ge_set_gej(secp256k1_ge* r, secp256k1_gej* a);
 __device__ void secp256k1_gej_add_ge(secp256k1_gej* r, const secp256k1_gej* a, const secp256k1_ge* b);
 __device__ void secp256k1_pubkey_save(uint8_t* pubkey, secp256k1_ge* ge);
+// Глобальная переменная для таблицы (устанавливается из host кода)
+extern __device__ const secp256k1_ge_storage* d_gTable_ptr;
+
 __device__ void secp256k1_ecmult_gen(secp256k1_gej* r, secp256k1_scalar* gn);
 __device__ int secp256k1_ec_pubkey_create(uint8_t* pubkey, const uint8_t* seckey);

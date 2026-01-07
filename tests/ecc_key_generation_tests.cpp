@@ -4,6 +4,8 @@
 #include "util/bitcoin_utils.h"
 #include "util/crypto_util.h"
 #include "util/utils.h"
+#include "util/secp256k1.h"
+#include "util/address_util.h"
 
 #include "cuda/ecc.cuh"
 #include "cuda/defines.h"
@@ -30,18 +32,18 @@ TEST_CASE("check private key generation")
         {
             uint32_t msg[16]{};
             uint32_t digest[8]{};
-            msg[0] = SWAP32(privateXPart);
-            msg[1] = SWAP32(i + (iteration * keysNumberPerIteration));
+            // sha256PrivateKeyBase использует little-endian формат
+            msg[0] = privateXPart;
+            msg[1] = i + (iteration * keysNumberPerIteration);
             msg[2] = 0x80000000;
             msg[15] = 8 * sizeof(uint2);
             crypto::sha256Init(digest);
             crypto::sha256(msg, digest);
-            std::array<uint32_t, 8> actualSha256{};
-            std::ranges::transform(digest, actualSha256.data(), utils::endian);
+            // digest уже в little-endian формате
             const auto p = h_privateKeys[i];
             for (uint32_t k = 0; k < 8; ++k)
             {
-                REQUIRE(actualSha256[k] == utils::endian(p.v[k]));
+                REQUIRE(digest[k] == p.v[k]);
             }
         }
     }
@@ -49,7 +51,175 @@ TEST_CASE("check private key generation")
 
 TEST_CASE("check public key generation")
 {
-    printf("TODO: add tests for checking public keys");
+    // Тестовые векторы: приватный ключ -> ожидаемый hash160
+    struct TestVector
+    {
+        std::string privateKeyHex;
+        std::string expectedHash160Uncompressed;
+        std::string expectedHash160Compressed;
+    };
+    
+    std::vector<TestVector> testVectors = {
+        {"0100000000000000000000000000000000000000000000000000000000000000", 
+         "8e7682b1c4af85f1ecd61ab2288be0d54d0444df", 
+         "60afcdec519698a263417ddfe7cea936737a0ee7"},
+        {"0100000000000000000000000000000000000000000000000000000000000200", 
+         "9f26a1af08f366906410ccdfca03d79f7e414eab", 
+         "0ea31dba6f1a8ae6499943d5581bf88e274881be"},
+    };
+
+    // Проверяем CPU реализацию (эталон)
+    for (const auto& test : testVectors)
+    {
+        secp256k1::uint256 privateKey(test.privateKeyHex);
+        const auto cpuPublicKey = secp256k1::multiplyPoint(privateKey, secp256k1::G());
+        
+        uint32_t cpuXWords[8]{};
+        uint32_t cpuYWords[8]{};
+        cpuPublicKey.x.exportWords(cpuXWords, 8, secp256k1::uint256::BigEndian);
+        cpuPublicKey.y.exportWords(cpuYWords, 8, secp256k1::uint256::BigEndian);
+
+        uint32_t cpuHash160Uncompressed[5]{};
+        uint32_t cpuHash160Compressed[5]{};
+        Hash::hashPublicKey(cpuXWords, cpuYWords, cpuHash160Uncompressed);
+        Hash::hashPublicKeyCompressed(cpuXWords, cpuYWords, cpuHash160Compressed);
+        
+        uint32_t cpuHash160UncompressedLE[5]{};
+        uint32_t cpuHash160CompressedLE[5]{};
+        std::ranges::transform(cpuHash160Uncompressed, cpuHash160UncompressedLE, utils::endian);
+        std::ranges::transform(cpuHash160Compressed, cpuHash160CompressedLE, utils::endian);
+
+        const std::string cpuHash160UncompressedStr = utils::toHex(cpuHash160UncompressedLE, 5);
+        const std::string cpuHash160CompressedStr = utils::toHex(cpuHash160CompressedLE, 5);
+
+        std::cout << "\nPrivate Key: " << test.privateKeyHex << std::endl;
+        std::cout << "Expected Hash160 (uncompressed): " << test.expectedHash160Uncompressed << std::endl;
+        std::cout << "CPU Hash160 (uncompressed):      " << cpuHash160UncompressedStr << std::endl;
+        std::cout << "Expected Hash160 (compressed):   " << test.expectedHash160Compressed << std::endl;
+        std::cout << "CPU Hash160 (compressed):        " << cpuHash160CompressedStr << std::endl;
+
+        REQUIRE(cpuHash160UncompressedStr == test.expectedHash160Uncompressed);
+        REQUIRE(cpuHash160CompressedStr == test.expectedHash160Compressed);
+    }
+    
+    std::cout << "\n✓ CPU public key generation is correct" << std::endl;
+}
+
+TEST_CASE("check CUDA public key generation")
+{
+    std::cout << "\n=== Testing CUDA hash160 generation ===" << std::endl;
+    
+    // Инициализируем CUDA ECC
+    std::unique_ptr<ECC> cuEcc(std::make_unique<ECC>());
+    cuEcc->init(1, PointCompressionType::BOTH, 0, 256); // 1 точка на поток для простоты
+    
+    // Генерируем приватные ключи через CUDA (как в реальном использовании)
+    const uint32_t privateXPart = 1;
+    const uint32_t iteration = 0;
+    cuEcc->generatePrivateKeysForXPerIteration(privateXPart, iteration);
+    
+    // Получаем приватные ключи из CUDA
+    std::vector<uint256_t> h_privateKeys;
+    cuEcc->getPrivateKeys(h_privateKeys);
+    
+    REQUIRE(h_privateKeys.size() > 0);
+    
+    // Генерируем публичные ключи через CUDA
+    cuEcc->calculatePublicKeysAndCheckHash160();
+    
+    // Получаем публичные ключи из CUDA
+    std::vector<uint256_t> h_publicKeysX, h_publicKeysY;
+    cuEcc->getPublicKeys(h_publicKeysX, h_publicKeysY);
+    
+    REQUIRE(h_publicKeysX.size() == h_privateKeys.size());
+    REQUIRE(h_publicKeysY.size() == h_privateKeys.size());
+    
+    // Проверяем первые несколько ключей
+    const uint32_t keysToCheck = std::min(static_cast<uint32_t>(h_privateKeys.size()), 10u);
+    
+    for (uint32_t i = 0; i < keysToCheck; ++i)
+    {
+        // Конвертируем CUDA приватный ключ в secp256k1::uint256 для CPU вычисления
+        // CUDA хранит приватный ключ в little-endian формате (v[0] - младшие 32 бита)
+        secp256k1::uint256 cudaPrivateKeyLE;
+        for (int j = 0; j < 8; ++j)
+        {
+            cudaPrivateKeyLE.v[j] = h_privateKeys[i].v[j];
+        }
+        
+        // Вычисляем ожидаемый публичный ключ через CPU
+        // secp256k1::multiplyPoint ожидает приватный ключ в little-endian формате
+        const auto cpuPublicKey = secp256k1::multiplyPoint(cudaPrivateKeyLE, secp256k1::G());
+        uint32_t cpuXWords[8]{};
+        uint32_t cpuYWords[8]{};
+        cpuPublicKey.x.exportWords(cpuXWords, 8, secp256k1::uint256::BigEndian);
+        cpuPublicKey.y.exportWords(cpuYWords, 8, secp256k1::uint256::BigEndian);
+        
+        // Конвертируем CUDA публичный ключ в формат для hash160
+        // CUDA хранит в little-endian (v[0] - младшие 32 бита, v[7] - старшие 32 бита)
+        // Hash::hashPublicKey ожидает big-endian (words[0] - старшие 32 бита, words[7] - младшие 32 бита)
+        // Нужно инвертировать порядок слов и применить endian к каждому слову
+        uint32_t cudaXWords[8]{};
+        uint32_t cudaYWords[8]{};
+        for (int j = 0; j < 8; ++j)
+        {
+            cudaXWords[j] = utils::endian(h_publicKeysX[i].v[7 - j]);
+            cudaYWords[j] = utils::endian(h_publicKeysY[i].v[7 - j]);
+        }
+        
+        // Вычисляем hash160 через CPU от CUDA публичного ключа
+        uint32_t cudaHash160Uncompressed[5]{};
+        uint32_t cudaHash160Compressed[5]{};
+        Hash::hashPublicKey(cudaXWords, cudaYWords, cudaHash160Uncompressed);
+        Hash::hashPublicKeyCompressed(cudaXWords, cudaYWords, cudaHash160Compressed);
+        
+        // Вычисляем ожидаемый hash160 через CPU
+        uint32_t cpuHash160Uncompressed[5]{};
+        uint32_t cpuHash160Compressed[5]{};
+        Hash::hashPublicKey(cpuXWords, cpuYWords, cpuHash160Uncompressed);
+        Hash::hashPublicKeyCompressed(cpuXWords, cpuYWords, cpuHash160Compressed);
+        
+        // Hash::hashPublicKey возвращает результат в big-endian формате
+        // Конвертируем в little-endian для сравнения (как в CUDA)
+        uint32_t cudaHash160UncompressedLE[5]{};
+        uint32_t cudaHash160CompressedLE[5]{};
+        uint32_t cpuHash160UncompressedLE[5]{};
+        uint32_t cpuHash160CompressedLE[5]{};
+        std::ranges::transform(cudaHash160Uncompressed, cudaHash160UncompressedLE, utils::endian);
+        std::ranges::transform(cudaHash160Compressed, cudaHash160CompressedLE, utils::endian);
+        std::ranges::transform(cpuHash160Uncompressed, cpuHash160UncompressedLE, utils::endian);
+        std::ranges::transform(cpuHash160Compressed, cpuHash160CompressedLE, utils::endian);
+        
+        const std::string cudaHash160UncompressedStr = utils::toHex(cudaHash160UncompressedLE, 5);
+        const std::string cudaHash160CompressedStr = utils::toHex(cudaHash160CompressedLE, 5);
+        const std::string cpuHash160UncompressedStr = utils::toHex(cpuHash160UncompressedLE, 5);
+        const std::string cpuHash160CompressedStr = utils::toHex(cpuHash160CompressedLE, 5);
+        
+        if (i == 0)
+        {
+            std::cout << "\nChecking key #" << i << ":" << std::endl;
+            std::cout << "CPU Public Key X: " << utils::toHex(cpuXWords, 8) << std::endl;
+            std::cout << "CUDA Public Key X: " << utils::toHex(cudaXWords, 8) << std::endl;
+            std::cout << "CPU Hash160 (uncompressed): " << cpuHash160UncompressedStr << std::endl;
+            std::cout << "CUDA Hash160 (uncompressed): " << cudaHash160UncompressedStr << std::endl;
+            std::cout << "CPU Hash160 (compressed): " << cpuHash160CompressedStr << std::endl;
+            std::cout << "CUDA Hash160 (compressed): " << cudaHash160CompressedStr << std::endl;
+        }
+        
+        // Проверяем, что CUDA генерирует правильный публичный ключ
+        // (сравниваем координаты X и Y)
+        for (int j = 0; j < 8; ++j)
+        {
+            REQUIRE(cpuXWords[j] == cudaXWords[j]);
+            REQUIRE(cpuYWords[j] == cudaYWords[j]);
+        }
+        
+        // Проверяем, что CUDA генерирует правильный hash160
+        REQUIRE(cpuHash160UncompressedStr == cudaHash160UncompressedStr);
+        REQUIRE(cpuHash160CompressedStr == cudaHash160CompressedStr);
+    }
+    
+    std::cout << "\n✓ CUDA hash160 generation is correct for " << keysToCheck << " keys!" << std::endl;
 }
 
 TEST_CASE("Openssl extended master key generation tests")

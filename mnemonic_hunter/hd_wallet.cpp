@@ -95,7 +95,7 @@ struct HDWallet::Impl
                 continue;
             }
 
-            SWAP32_HASH160(cudaResults[i].digest, cudaResults[i].digest);
+            // digest уже в правильном формате (little-endian) из CUDA кода
 
             Hash160MnemonicSearchResult result(cudaResults[i], expandedDerivationPaths[cudaResults[i].derivedPathIndex]);
             while (!gContext->mnemonicMasterKeyHash160SearchResultsQueue->push(result))

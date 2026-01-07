@@ -925,23 +925,34 @@ __device__ void secp256k1_pubkey_save(uint8_t* pubkey, secp256k1_ge* ge)
     secp256k1_fe_get_b32(pubkey + 32, &ge->y);
 }
 
+// Глобальная переменная для таблицы (устанавливается из host кода)
+__device__ const secp256k1_ge_storage* d_gTable_ptr;
+
 __device__ void secp256k1_ecmult_gen(secp256k1_gej* r, secp256k1_scalar* gn)
 {
     secp256k1_ge add;
 
     secp256k1_gej_set_infinity(r);
 
+    // Используем window size = 16 бит (как в CudaBrainSecp)
+    // Приватный ключ разбивается на 16 частей по 16 бит
     #pragma unroll
-    for (uint32_t j = 0; j < ECMULT_GEN_PREC_N; ++j)
+    for (uint32_t chunk = 0; chunk < ECMULT_GEN_PREC_N; ++chunk)
     {
-        const uint32_t bits = secp256k1_scalar_get_bits(gn, j * ECMULT_GEN_PREC_B, ECMULT_GEN_PREC_B);
+        // Извлекаем 16 бит из скаляра
+        const uint32_t chunkValue = secp256k1_scalar_get_bits(gn, chunk * ECMULT_GEN_PREC_B, ECMULT_GEN_PREC_B);
         
-        // ПРЯМОЙ ДОСТУП к таблице вместо маскирования всех вариантов
-        // Это убирает 8192 лишних операции маскирования на одно скалярное умножение!
-        secp256k1_ge_from_storage(&add, &prec[j][bits]);
-        
-        // Пропуск нулевых битов экономит ~50% операций (если ~50% битов = 0)
-        if (bits != 0) {
+        // Пропускаем нулевые чанки для экономии операций
+        // Используем проверку, но она не должна вызывать сильный branch divergence,
+        // так как нулевые чанки встречаются редко (вероятность ~1/65536)
+        if (chunkValue != 0)
+        {
+            // Вычисляем индекс в таблице: chunk * 65536 + (chunkValue - 1)
+            // chunkValue - 1 потому что значения в таблице начинаются с 1, а не с 0
+            const uint32_t tableIndex = chunk * ECMULT_GEN_PREC_G + (chunkValue - 1);
+            
+            // Читаем точку из global memory
+            secp256k1_ge_from_storage(&add, &d_gTable_ptr[tableIndex]);
             secp256k1_gej_add_ge(r, r, &add);
         }
     }

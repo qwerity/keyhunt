@@ -12,12 +12,8 @@ __device__ __forceinline__ void hashPublicKey(const uint256_t& x, const uint256_
     uint256_t hash;
     sha256PublicKey(x, y, hash);
 
-    // Swap to little-endian
-    #pragma unroll
-    for (uint32_t i = 0; i < 8; ++i)
-    {
-        hash[i] = SWAP32(hash[i]);
-    }
+    // sha256PublicKey возвращает результат в little-endian формате
+    // ripemd160sha256 ожидает little-endian формат
     ripemd160sha256(hash.v, digestOut);
 }
 
@@ -26,12 +22,8 @@ __device__ __forceinline__ void hashPublicKeyCompressed(const uint256_t& x, cons
     uint256_t hash;
     sha256PublicKeyCompressed(x, yParity, hash);
 
-    // Swap to little-endian
-    #pragma unroll
-    for (uint32_t i = 0; i < 8; ++i)
-    {
-        hash[i] = SWAP32(hash[i]);
-    }
+    // sha256PublicKeyCompressed возвращает результат в little-endian формате
+    // ripemd160sha256 ожидает little-endian формат
     ripemd160sha256(hash.v, digestOut);
 }
 
@@ -43,15 +35,25 @@ __device__ __forceinline__ void setResultFound(const uint32_t idx, const bool co
     r.idx = idx;
     r.compressed = compressed;
 
-    auto* privateKeyU = reinterpret_cast<const uint32_t*>(privateKey);
-
-    #pragma unroll
-    for (uint32_t i = 0; i < 8; ++i)
+    // privateKey приходит в формате secp256k1 (big-endian байты)
+    // Конвертируем в uint256_t формат (little-endian слова)
+    const uint8_t* src = privateKey;
+    for (int i = 0; i < 8; ++i)
     {
-        r.privateKey[i] = SWAP32(privateKeyU[i]);
+        const int byte_idx = 7 - i; // Инвертируем порядок слов
+        r.privateKey[i] = (static_cast<uint32_t>(src[byte_idx * 4 + 0]) << 24) |
+                         (static_cast<uint32_t>(src[byte_idx * 4 + 1]) << 16) |
+                         (static_cast<uint32_t>(src[byte_idx * 4 + 2]) << 8) |
+                         (static_cast<uint32_t>(src[byte_idx * 4 + 3]));
     }
 
-    SWAP32_HASH160(digest, r.digest);
+    // digest приходит в little-endian формате (из ripemd160sha256)
+    // Копируем как есть
+    #pragma unroll
+    for (uint32_t i = 0; i < 5; ++i)
+    {
+        r.digest[i] = digest[i];
+    }
 
     atomicListAdd(&r, sizeof(r));
 }

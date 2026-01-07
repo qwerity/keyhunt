@@ -2,10 +2,11 @@
 
 #include <cstdint>
 
-#define ECMULT_GEN_PREC_BITS 2
+// Используем window size = 16 бит (как в CudaBrainSecp) для уменьшения итераций с 128 до 16
+#define ECMULT_GEN_PREC_BITS 16
 #define ECMULT_GEN_PREC_B ECMULT_GEN_PREC_BITS
-#define ECMULT_GEN_PREC_G (1 << ECMULT_GEN_PREC_B)
-#define ECMULT_GEN_PREC_N (256 / ECMULT_GEN_PREC_B)
+#define ECMULT_GEN_PREC_G (1 << ECMULT_GEN_PREC_B)  // 65536 значений на чанк
+#define ECMULT_GEN_PREC_N (256 / ECMULT_GEN_PREC_B)  // 16 чанков
 //#define ECMULT_WINDOW_SIZE 15
 //#define WINDOW_A 5
 //#define WINDOW_G ECMULT_WINDOW_SIZE

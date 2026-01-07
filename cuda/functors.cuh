@@ -18,8 +18,9 @@ struct PrivateKeyForXWithRandomYFunctor
     uint256_t operator()(const uint32_t& i) const
     {
         uint2 p;
-        p.x = SWAP32(xPart);
-        p.y = SWAP32(i + yPartIncrementBy);
+        // sha256PrivateKeyBase ожидает little-endian формат
+        p.x = xPart;
+        p.y = i + yPartIncrementBy;
         //p.y = 0; // For test
 
         uint256_t digest;

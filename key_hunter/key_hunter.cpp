@@ -102,7 +102,7 @@ struct KeyHunter::Impl
                 continue;
             }
 
-            SWAP32_HASH160(results[i].digest, results[i].digest);
+            // digest уже в правильном формате (little-endian) из CUDA кода
 
             results[i].iteration = iteration;
             results[i].privateXPart = privateXPart;
@@ -122,8 +122,6 @@ struct KeyHunter::Impl
         {
             BOOST_LOG_TRIVIAL(trace) << "False positives count: " << falsePositiveCount;
         }
-
-        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] pushResultsToQueue: {} ms", cudaInfo.id, t.elapsedMs());
     }
 
     void startSearchPublicHashWithPrivateDefinedXRandomY(const uint32_t privateXPart) const
@@ -147,11 +145,9 @@ struct KeyHunter::Impl
             {
                 utils::Timer t;
                 cuECC->generatePrivateKeysForXPerIteration(privateXPart, iteration);
-                BOOST_LOG_TRIVIAL(trace) << std::format("[{}] generatePrivateKeysForXPerIteration: {} ms", cudaInfo.id, t.elapsedMs());
 
                 t.start();
                 cuECC->calculatePublicKeysAndCheckHash160();
-                BOOST_LOG_TRIVIAL(trace) << std::format("[{}] calculatePublicKeysAndCheckHash160: {} ms", cudaInfo.id, t.elapsedMs());
             }
             //const uint64_t nextY = iteration * cuECC->getMnemonicsPerIteration() + 1;
             /// TODO(ksh): to be used later

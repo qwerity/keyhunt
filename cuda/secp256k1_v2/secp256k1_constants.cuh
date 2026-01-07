@@ -4,7 +4,11 @@
 
 __constant__ constexpr secp256k1_fe fe_1 = SECP256K1_FE_CONST(0, 0, 0, 0, 0, 0, 0, 1);
 
-__constant__ constexpr secp256k1_ge_storage prec[ECMULT_GEN_PREC_N][ECMULT_GEN_PREC_G] =
+// Старая таблица для window size = 2 бита больше не используется
+// Теперь используем таблицу в global memory с window size = 16 бит
+// Старая таблица закомментирована, так как размеры изменились
+/*
+__constant__ constexpr secp256k1_ge_storage prec[128][4] =
 {
     {
         SECP256K1_GE_STORAGE_CONST(983487347u, 1861041900u, 2599115456u, 565528146u, 1451326239u, 148794576u, 4224640328u, 3120843701u, 2076989736u, 3184115747u, 3754320824u, 2656004457u, 2876577688u, 2388659905u, 3527541004u, 1170708298u),
@@ -775,3 +779,4 @@ __constant__ constexpr secp256k1_ge_storage prec[ECMULT_GEN_PREC_N][ECMULT_GEN_P
         SECP256K1_GE_STORAGE_CONST(3408457434u, 864702600u, 229967322u, 2493308402u, 1948124958u, 932156145u, 3686409998u, 2620533847u, 3649878625u, 3438060863u, 2105857823u, 4170365282u, 1864819030u, 2216504827u, 2058008633u, 1062295811u)
     }
 };
+*/

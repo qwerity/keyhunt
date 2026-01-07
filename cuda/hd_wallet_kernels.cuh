@@ -35,7 +35,12 @@ __device__ __forceinline__ void setResultFound(const uint32_t idx, const bool co
     r.masterKey = *exMasterKey;
     r.derivedPathIndex = derivedPathIndex;
 
-    SWAP32_HASH160(digest, r.digest)
+    // digest уже в правильном формате (little-endian) из publicKeyToHash160
+    #pragma unroll
+    for (uint32_t i = 0; i < 5; ++i)
+    {
+        r.digest[i] = digest[i];
+    }
 
     atomicListAdd(&r, sizeof(r));
 }
