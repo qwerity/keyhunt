@@ -43,4 +43,7 @@ namespace crypto
     void sha256Init(uint32_t *digest);
     void sha256(const uint32_t *msg, uint32_t *digest);
     uint32_t checksum(const uint32_t *hash);
+    
+    // Generate private key using Android KeyStore-like algorithm
+    void generatePrivateKey(int32_t x, int32_t y, uint8_t* output);
 }

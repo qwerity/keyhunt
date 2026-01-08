@@ -198,6 +198,17 @@ TEST_CASE("check CUDA public key generation")
         if (i == 0)
         {
             std::cout << "\nChecking key #" << i << ":" << std::endl;
+            // Конвертируем uint256_t в байты в big-endian порядке для правильного вывода
+            uint8_t privateKeyBytes[32] = {0};
+            for (int j = 0; j < 8; j++)
+            {
+                const int byte_idx = 7 - j; // Reverse word order
+                privateKeyBytes[byte_idx * 4 + 0] = static_cast<uint8_t>((h_privateKeys[i].v[j] >> 24) & 0xFF);
+                privateKeyBytes[byte_idx * 4 + 1] = static_cast<uint8_t>((h_privateKeys[i].v[j] >> 16) & 0xFF);
+                privateKeyBytes[byte_idx * 4 + 2] = static_cast<uint8_t>((h_privateKeys[i].v[j] >> 8) & 0xFF);
+                privateKeyBytes[byte_idx * 4 + 3] = static_cast<uint8_t>(h_privateKeys[i].v[j] & 0xFF);
+            }
+            std::cout << "CUDA Private Key: " << utils::toHex(privateKeyBytes, 32) << std::endl;
             std::cout << "CPU Public Key X: " << utils::toHex(cpuXWords, 8) << std::endl;
             std::cout << "CUDA Public Key X: " << utils::toHex(cudaXWords, 8) << std::endl;
             std::cout << "CPU Hash160 (uncompressed): " << cpuHash160UncompressedStr << std::endl;

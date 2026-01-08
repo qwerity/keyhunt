@@ -66,3 +66,14 @@ set_target_properties(cuda_secp256k1_v2_test PROPERTIES
 )
 
 ####################################################################################################################################################################################
+add_executable(generate_private_key_test generate_private_key_test.cu)
+target_link_libraries(generate_private_key_test PRIVATE util)
+target_link_libraries(generate_private_key_test PRIVATE ecc_cuda)
+set_target_properties(generate_private_key_test PROPERTIES
+    CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    CUDA_SEPARABLE_COMPILATION ON
+)
+
+add_test(NAME generate_private_key_test COMMAND generate_private_key_test)
+
+####################################################################################################################################################################################

@@ -3,6 +3,7 @@
 #include "defines.cuh"
 #include "defines.h"
 #include "sha256.cuh"
+#include "sha1.cuh"
 
 #include <curand_kernel.h>
 
@@ -18,13 +19,12 @@ struct PrivateKeyForXWithRandomYFunctor
     uint256_t operator()(const uint32_t& i) const
     {
         uint2 p;
-        // sha256PrivateKeyBase ожидает little-endian формат
         p.x = xPart;
         p.y = i + yPartIncrementBy;
         //p.y = 0; // For test
 
         uint256_t digest;
-        sha256PrivateKeyBase(p, digest);
+        generatePrivateKeyBase(p, digest);
 
         return digest;
     }
