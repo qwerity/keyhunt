@@ -77,3 +77,9 @@ set_target_properties(generate_private_key_test PROPERTIES
 add_test(NAME generate_private_key_test COMMAND generate_private_key_test)
 
 ####################################################################################################################################################################################
+add_executable(hash160_file_test hash160_file_test.cpp)
+target_link_libraries(hash160_file_test PRIVATE util)
+target_link_libraries(hash160_file_test PRIVATE Boost::log Boost::log_setup Boost::iostreams)
+add_test(NAME hash160_file_test COMMAND hash160_file_test)
+
+####################################################################################################################################################################################

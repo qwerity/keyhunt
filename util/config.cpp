@@ -265,9 +265,14 @@ struct Config::Impl
         if (configJson.contains("forcePrivateXPart") && configJson["forcePrivateXPart"].is_boolean() && configJson["forcePrivateXPart"] == true)
         {
             hunter.forcePrivateXPart = true;
+            // Support both "privateXPart" and "privateX" for backward compatibility
             if (configJson.contains("privateXPart") && configJson["privateXPart"].is_number_unsigned())
             {
                 hunter.privateXPart = configJson["privateXPart"].get<uint32_t>();
+            }
+            else if (configJson.contains("privateX") && configJson["privateX"].is_number_unsigned())
+            {
+                hunter.privateXPart = configJson["privateX"].get<uint32_t>();
             }
         }
 

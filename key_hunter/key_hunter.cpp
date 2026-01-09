@@ -43,8 +43,6 @@ struct KeyHunter::Impl
     void stop()
     {
         stopFlag = true;
-
-        BOOST_LOG_TRIVIAL(trace) << "KeyHunter stopped";
     }
 
     void signalStatusInfo(const uint64_t keysNumberPerIteration, const uint32_t iteration, const uint32_t totalIterations, const uint64_t elapsedTimeMs) const
@@ -95,14 +93,39 @@ struct KeyHunter::Impl
         {
             results[i].cudaDeviceId = cudaInfo.id;
 
-            // recheck the false-positive
-            if (!gContext->hash160Targets.contains(hash160(results[i].digest)))
+            hash160 resultHashLE(results[i].digest);
+            bool found = gContext->hash160Targets.contains(resultHashLE);
+            
+            if (!found)
+            {
+                hash160 resultHashBE;
+                for (uint32_t j = 0; j < 5; ++j)
+                {
+                    resultHashBE.h[j] = ((results[i].digest[j] & 0x000000FF) << 24) |
+                                        ((results[i].digest[j] & 0x0000FF00) << 8) |
+                                        ((results[i].digest[j] & 0x00FF0000) >> 8) |
+                                        ((results[i].digest[j] & 0xFF000000) >> 24);
+                }
+                found = gContext->hash160Targets.contains(resultHashBE);
+                if (found)
+                {
+                    resultHashLE = resultHashBE;
+                }
+            }
+            
+            if (!found)
             {
                 ++falsePositiveCount;
                 continue;
             }
 
-            // digest уже в правильном формате (little-endian) из CUDA кода
+            if (resultHashLE.h[0] != results[i].digest[0])
+            {
+                for (uint32_t j = 0; j < 5; ++j)
+                {
+                    results[i].digest[j] = resultHashLE.h[j];
+                }
+            }
 
             results[i].iteration = iteration;
             results[i].privateXPart = privateXPart;
@@ -118,10 +141,6 @@ struct KeyHunter::Impl
             }
         }
 
-        if (falsePositiveCount)
-        {
-            BOOST_LOG_TRIVIAL(trace) << "False positives count: " << falsePositiveCount;
-        }
     }
 
     void startSearchPublicHashWithPrivateDefinedXRandomY(const uint32_t privateXPart) const
@@ -149,9 +168,6 @@ struct KeyHunter::Impl
                 t.start();
                 cuECC->calculatePublicKeysAndCheckHash160();
             }
-            //const uint64_t nextY = iteration * cuECC->getMnemonicsPerIteration() + 1;
-            /// TODO(ksh): to be used later
-            // gContext->config.setCalculationIteration(iteration);
 
             pushResultsToQueue(privateXPart, keysNumberPerIteration, iteration);
 
@@ -191,22 +207,10 @@ struct KeyHunter::Impl
 
     void startSearchPublicHash()
     {
-        utils::Timer t;
-        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] KeyHunter Thread ID: ", cudaInfo.id) << std::this_thread::get_id();
-
-        // Preparing Public, Private, Results buffers
         hash160Lookup.setTargets(gContext->hash160Targets);
-        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] hash160Lookup.setTargets: {} ms", cudaInfo.id, t.elapsedMs());
-
-        t.start();
         resultAtomicList.init(sizeof(Hash160SearchResult), 256);
-        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] resultAtomicList.init: {} ms", cudaInfo.id, t.elapsedMs());
-
-        t.start();
         cuECC->init(gContext->config.pointsPerThread(), gContext->config.publicKeyCompressionTypeToCheck(), gContext->config.gridSize(), gContext->config.blockSize());
-        BOOST_LOG_TRIVIAL(trace) << std::format("[{}] init: {} ms", cudaInfo.id, t.elapsedMs());
 
-        // Getting from http service the next private key x part, generating public and checking targets hashes
         do
         {
             const uint32_t privateXPart = getPrivateXPart();
@@ -215,7 +219,6 @@ struct KeyHunter::Impl
 
             startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
 
-            // if it is not test we are setting search over privateXPart done
             if (!gContext->config.devMode())
             {
                 const std::string postString = std::format("markXPartDone for privateXPart: {}", privateXPart);
@@ -225,7 +228,7 @@ struct KeyHunter::Impl
                 BOOST_LOG_TRIVIAL(fatal) << postString;
             }
         }
-        while (!stopFlag && !gContext->config.hunter().forcePrivateXPart); // if force private X part is set, one iteration is enough
+        while (!stopFlag && !gContext->config.hunter().forcePrivateXPart);
     }
 };
 

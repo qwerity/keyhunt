@@ -24,7 +24,6 @@ void statusCallback(const StatusInfo& info)
         , info.iteration, info.totalIterations
         , speedStr, totalStr, timeStr);
 
-    // fprintf(stderr, "\r%s", statusStr.c_str());
     BOOST_LOG_TRIVIAL(fatal) << statusStr;
 }
 
@@ -92,6 +91,7 @@ int main()
         BOOST_LOG_TRIVIAL(info) << "Stopping application as hash160 targets are not set";
         return 2;
     }
+    BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "Loaded {:L} hash160 targets", context->hash160Targets.size());
 
     // Start generation checking and results processing
     const ResultsProcessor resultProcessor(context);

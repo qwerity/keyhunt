@@ -9,27 +9,7 @@ extern __constant__ uint32_t d_pointsPerThread;
 extern __constant__ uint256_t *d_publicKeyXPtr;
 extern __constant__ uint256_t *d_publicKeyYPtr;
 
-// Check public key hash160 compressed/uncompressed/both
 __constant__ int d_publicKeyCompressionTypeToCheck{PointCompressionType::BOTH};
-
-__device__ void print(uint256_t& x, uint32_t step, uint32_t idx, char op)
-{
-    if (idx != 0)
-        return;
-
-    printf("op: %c step: %u, idx: %u, x: ", op, step, idx);
-    for (size_t i = 0; i < 8; ++i)
-    {
-        // Print the 4 bytes of each uint32_t directly
-        printf("%02x %02x %02x %02x ",
-               (x[i] & 0x000000FF),        // Least significant byte
-               (x[i] & 0x0000FF00) >> 8,   // Second byte
-               (x[i] & 0x00FF0000) >> 16,  // Third byte
-               (x[i] & 0xFF000000) >> 24   // Most significant byte
-        );
-    }
-    printf("\n");
-}
 
 __global__ void checkHashKernel(const uint256_t *privateKeys)
 {
@@ -53,7 +33,17 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
 
         if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
         {
-            hashPublicKeyCompressed(publicX, readUInt256LSW(d_publicKeyYPtr, i), hash160.h);
+            uint256_t sha256Digest;
+            sha256PublicKeyCompressed(publicX, readUInt256LSW(d_publicKeyYPtr, i), sha256Digest);
+            uint32_t swapped[8];
+            #pragma unroll
+            for (int j = 0; j < 8; ++j)
+            {
+                uint32_t x = sha256Digest.v[j];
+                swapped[j] = (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
+            }
+            ripemd160sha256(swapped, hash160.h);
+            
             if (checkHash(hash160))
             {
                 setResultFound(index, true, privateKey, hash160.h);
@@ -64,7 +54,17 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
         {
             readUInt256(d_publicKeyYPtr, i, publicY);
 
-            hashPublicKey(publicX, publicY, hash160.h);
+            uint256_t sha256Digest;
+            sha256PublicKey(publicX, publicY, sha256Digest);
+            uint32_t swapped[8];
+            #pragma unroll
+            for (int j = 0; j < 8; ++j)
+            {
+                uint32_t x = sha256Digest.v[j];
+                swapped[j] = (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
+            }
+            ripemd160sha256(swapped, hash160.h);
+            
             if (checkHash(hash160))
             {
                 setResultFound(index, false, privateKey, hash160.h);
@@ -73,16 +73,9 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
     }
 }
 
-// Максимально оптимизированная версия: конвертирует uint256_t напрямую в формат для secp256k1_scalar_set_b32
-// Использует прямой доступ к памяти и развернутые циклы для максимальной производительности
 __device__ __forceinline__ void uint256_to_secp256k1_bytes_optimized(const uint256_t& src, uint8_t* dst)
 {
-    // secp256k1_scalar_set_b32 ожидает big-endian байты: b32[0] - старший байт, b32[31] - младший байт
-    // uint256_t хранит little-endian: v[0] - младшие 32 бита, v[7] - старшие 32 бита
-    // Разворачиваем цикл полностью для максимальной производительности
     const uint32_t* v = src.v;
-    
-    // v[7] -> dst[0..3] (старшие байты)
     const uint32_t w7 = v[7];
     dst[0] = static_cast<uint8_t>(w7 >> 24);
     dst[1] = static_cast<uint8_t>(w7 >> 16);
@@ -131,7 +124,6 @@ __device__ __forceinline__ void uint256_to_secp256k1_bytes_optimized(const uint2
     dst[26] = static_cast<uint8_t>(w1 >> 8);
     dst[27] = static_cast<uint8_t>(w1);
     
-    // v[0] -> dst[28..31] (младшие байты)
     const uint32_t w0 = v[0];
     dst[28] = static_cast<uint8_t>(w0 >> 24);
     dst[29] = static_cast<uint8_t>(w0 >> 16);
@@ -139,103 +131,82 @@ __device__ __forceinline__ void uint256_to_secp256k1_bytes_optimized(const uint2
     dst[31] = static_cast<uint8_t>(w0);
 }
 
-// Максимально оптимизированная версия: конвертирует результат secp256k1 напрямую в uint256_t
-// Использует прямой доступ к памяти и развернутые циклы для максимальной производительности
 __device__ __forceinline__ void secp256k1_bytes_to_uint256_optimized(const uint8_t* src, uint256_t& dst)
 {
-    // secp256k1_pubkey_save возвращает big-endian байты: src[0] - старший байт, src[31] - младший байт
-    // uint256_t хранит little-endian: v[0] - младшие 32 бита, v[7] - старшие 32 бита
-    // Разворачиваем цикл полностью для максимальной производительности
     uint32_t* v = dst.v;
-    
-    // src[28..31] -> v[0] (младшие байты, инвертируем порядок байтов)
-    v[0] = (static_cast<uint32_t>(src[31]) << 24) |
-           (static_cast<uint32_t>(src[30]) << 16) |
-           (static_cast<uint32_t>(src[29]) << 8) |
-           (static_cast<uint32_t>(src[28]));
-    
-    // src[24..27] -> v[1]
-    v[1] = (static_cast<uint32_t>(src[27]) << 24) |
-           (static_cast<uint32_t>(src[26]) << 16) |
-           (static_cast<uint32_t>(src[25]) << 8) |
-           (static_cast<uint32_t>(src[24]));
-    
-    // src[20..23] -> v[2]
-    v[2] = (static_cast<uint32_t>(src[23]) << 24) |
-           (static_cast<uint32_t>(src[22]) << 16) |
-           (static_cast<uint32_t>(src[21]) << 8) |
-           (static_cast<uint32_t>(src[20]));
-    
-    // src[16..19] -> v[3]
-    v[3] = (static_cast<uint32_t>(src[19]) << 24) |
-           (static_cast<uint32_t>(src[18]) << 16) |
-           (static_cast<uint32_t>(src[17]) << 8) |
-           (static_cast<uint32_t>(src[16]));
-    
-    // src[12..15] -> v[4]
-    v[4] = (static_cast<uint32_t>(src[15]) << 24) |
-           (static_cast<uint32_t>(src[14]) << 16) |
-           (static_cast<uint32_t>(src[13]) << 8) |
-           (static_cast<uint32_t>(src[12]));
-    
-    // src[8..11] -> v[5]
-    v[5] = (static_cast<uint32_t>(src[11]) << 24) |
-           (static_cast<uint32_t>(src[10]) << 16) |
-           (static_cast<uint32_t>(src[9]) << 8) |
-           (static_cast<uint32_t>(src[8]));
+    v[7] = (static_cast<uint32_t>(src[0]) << 24) |
+           (static_cast<uint32_t>(src[1]) << 16) |
+           (static_cast<uint32_t>(src[2]) << 8) |
+           (static_cast<uint32_t>(src[3]));
     
     // src[4..7] -> v[6]
-    v[6] = (static_cast<uint32_t>(src[7]) << 24) |
-           (static_cast<uint32_t>(src[6]) << 16) |
-           (static_cast<uint32_t>(src[5]) << 8) |
-           (static_cast<uint32_t>(src[4]));
+    v[6] = (static_cast<uint32_t>(src[4]) << 24) |
+           (static_cast<uint32_t>(src[5]) << 16) |
+           (static_cast<uint32_t>(src[6]) << 8) |
+           (static_cast<uint32_t>(src[7]));
     
-    // src[0..3] -> v[7] (старшие байты, инвертируем порядок байтов)
-    v[7] = (static_cast<uint32_t>(src[3]) << 24) |
-           (static_cast<uint32_t>(src[2]) << 16) |
-           (static_cast<uint32_t>(src[1]) << 8) |
-           (static_cast<uint32_t>(src[0]));
+    // src[8..11] -> v[5]
+    v[5] = (static_cast<uint32_t>(src[8]) << 24) |
+           (static_cast<uint32_t>(src[9]) << 16) |
+           (static_cast<uint32_t>(src[10]) << 8) |
+           (static_cast<uint32_t>(src[11]));
+    
+    // src[12..15] -> v[4]
+    v[4] = (static_cast<uint32_t>(src[12]) << 24) |
+           (static_cast<uint32_t>(src[13]) << 16) |
+           (static_cast<uint32_t>(src[14]) << 8) |
+           (static_cast<uint32_t>(src[15]));
+    
+    // src[16..19] -> v[3]
+    v[3] = (static_cast<uint32_t>(src[16]) << 24) |
+           (static_cast<uint32_t>(src[17]) << 16) |
+           (static_cast<uint32_t>(src[18]) << 8) |
+           (static_cast<uint32_t>(src[19]));
+    
+    // src[20..23] -> v[2]
+    v[2] = (static_cast<uint32_t>(src[20]) << 24) |
+           (static_cast<uint32_t>(src[21]) << 16) |
+           (static_cast<uint32_t>(src[22]) << 8) |
+           (static_cast<uint32_t>(src[23]));
+    
+    // src[24..27] -> v[1]
+    v[1] = (static_cast<uint32_t>(src[24]) << 24) |
+           (static_cast<uint32_t>(src[25]) << 16) |
+           (static_cast<uint32_t>(src[26]) << 8) |
+           (static_cast<uint32_t>(src[27]));
+    
+    v[0] = (static_cast<uint32_t>(src[28]) << 24) |
+           (static_cast<uint32_t>(src[29]) << 16) |
+           (static_cast<uint32_t>(src[30]) << 8) |
+           (static_cast<uint32_t>(src[31]));
 }
 
 __global__ void publicKeyGenerationKernel(const uint256_t *privateKeys)
 {
-    // Оптимизация: используем batch normalization если d_pointsPerThread <= 16
-    // Это позволяет нормализовать несколько точек одновременно, используя batch inversion
     constexpr uint32_t MAX_BATCH_SIZE = 16;
     
     if (d_pointsPerThread <= MAX_BATCH_SIZE)
     {
-        // Batch mode: собираем все точки в якобиановых координатах, затем нормализуем batch'ом
         secp256k1_gej points[MAX_BATCH_SIZE];
         secp256k1_ge normalized_points[MAX_BATCH_SIZE];
         
-        // Шаг 1: Вычислить все точки в якобиановых координатах (без нормализации)
-        // Примечание: #pragma unroll не работает для динамических циклов (d_pointsPerThread - runtime значение)
-        // Компилятор может оптимизировать цикл автоматически через loop unrolling для небольших значений
         for(uint32_t i = 0; i < d_pointsPerThread; ++i)
         {
             HDExtendedPrivateKey privateExKey;
             uint256_t privateKey;
             readUInt256(privateKeys, i, privateKey);
             
-            // Оптимизированная конвертация: используем inline функции с #pragma unroll
             uint256_to_secp256k1_bytes_optimized(privateKey, privateExKey.key);
-            
-            // Вычислить точку в якобиановых координатах (без нормализации)
             secp256k1_ec_pubkey_create_gej(&points[i], &privateExKey.key[0]);
         }
         
-        // Шаг 2: Нормализовать все точки batch'ом (1 инверсия вместо N)
         secp256k1_ge_set_gej_batch(normalized_points, points, d_pointsPerThread);
         
-        // Шаг 3: Сохранить результаты
         for(uint32_t i = 0; i < d_pointsPerThread; ++i)
         {
-            // Конвертировать нормализованные точки в формат для сохранения
             uint8_t pubkey[64];
             secp256k1_pubkey_save(pubkey, &normalized_points[i]);
             
-            // Оптимизированная конвертация результата
             uint256_t newX, newY;
             secp256k1_bytes_to_uint256_optimized(pubkey, newX);
             secp256k1_bytes_to_uint256_optimized(pubkey + 32, newY);
@@ -246,15 +217,12 @@ __global__ void publicKeyGenerationKernel(const uint256_t *privateKeys)
     }
     else
     {
-        // Fallback: обычный метод для больших batch'ей (когда d_pointsPerThread > 16)
-        // Разбиваем на батчи по 16 элементов
         for(uint32_t batchStart = 0; batchStart < d_pointsPerThread; batchStart += MAX_BATCH_SIZE)
         {
             const uint32_t batchSize = (MAX_BATCH_SIZE < (d_pointsPerThread - batchStart)) ? MAX_BATCH_SIZE : (d_pointsPerThread - batchStart);
             secp256k1_gej points[MAX_BATCH_SIZE];
             secp256k1_ge normalized_points[MAX_BATCH_SIZE];
             
-            // Вычислить точки в текущем батче
             for(uint32_t i = 0; i < batchSize; ++i)
             {
                 HDExtendedPrivateKey privateExKey;
@@ -265,10 +233,8 @@ __global__ void publicKeyGenerationKernel(const uint256_t *privateKeys)
                 secp256k1_ec_pubkey_create_gej(&points[i], &privateExKey.key[0]);
             }
             
-            // Нормализовать batch'ом
             secp256k1_ge_set_gej_batch(normalized_points, points, batchSize);
             
-            // Сохранить результаты
             for(uint32_t i = 0; i < batchSize; ++i)
             {
                 uint8_t pubkey[64];

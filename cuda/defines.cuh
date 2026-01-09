@@ -262,7 +262,7 @@ __device__ __forceinline__ uint32_t readUInt256LSW(const uint256_t *data, const 
     const uint32_t base = depth * totalThreads;
     const uint32_t index = base + threadId;
 
-    return data[index].v[7];
+    return data[index].v[0];
 }
 
 __device__ __forceinline__ void readUInt256(const uint256_t *data, const uint32_t depth, uint256_t& x)

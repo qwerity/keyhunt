@@ -24,16 +24,10 @@ public:
     void calculatePublicKeysAndCheckHash160() const;
     void generatePrivateKeysForXPerIteration(uint32_t privateXPart, uint32_t iteration) const;
 
-    /// TODO(ksh): somehow this function doesn't exported to the lib code, to figure out later
-    /// so disabling this interface for the moment
-    /// void getPrivateKeys(thrust::host_vector<uint256_t>& h_privateKeys) const;
-
     void getPrivateKeys(std::vector<uint256_t>& h_privateKeys) const;
     
-    // Для тестирования: получить публичные ключи
     void getPublicKeys(std::vector<uint256_t>& h_publicKeysX, std::vector<uint256_t>& h_publicKeysY) const;
     
-    // Для тестирования: установить приватные ключи напрямую
     void setPrivateKeys(const std::vector<uint256_t>& h_privateKeys) const;
 
 private:

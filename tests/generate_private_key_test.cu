@@ -305,8 +305,43 @@ TEST_CASE("Test hash160 for (1, 1)")
     std::ranges::transform(hash160Uncompressed, hash160UncompressedLE, utils::endian);
     std::ranges::transform(hash160Compressed, hash160CompressedLE, utils::endian);
     
-    std::cout << "Hash160 (uncompressed): " << utils::toHex(hash160UncompressedLE, 5) << std::endl;
-    std::cout << "Hash160 (compressed):   " << utils::toHex(hash160CompressedLE, 5) << std::endl;
+    std::cout << "\n--- Hash160 Formats ---" << std::endl;
+    std::cout << "Uncompressed (big-endian words, little-endian bytes): " << utils::toHex(hash160UncompressedLE, 5) << std::endl;
+    std::cout << "Compressed (big-endian words, little-endian bytes):   " << utils::toHex(hash160CompressedLE, 5) << std::endl;
+    
+    // Выводим также в формате, как хранится в структуре hash160 (little-endian слова)
+    hash160 hash160UncompressedStruct;
+    hash160 hash160CompressedStruct;
+    for (int i = 0; i < 5; ++i)
+    {
+        hash160UncompressedStruct.h[i] = hash160UncompressedLE[i];
+        hash160CompressedStruct.h[i] = hash160CompressedLE[i];
+    }
+    
+    std::cout << "\n--- Hash160 in hash160 struct format (little-endian words) ---" << std::endl;
+    std::cout << "Uncompressed struct format: " << utils::toHex(hash160UncompressedStruct.h, 5) << std::endl;
+    std::cout << "Compressed struct format:   " << utils::toHex(hash160CompressedStruct.h, 5) << std::endl;
+    
+    // Выводим также в формате big-endian слов (как может быть в файле)
+    std::cout << "\n--- Hash160 in big-endian word format (as might be in file) ---" << std::endl;
+    std::cout << "Uncompressed (big-endian words): " << utils::toHex(hash160Uncompressed, 5) << std::endl;
+    std::cout << "Compressed (big-endian words):   " << utils::toHex(hash160Compressed, 5) << std::endl;
+    
+    // Выводим внутреннее представление для диагностики
+    std::cout << "\n--- Internal representation (uint32_t array) ---" << std::endl;
+    std::cout << "Uncompressed LE words: ";
+    for (int i = 0; i < 5; ++i)
+    {
+        std::cout << std::format("{:08x} ", hash160UncompressedLE[i]);
+    }
+    std::cout << std::endl;
+    
+    std::cout << "Compressed LE words:   ";
+    for (int i = 0; i < 5; ++i)
+    {
+        std::cout << std::format("{:08x} ", hash160CompressedLE[i]);
+    }
+    std::cout << std::endl;
     
     std::cout << "\n✓ Hash160 test for (1, 1) completed!" << std::endl;
 }
