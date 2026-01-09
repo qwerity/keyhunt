@@ -297,11 +297,4 @@ __device__ __forceinline__ void ripemd160sha256(const uint32_t x[8], uint32_t di
     digest[2] = RIPEMD160_IV3 + e1 + a2;
     digest[3] = RIPEMD160_IV4 + a1 + b2;
     digest[4] = RIPEMD160_IV0 + b1 + c2;
-
-    #pragma unroll
-    for (int i = 0; i < 5; ++i)
-    {
-        uint32_t x = digest[i];
-        digest[i] = (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
-    }
 }

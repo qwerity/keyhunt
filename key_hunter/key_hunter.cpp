@@ -93,25 +93,15 @@ struct KeyHunter::Impl
         {
             results[i].cudaDeviceId = cudaInfo.id;
 
-            hash160 resultHashLE(results[i].digest);
-            bool found = gContext->hash160Targets.contains(resultHashLE);
-            
-            if (!found)
+            hash160 resultHashBE;
+            for (uint32_t j = 0; j < 5; ++j)
             {
-                hash160 resultHashBE;
-                for (uint32_t j = 0; j < 5; ++j)
-                {
-                    resultHashBE.h[j] = ((results[i].digest[j] & 0x000000FF) << 24) |
-                                        ((results[i].digest[j] & 0x0000FF00) << 8) |
-                                        ((results[i].digest[j] & 0x00FF0000) >> 8) |
-                                        ((results[i].digest[j] & 0xFF000000) >> 24);
-                }
-                found = gContext->hash160Targets.contains(resultHashBE);
-                if (found)
-                {
-                    resultHashLE = resultHashBE;
-                }
+                resultHashBE.h[j] = ((results[i].digest[j] & 0x000000FF) << 24) |
+                                    ((results[i].digest[j] & 0x0000FF00) << 8) |
+                                    ((results[i].digest[j] & 0x00FF0000) >> 8) |
+                                    ((results[i].digest[j] & 0xFF000000) >> 24);
             }
+            bool found = gContext->hash160Targets.contains(resultHashBE);
             
             if (!found)
             {
@@ -119,12 +109,9 @@ struct KeyHunter::Impl
                 continue;
             }
 
-            if (resultHashLE.h[0] != results[i].digest[0])
+            for (uint32_t j = 0; j < 5; ++j)
             {
-                for (uint32_t j = 0; j < 5; ++j)
-                {
-                    results[i].digest[j] = resultHashLE.h[j];
-                }
+                results[i].digest[j] = resultHashBE.h[j];
             }
 
             results[i].iteration = iteration;
