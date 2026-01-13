@@ -15,7 +15,10 @@ __constant__ uint32_t d_pointsPerThread{};
 __constant__ uint256_t *d_publicKeyXPtr{};
 __constant__ uint256_t *d_publicKeyYPtr{};
 
-    extern __device__ const secp256k1_ge_storage* d_gTable_ptr;
+// External declaration of secp256k1_N defined in ecc_helper.cu
+extern __constant__ uint256_t secp256k1_N;
+
+extern __device__ const secp256k1_ge_storage* d_gTable_ptr;
 
 struct ECC::Impl
 {
@@ -214,6 +217,13 @@ struct ECC::Impl
         computeResolutionForMaxOccupancy(pointsPerThread, gridSize, blockSize);
 
         cudaCheckError(cudaMemcpyToSymbol(d_publicKeyCompressionTypeToCheck, &publicKeyCompressionTypeToCheck, sizeof(uint32_t)));
+
+        // Initialize secp256k1 group order N
+        constexpr uint256_t secp256k1_N_host = {
+            SECP256K1_N_0, SECP256K1_N_1, SECP256K1_N_2, SECP256K1_N_3,
+            SECP256K1_N_4, SECP256K1_N_5, SECP256K1_N_6, SECP256K1_N_7
+        };
+        cudaCheckError(cudaMemcpyToSymbol(secp256k1_N, &secp256k1_N_host, sizeof(uint256_t)));
 
         allocateGTableDeviceMemory();
         allocatePrivateKeysDeviceMemory();

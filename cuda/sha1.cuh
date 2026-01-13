@@ -198,8 +198,8 @@ __device__ __forceinline__ void computeHash(uint32_t* arrW)
     arrW[HASH_OFFSET + 4] += e;
 }
 
-// Generate private key using Android KeyStore-like algorithm
-// Similar to sha256PrivateKeyBase, but uses SHA1
+// Generate private key using Android SHA1PRNG mycelium
+// Similar to sha256PrivateKeyBase, but bytes[0] &= 0x7F (make positive)
 __device__ __forceinline__ void generatePrivateKeyBase(const uint2& p, uint256_t& digest)
 {
     constexpr int32_t SEED_SIZE = HASH_OFFSET + EXTRAFRAME_OFFSET;

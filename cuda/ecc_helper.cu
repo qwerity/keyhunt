@@ -3,6 +3,7 @@
 
 #include "secp256k1_v2/bip32.cuh"
 #include "secp256k1_v2/secp256k1.cuh"
+#include "secp256k1_v2/secp256k1_defines.cuh"
 
 extern __constant__ uint32_t d_pointsPerThread;
 
@@ -10,6 +11,56 @@ extern __constant__ uint256_t *d_publicKeyXPtr;
 extern __constant__ uint256_t *d_publicKeyYPtr;
 
 __constant__ int d_publicKeyCompressionTypeToCheck{PointCompressionType::BOTH};
+
+// secp256k1 group order N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+__constant__ uint256_t secp256k1_N;
+
+__device__ __forceinline__ bool uint256_greater_or_equal(const uint256_t& a, const uint256_t& b)
+{
+    for (int i = 7; i >= 0; --i)
+    {
+        if (a.v[i] > b.v[i])
+            return true;
+        if (a.v[i] < b.v[i])
+            return false;
+    }
+    return true; // equal
+}
+
+__device__ __forceinline__ void uint256_sub(uint256_t& result, const uint256_t& a, const uint256_t& b)
+{
+    uint64_t borrow = 0;
+    #pragma unroll
+    for (int i = 0; i < 8; ++i)
+    {
+        uint64_t diff = static_cast<uint64_t>(a.v[i]) - static_cast<uint64_t>(b.v[i]) - borrow;
+        result.v[i] = static_cast<uint32_t>(diff);
+        borrow = (diff > 0xFFFFFFFFULL) ? 1 : 0;
+    }
+}
+
+__device__ __forceinline__ void reduce_mod_N(const uint256_t& x, uint256_t& result)
+{
+    // Copy x to result
+    #pragma unroll
+    for (int i = 0; i < 8; ++i)
+    {
+        result.v[i] = x.v[i];
+    }
+    
+    // Reduce modulo N (group order)
+    // If result >= N, subtract N (at most once, since x is already in field)
+    if (uint256_greater_or_equal(result, secp256k1_N))
+    {
+        uint256_t temp;
+        uint256_sub(temp, result, secp256k1_N);
+        #pragma unroll
+        for (int i = 0; i < 8; ++i)
+        {
+            result.v[i] = temp.v[i];
+        }
+    }
+}
 
 __global__ void checkHashKernel(const uint256_t *privateKeys)
 {
@@ -19,7 +70,6 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
     uint256_t privateKey;
     uint256_t publicX;
     uint256_t publicY;
-    hash160 hash160;
 
     #pragma unroll
     for(uint32_t i = 0; i < d_pointsPerThread; ++i)
@@ -31,45 +81,67 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
         const uint32_t base = i * totalThreads;
         const uint32_t index = base + threadId;
 
-        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
-        {
-            uint256_t sha256Digest;
-            sha256PublicKeyCompressed(publicX, readUInt256LSW(d_publicKeyYPtr, i), sha256Digest);
-            uint32_t swapped[8];
+        // TODO: make in future mode for config 
+        if (1) {
+            uint256_t publicR;
+
+            // Reduce x-coordinate modulo N (group order)
+            reduce_mod_N(publicX, publicR);
+
+            // Take first 5 words from publicR
+            uint32_t publicRFirst5[5];
             #pragma unroll
-            for (int j = 0; j < 8; ++j)
+            for (int j = 0; j < 5; ++j)
             {
-                uint32_t x = sha256Digest.v[j];
-                swapped[j] = (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
+                publicRFirst5[j] = publicR.v[j];
             }
-            ripemd160sha256(swapped, hash160.h);
-            
-            if (checkHash(hash160))
+
+            // Check if first 5 words from publicR match target
+            if (checkHash(publicRFirst5))
             {
-                setResultFound(index, true, privateKey, hash160.h);
+                setResultFound(index, true, privateKey, publicRFirst5);
             }
         }
 
-        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
-        {
-            readUInt256(d_publicKeyYPtr, i, publicY);
-
-            uint256_t sha256Digest;
-            sha256PublicKey(publicX, publicY, sha256Digest);
-            uint32_t swapped[8];
-            #pragma unroll
-            for (int j = 0; j < 8; ++j)
-            {
-                uint32_t x = sha256Digest.v[j];
-                swapped[j] = (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
-            }
-            ripemd160sha256(swapped, hash160.h);
+        // if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+        // {
+        //     uint256_t sha256Digest;
+        //     sha256PublicKeyCompressed(publicX, readUInt256LSW(d_publicKeyYPtr, i), sha256Digest);
+        //     uint32_t swapped[8];
+        //     #pragma unroll
+        //     for (int j = 0; j < 8; ++j)
+        //     {
+        //         uint32_t x = sha256Digest.v[j];
+        //         swapped[j] = (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
+        //     }
+        //     ripemd160sha256(swapped, hash160.h);
             
-            if (checkHash(hash160))
-            {
-                setResultFound(index, false, privateKey, hash160.h);
-            }
-        }
+        //     if (checkHash(hash160))
+        //     {
+        //         setResultFound(index, true, privateKey, hash160.h);
+        //     }
+        // }
+
+        // if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+        // {
+        //     readUInt256(d_publicKeyYPtr, i, publicY);
+
+        //     uint256_t sha256Digest;
+        //     sha256PublicKey(publicX, publicY, sha256Digest);
+        //     uint32_t swapped[8];
+        //     #pragma unroll
+        //     for (int j = 0; j < 8; ++j)
+        //     {
+        //         uint32_t x = sha256Digest.v[j];
+        //         swapped[j] = (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
+        //     }
+        //     ripemd160sha256(swapped, hash160.h);
+            
+        //     if (checkHash(hash160))
+        //     {
+        //         setResultFound(index, false, privateKey, hash160.h);
+        //     }
+        // }
     }
 }
 

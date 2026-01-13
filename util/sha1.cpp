@@ -235,4 +235,7 @@ void crypto::generatePrivateKey(int32_t x, int32_t y, uint8_t* output)
             output[offset++] = static_cast<uint8_t>(k);
         }
     }
+    
+    // Clear the most significant bit of the first byte
+    output[0] &= 0x7F;
 }
