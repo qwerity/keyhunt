@@ -237,6 +237,9 @@ __device__ __forceinline__ void generatePrivateKeyBase(const uint2& p, uint256_t
         }
     }
     
+    // Clear the most significant bit of the first byte
+    output[0] &= 0x7F;
+    
     // Convert output bytes to uint256_t (little-endian words)
     // output is in big-endian byte order, need to convert to little-endian words
     for (int i = 0; i < 8; i++)
@@ -247,4 +250,5 @@ __device__ __forceinline__ void generatePrivateKeyBase(const uint2& p, uint256_t
                       (static_cast<uint32_t>(output[byte_idx * 4 + 2]) << 8) |
                       (static_cast<uint32_t>(output[byte_idx * 4 + 3]));
     }
+
 }
