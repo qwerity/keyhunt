@@ -5,6 +5,9 @@
 
 #include "defines.h"
 
+// Раскомментируйте следующую строку для включения отладочного вывода в checkHash()
+// #define DEBUG_HASH_CHECK
+
 constexpr uint32_t maxTargetsConstantMem{16};
 
 __constant__ uint32_t d_UseBloomFilter{};
@@ -214,6 +217,21 @@ __device__ bool checkBloomFilter64(const hash160& hash)
 
 __device__ bool checkHash(const uint32_t hash[5])
 {
+    // DEBUG: Отладочный вывод (включите DEBUG_HASH_CHECK в начале файла)
+    #ifdef DEBUG_HASH_CHECK
+    // Выводим только для первого потока первого блока, первые несколько раз
+    static __device__ int debugCallCount = 0;
+    int callIdx = atomicAdd(&debugCallCount, 1);
+    
+    if (threadIdx.x == 0 && blockIdx.x == 0 && callIdx < 5) // Первые 5 вызовов
+    {
+        printf("\n[DEBUG checkHash] Call #%d (Thread %d, Block %d)\n", callIdx, threadIdx.x, blockIdx.x);
+        printf("  Input hash[5] = {0x%08x, 0x%08x, 0x%08x, 0x%08x, 0x%08x}\n", 
+               hash[0], hash[1], hash[2], hash[3], hash[4]);
+        printf("  d_NumTargetHashes = %d\n", d_NumTargetHashes);
+    }
+    #endif
+
     if (d_UseBloomFilter == 1)
     {
         return checkBloomFilter(hash);
@@ -229,13 +247,47 @@ __device__ bool checkHash(const uint32_t hash[5])
     {
         bool equal = true;
 
+        #ifdef DEBUG_HASH_CHECK
+        if (threadIdx.x == 0 && blockIdx.x == 0 && callIdx < 5)
+        {
+            printf("  Comparing with target[%d]: {0x%08x, 0x%08x, 0x%08x, 0x%08x, 0x%08x}\n", j,
+                   d_TargetHash[j][0], d_TargetHash[j][1], d_TargetHash[j][2], 
+                   d_TargetHash[j][3], d_TargetHash[j][4]);
+        }
+        #endif
+
         #pragma unroll
         for (uint32_t i = 0; i < 5; ++i)
         {
-            equal &= (hash[i] == d_TargetHash[j][i]);
+            bool wordEqual = (hash[i] == d_TargetHash[j][i]);
+            equal &= wordEqual;
+            
+            #ifdef DEBUG_HASH_CHECK
+            if (threadIdx.x == 0 && blockIdx.x == 0 && callIdx < 5 && !wordEqual)
+            {
+                printf("    [MISMATCH] hash[%d] (0x%08x) != target[%d][%d] (0x%08x)\n", 
+                       i, hash[i], j, i, d_TargetHash[j][i]);
+            }
+            #endif
         }
+        
+        #ifdef DEBUG_HASH_CHECK
+        if (threadIdx.x == 0 && blockIdx.x == 0 && callIdx < 5)
+        {
+            printf("  Target[%d] match: %s\n", j, equal ? "YES" : "NO");
+        }
+        #endif
+        
         foundMatch |= equal;
     }
+
+    #ifdef DEBUG_HASH_CHECK
+    if (threadIdx.x == 0 && blockIdx.x == 0 && callIdx < 5)
+    {
+        printf("  Final result: %s\n", foundMatch ? "MATCH FOUND" : "NO MATCH");
+        printf("\n");
+    }
+    #endif
 
     return foundMatch;
 }
