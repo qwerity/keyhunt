@@ -8,6 +8,9 @@
 #include "defines.h"
 #include "../util/secp256k1.h"
 
+#include <fstream>
+#include <string>
+
 extern __constant__ int d_publicKeyCompressionTypeToCheck;
 
 __constant__ uint32_t d_pointsPerThread{};
@@ -174,15 +177,64 @@ struct ECC::Impl
         convertUint256ToFeStorage(src.y, dst.y);
     }
 
+    bool loadGTableFromFile(const std::string& filename)
+    {
+        constexpr uint32_t tableSize = ECMULT_GEN_PREC_N * ECMULT_GEN_PREC_G;
+        constexpr size_t expectedFileSize = tableSize * sizeof(secp256k1_ge_storage);
+        
+        std::ifstream file(filename, std::ios::binary | std::ios::ate);
+        if (!file.is_open())
+        {
+            return false;
+        }
+        
+        // Check file size
+        const size_t fileSize = file.tellg();
+        if (fileSize != expectedFileSize)
+        {
+            fprintf(stderr, "Warning: gTable file size mismatch. Expected %zu bytes, got %zu bytes. Will regenerate.\n", 
+                    expectedFileSize, fileSize);
+            file.close();
+            return false;
+        }
+        
+        // Read the table
+        file.seekg(0, std::ios::beg);
+        std::vector<secp256k1_ge_storage> h_gTable(tableSize);
+        file.read(reinterpret_cast<char*>(h_gTable.data()), expectedFileSize);
+        
+        if (!file.good() || file.gcount() != static_cast<std::streamsize>(expectedFileSize))
+        {
+            fprintf(stderr, "Warning: Failed to read gTable from file. Will regenerate.\n");
+            file.close();
+            return false;
+        }
+        
+        file.close();
+        
+        // Copy to device memory
+        thrust::copy(h_gTable.begin(), h_gTable.end(), d_gTable.begin());
+        
+        fprintf(stdout, "Successfully loaded gTable from file: %s (%zu bytes)\n", filename.c_str(), fileSize);
+        return true;
+    }
+
     void generateGTable()
     {
         constexpr uint32_t tableSize = ECMULT_GEN_PREC_N * ECMULT_GEN_PREC_G;
         std::vector<secp256k1_ge_storage> h_gTable(tableSize);
         
+        fprintf(stdout, "Generating gTable (this may take a while)...\n");
+        
         secp256k1::ecpoint basePoint = secp256k1::G();
         
         for (uint32_t chunk = 0; chunk < ECMULT_GEN_PREC_N; ++chunk)
         {
+            if (chunk % 2 == 0)
+            {
+                fprintf(stdout, "Generating chunk %u/%u\n", chunk, ECMULT_GEN_PREC_N);
+            }
+            
             secp256k1::ecpoint chunkBasePoint = basePoint;
             
             for (uint32_t i = 0; i < chunk * ECMULT_GEN_PREC_B; ++i)
@@ -203,13 +255,21 @@ struct ECC::Impl
         }
         
         thrust::copy(h_gTable.begin(), h_gTable.end(), d_gTable.begin());
+        fprintf(stdout, "gTable generation completed!\n");
     }
 
     void allocateGTableDeviceMemory()
     {
         constexpr uint32_t tableSize = ECMULT_GEN_PREC_N * ECMULT_GEN_PREC_G;
         d_gTable.resize(tableSize);
-        generateGTable();
+        
+        // Try to load from file first
+        const std::string defaultFilename = "gtables.bin";
+        if (!loadGTableFromFile(defaultFilename))
+        {
+            // If loading failed, generate the table
+            generateGTable();
+        }
     }
 
     void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t gridSize, const uint32_t blockSize)
