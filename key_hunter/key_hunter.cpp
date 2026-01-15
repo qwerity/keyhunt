@@ -163,9 +163,9 @@ struct KeyHunter::Impl
             signalStatusInfo(keysNumberPerIteration, iteration, finalIterationsCount, timer.elapsedMs());
         }
 
-        assert(iteration == finalIterationsCount);
-
-        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] KeyHunter: done, generated: {:L} keys", cudaInfo.id, keysNumberPerIteration * finalIterationsCount);
+        // Calculate actual keys generated (may be less than planned if stopped early)
+        const uint64_t actualKeysGenerated = static_cast<uint64_t>(keysNumberPerIteration) * iteration;
+        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] KeyHunter: done, generated: {:L} keys (iterations: {:L}, planned: {:L})", cudaInfo.id, actualKeysGenerated, iteration, finalIterationsCount);
     }
 
     uint32_t getPrivateXPart() const
