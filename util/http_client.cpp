@@ -317,7 +317,7 @@ struct HttpClient::Impl
 
     bool setXPartFound(const uint32_t number, const std::string& privateKeyHex)
     {
-        const std::string body = std::format(R"({{"num": {}, "pvk": "{}"}})", number, privateKeyHex);
+        const std::string body = std::format(R"({{"num": {}}})", number);
 
         http::response<http::dynamic_body> response;
         const http::status responseCode = postJson("/set_found", body, response);
