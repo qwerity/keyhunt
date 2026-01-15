@@ -10,6 +10,7 @@
 #include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/http.hpp>
 
 #include <utility>
@@ -41,6 +42,42 @@ struct HttpClient::Impl
         return std::format("{}:{} | {}", config.host, config.port, maskedToken);
     }
 
+    void connectToServer()
+    {
+        beast::error_code ec;
+        
+        // Try to parse as IP address first (more efficient for IP addresses)
+        ec.clear();
+        net::ip::address_v4 ipv4 = net::ip::address_v4::from_string(config.host.c_str(), ec);
+        if (!ec)
+        {
+            // Direct connection using IP address
+            try
+            {
+                uint16_t portNum = static_cast<uint16_t>(std::stoul(config.port));
+                tcp::endpoint endpoint(ipv4, portNum);
+                ec.clear();
+                tcpStream.socket().connect(endpoint, ec);
+                if (ec)
+                {
+                    throw beast::system_error{ec};
+                }
+            }
+            catch (const std::exception& e)
+            {
+                BOOST_LOG_TRIVIAL(error) << "Failed to connect to IP " << config.host << ":" << config.port << " - " << e.what();
+                throw;
+            }
+        }
+        else
+        {
+            // Use resolver for hostname
+            tcp::resolver resolver(ioc);
+            auto const results = resolver.resolve(tcp::v4(), config.host, config.port);
+            tcpStream.connect(results);
+        }
+    }
+
     http::status get(const std::string& target, http::response<http::dynamic_body>& response)
     {
         std::lock_guard<std::mutex> lock(connectionMutex);
@@ -48,12 +85,23 @@ struct HttpClient::Impl
         http::status responseCode{http::status::not_found};
         try
         {
-            // Resolve the host
-            tcp::resolver resolver(ioc);
+            // Validate configuration
+            if (config.host.empty() || config.port.empty())
+            {
+                BOOST_LOG_TRIVIAL(error) << "Http client failed: host or port is empty. Host: '" << config.host << "', Port: '" << config.port << "'";
+                return responseCode;
+            }
 
-            // Connect to the server
-            auto const results = resolver.resolve(config.host, config.port);
-            tcpStream.connect(results);
+            // Close socket if it's already open
+            beast::error_code ec;
+            if (tcpStream.socket().is_open())
+            {
+                tcpStream.socket().shutdown(tcp::socket::shutdown_both, ec);
+                tcpStream.socket().close(ec);
+            }
+
+            // Connect to the server (handles both IP addresses and hostnames)
+            connectToServer();
 
             // Set up the HTTP GET request with the Authorization header
             http::request<http::string_body> request{http::verb::get, target, http11Version};
@@ -73,14 +121,12 @@ struct HttpClient::Impl
             responseCode = response.result();
 
             // Gracefully close the socket
-            beast::error_code ec;
+            ec.clear(); // Reuse existing ec variable
             tcpStream.socket().shutdown(tcp::socket::shutdown_both, ec);
+            tcpStream.socket().close(ec);
 
-            // Handle potential errors
-            if (ec && ec != beast::errc::not_connected)
-            {
-                throw beast::system_error{ec};
-            }
+            // Handle potential errors (ignore not_connected and already_closed)
+            // Errors are silently ignored as connection was successful
         }
         catch (const std::exception& e)
         {
@@ -100,12 +146,23 @@ struct HttpClient::Impl
         {
             const std::string& contentType = "application/json";
 
-            // Resolver to translate the host name into an IP address
-            tcp::resolver resolver(ioc);
+            // Validate configuration
+            if (config.host.empty() || config.port.empty())
+            {
+                BOOST_LOG_TRIVIAL(error) << "Http client failed: host or port is empty. Host: '" << config.host << "', Port: '" << config.port << "'";
+                return responseCode;
+            }
 
-            // Connect to the server
-            auto const results = resolver.resolve(config.host, config.port);
-            tcpStream.connect(results);
+            // Close socket if it's already open
+            beast::error_code ec;
+            if (tcpStream.socket().is_open())
+            {
+                tcpStream.socket().shutdown(tcp::socket::shutdown_both, ec);
+                tcpStream.socket().close(ec);
+            }
+
+            // Connect to the server (handles both IP addresses and hostnames)
+            connectToServer();
 
             // Set up an HTTP POST request message
             http::request<http::string_body> req{http::verb::post, target, http11Version};
@@ -127,14 +184,12 @@ struct HttpClient::Impl
             responseCode = response.result();
 
             // Gracefully close the socket
-            beast::error_code ec;
+            ec.clear(); // Reuse existing ec variable
             tcpStream.socket().shutdown(tcp::socket::shutdown_both, ec);
+            tcpStream.socket().close(ec);
 
-            // Ignore the error if it's because the connection was already closed
-            if (ec && ec != beast::errc::not_connected)
-            {
-                throw beast::system_error{ec};
-            }
+            // Handle potential errors (ignore not_connected and already_closed)
+            // Errors are silently ignored as connection was successful
         }
         catch (const std::exception& e)
         {
@@ -146,7 +201,7 @@ struct HttpClient::Impl
 
     http::status generateToken(std::string& token)
     {
-        const std::string target{"generate_token"};
+        const std::string target{"/generate_token"};
 
         // Container to hold the response
         http::response<http::dynamic_body> response;
@@ -180,7 +235,7 @@ struct HttpClient::Impl
 
     bool hostAlive()
     {
-        const std::string target{"status"};
+        const std::string target{"/status"};
 
         // Container to hold the response
         http::response<http::dynamic_body> response;
@@ -194,7 +249,7 @@ struct HttpClient::Impl
 
     http::status getXPartNumber(uint32_t& number)
     {
-        const std::string target{"get_number"};
+        const std::string target{"/get_number"};
 
         // Container to hold the response
         http::response<http::dynamic_body> response;

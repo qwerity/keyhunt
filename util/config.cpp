@@ -88,9 +88,16 @@ struct Config::Impl
             server.authorisationHeader = serverConfig["authorisationHeader"];
         }
 
-        if (serverConfig.contains("port") && serverConfig["port"].is_string() && !serverConfig["port"].empty())
+        if (serverConfig.contains("port"))
         {
-            server.port = serverConfig["port"];
+            if (serverConfig["port"].is_string() && !serverConfig["port"].empty())
+            {
+                server.port = serverConfig["port"];
+            }
+            else if (serverConfig["port"].is_number())
+            {
+                server.port = std::to_string(serverConfig["port"].get<uint32_t>());
+            }
         }
     }
 
