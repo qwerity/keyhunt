@@ -1,0 +1,34 @@
+# Игнорируем директории сборки
+build/
+bin/
+out/
+cmake-build-*/
+
+# Игнорируем IDE файлы
+.vs/
+.idea/
+*.swp
+*.swo
+*~
+
+# Игнорируем git
+.git/
+.gitignore
+
+# Игнорируем тесты
+tests/
+Testing/
+
+# Игнорируем документацию (опционально)
+*.md
+!README.md
+
+# Игнорируем скрипты (если не нужны в образе)
+scripts/
+
+# Игнорируем архивные файлы
+archive/
+
+# Игнорируем Docker файлы (чтобы не копировать сам Dockerfile в образ)
+Dockerfile
+.dockerignore
