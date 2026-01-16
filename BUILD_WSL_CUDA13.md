@@ -15,5 +15,8 @@ cmake -DCMAKE_BUILD_TYPE=Release \
 
 # Сборка
 cmake --build ./build --config Release -j $(nproc) --target cuda-keyhunt-pvk
+
+# Upload
+gsutil cp ./cuda-keyhunt-pvk gs://data_btc_r
 ```
 
