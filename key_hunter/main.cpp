@@ -3,6 +3,7 @@
 
 #include "util/common_host.h"
 #include "util/utils.h"
+#include "util/xpart_manager.h"
 
 #include <thread>
 #include <format>
@@ -83,6 +84,21 @@ int main()
     utils::initLogging(context->config.log());
 
     setupPrivateXPart(context);
+
+    // Initialize XPartManager for async non-blocking X part distribution (improves multi-GPU performance)
+    // Only use it if not in forcePrivateXPart mode and HTTP is available
+    const bool useXPartManager = !context->config.hunter().forcePrivateXPart && 
+                                  !context->config.dataGenerationIsRandom() &&
+                                  context->httpClient->hostAlive();
+    if (useXPartManager)
+    {
+        BOOST_LOG_TRIVIAL(info) << "Initializing XPartManager for async X part distribution (multi-GPU optimized)";
+        context->xPartManager = std::make_shared<XPartManager>(context->httpClient, context->config.dataGenerationIsRandom());
+    }
+    else
+    {
+        BOOST_LOG_TRIVIAL(info) << "XPartManager disabled (using synchronous mode)";
+    }
 
     // load hash160 targets to memory
     utils::readHash160Targets(context->config.hunter().ripemd160TargetsFilePaths, context->hash160Targets);

@@ -11,6 +11,7 @@
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ssl.hpp>
 #include <boost/beast/http.hpp>
 
 #include <utility>
@@ -115,10 +116,39 @@ struct HttpClient::Impl
             // Buffer is used to read raw network data
             beast::flat_buffer buffer;
 
-            // Receive the HTTP response
-            http::read(tcpStream, buffer, response);
-
-            responseCode = response.result();
+            // Receive the HTTP response with error handling
+            try
+            {
+                http::read(tcpStream, buffer, response);
+                responseCode = response.result();
+            }
+            catch (const beast::system_error& e)
+            {
+                // Handle stream truncated and other network errors
+                if (e.code() == beast::error::timeout || 
+                    e.code() == boost::asio::error::eof ||
+                    e.code() == boost::asio::error::connection_reset ||
+                    e.code() == boost::asio::ssl::error::stream_truncated ||
+                    e.code().category() == boost::asio::error::get_ssl_category())
+                {
+                    BOOST_LOG_TRIVIAL(warning) << "Http client connection error: " << e.what() << " (code: " << e.code() << ")";
+                    // Try to read partial response if available
+                    if (response.result() != http::status::unknown)
+                    {
+                        responseCode = response.result();
+                    }
+                    else
+                    {
+                        // If request was sent but response truncated, mark as timeout
+                        // The caller can decide if this is acceptable (request was sent)
+                        responseCode = http::status::request_timeout;
+                    }
+                }
+                else
+                {
+                    throw; // Re-throw if it's not a connection error
+                }
+            }
 
             // Gracefully close the socket
             ec.clear(); // Reuse existing ec variable
@@ -128,9 +158,27 @@ struct HttpClient::Impl
             // Handle potential errors (ignore not_connected and already_closed)
             // Errors are silently ignored as connection was successful
         }
+        catch (const beast::system_error& e)
+        {
+            // More detailed error logging
+            BOOST_LOG_TRIVIAL(error) << "Http client GET system error: " << e.what() 
+                                     << " (code: " << e.code() << ", category: " << e.code().category().name() << ")";
+            
+            // Check if it's an SSL/stream error
+            std::string errorMsg = e.what() ? std::string(e.what()) : "";
+            if (e.code().category() == boost::asio::error::get_ssl_category() ||
+                e.code() == boost::asio::ssl::error::stream_truncated ||
+                errorMsg.find("stream truncated") != std::string::npos)
+            {
+                BOOST_LOG_TRIVIAL(error) << "SSL/Stream truncated error detected. This may indicate:";
+                BOOST_LOG_TRIVIAL(error) << "  - Server closed connection prematurely";
+                BOOST_LOG_TRIVIAL(error) << "  - Network timeout or connection reset";
+                BOOST_LOG_TRIVIAL(error) << "  - Incomplete response received";
+            }
+        }
         catch (const std::exception& e)
         {
-            BOOST_LOG_TRIVIAL(error) << "Http client failed: " << e.what();
+            BOOST_LOG_TRIVIAL(error) << "Http client GET failed: " << e.what();
         }
 
         return responseCode;
@@ -174,14 +222,47 @@ struct HttpClient::Impl
 
             // Send the HTTP request to the remote host
             http::write(tcpStream, req);
+            // At this point, request was successfully sent to server
 
             // This buffer is used for reading the response
             beast::flat_buffer buffer;
 
-            // Receive the HTTP response
-            http::read(tcpStream, buffer, response);
-
-            responseCode = response.result();
+            // Receive the HTTP response with error handling
+            try
+            {
+                http::read(tcpStream, buffer, response);
+                responseCode = response.result();
+            }
+            catch (const beast::system_error& e)
+            {
+                // Handle stream truncated and other network errors
+                // If request was sent successfully, server likely processed it
+                if (e.code() == beast::error::timeout || 
+                    e.code() == boost::asio::error::eof ||
+                    e.code() == boost::asio::error::connection_reset ||
+                    e.code() == boost::asio::ssl::error::stream_truncated ||
+                    e.code().category() == boost::asio::error::get_ssl_category())
+                {
+                    BOOST_LOG_TRIVIAL(warning) << "Http client connection error after request sent: " << e.what() << " (code: " << e.code() << ")";
+                    BOOST_LOG_TRIVIAL(warning) << "Request was sent successfully, server likely processed it despite connection error";
+                    
+                    // Try to read partial response if available
+                    if (response.result() != http::status::unknown)
+                    {
+                        responseCode = response.result();
+                    }
+                    else
+                    {
+                        // Request was sent, but response truncated - mark as accepted
+                        // Caller should treat this as success since request reached server
+                        responseCode = http::status::accepted; // 202 Accepted - request received but response incomplete
+                    }
+                }
+                else
+                {
+                    throw; // Re-throw if it's not a connection error
+                }
+            }
 
             // Gracefully close the socket
             ec.clear(); // Reuse existing ec variable
@@ -191,9 +272,27 @@ struct HttpClient::Impl
             // Handle potential errors (ignore not_connected and already_closed)
             // Errors are silently ignored as connection was successful
         }
+        catch (const beast::system_error& e)
+        {
+            // More detailed error logging
+            BOOST_LOG_TRIVIAL(error) << "Http client POST system error: " << e.what() 
+                                     << " (code: " << e.code() << ", category: " << e.code().category().name() << ")";
+            
+            // Check if it's an SSL/stream error
+            std::string errorMsg = e.what() ? std::string(e.what()) : "";
+            if (e.code().category() == boost::asio::error::get_ssl_category() ||
+                e.code() == boost::asio::ssl::error::stream_truncated ||
+                errorMsg.find("stream truncated") != std::string::npos)
+            {
+                BOOST_LOG_TRIVIAL(error) << "SSL/Stream truncated error detected. This may indicate:";
+                BOOST_LOG_TRIVIAL(error) << "  - Server closed connection prematurely";
+                BOOST_LOG_TRIVIAL(error) << "  - Network timeout or connection reset";
+                BOOST_LOG_TRIVIAL(error) << "  - Incomplete response received";
+            }
+        }
         catch (const std::exception& e)
         {
-            BOOST_LOG_TRIVIAL(error) << "Http client failed: " << e.what();
+            BOOST_LOG_TRIVIAL(error) << "Http client POST failed: " << e.what();
         }
 
         return responseCode;
@@ -287,10 +386,19 @@ struct HttpClient::Impl
 
         http::response<http::dynamic_body> response;
         http::status responseCode = postJson("/mark_done", body, response);
+        
+        // If we got accepted (202) or timeout but request was sent, consider it success
+        // (server may have processed it but closed connection prematurely)
+        if (responseCode == http::status::accepted || responseCode == http::status::request_timeout)
+        {
+            BOOST_LOG_TRIVIAL(info) << std::format("markXPartDone for {} - request sent successfully, response incomplete (code: {}) - assuming success", number, static_cast<int>(responseCode));
+            return true; // Assume success if request was sent
+        }
+        
         const std::string resultString = beast::buffers_to_string(response.body().data());
         if (http::status::ok != responseCode)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone for {} failed: {}", number, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone for {} failed: {} (response: {})", number, static_cast<int>(responseCode), resultString);
             return false;
         }
 
@@ -301,6 +409,12 @@ struct HttpClient::Impl
         }
         catch (const nlohmann::json::parse_error& e)
         {
+            // If JSON parse fails but we got OK status, request was likely processed
+            if (responseCode == http::status::ok)
+            {
+                BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone for {} - JSON parse failed but got OK status, assuming success: {}", number, resultString);
+                return true;
+            }
             BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone for {} failed, JSON parse failed: {}, parse error at byte {}\nduring paring: {}", number, e.what(),  e.byte, resultString);
             return false;
         }
@@ -311,7 +425,7 @@ struct HttpClient::Impl
             return false;
         }
 
-        BOOST_LOG_TRIVIAL(trace) << std::format("markXPartDone for {}", number);
+        // Logging is handled by XPartManager if used, so we don't log here to avoid duplication
         return true;
     }
 

@@ -35,6 +35,9 @@ set(SRC_FILES
     http_client.cpp
     http_client.h
 
+    xpart_manager.cpp
+    xpart_manager.h
+
     bitcoin_utils.cpp
     bitcoin_utils.h
 

@@ -81,4 +81,4 @@ There is needed to install following packages to be able to compile
 
 ## use vast ai 
 - create instance with custom template
-- wget https://storage.googleapis.com/data_btc_r/startup.sh && chmod +x ./startup.sh
+- wget https://storage.googleapis.com/data_btc_r/startup.sh && chmod +x ./startup.sh && ./startup.sh

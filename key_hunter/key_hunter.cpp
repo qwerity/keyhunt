@@ -13,6 +13,7 @@
 #include "util/utils.h"
 #include "util/secp256k1.h"
 #include "util/http_client.h"
+#include "util/xpart_manager.h"
 
 
 struct KeyHunter::Impl
@@ -170,6 +171,13 @@ struct KeyHunter::Impl
 
     uint32_t getPrivateXPart() const
     {
+        // Use XPartManager if available (for async non-blocking X part distribution)
+        if (gContext->xPartManager)
+        {
+            return gContext->xPartManager->getNextXPart();
+        }
+
+        // Fallback to old synchronous method
         uint32_t privateXPart{0};
         if (gContext->config.dataGenerationIsRandom())
         {
@@ -208,11 +216,20 @@ struct KeyHunter::Impl
 
             if (!gContext->config.devMode())
             {
-                const std::string postString = std::format("markXPartDone for privateXPart: {}", privateXPart);
-                utils::backupToTGAsync(postString);
-                (void) gContext->httpClient->markXPartDone(privateXPart);
-
-                BOOST_LOG_TRIVIAL(fatal) << postString;
+                // Use async marking if XPartManager is available (recommended for multi-GPU)
+                if (gContext->xPartManager)
+                {
+                    // XPartManager handles logging internally
+                    gContext->xPartManager->markXPartDoneAsync(privateXPart);
+                }
+                else
+                {
+                    // Fallback to synchronous method (may block GPU threads)
+                    const std::string postString = std::format("markXPartDone for privateXPart: {}", privateXPart);
+                    utils::backupToTGAsync(postString);
+                    (void) gContext->httpClient->markXPartDone(privateXPart);
+                    BOOST_LOG_TRIVIAL(fatal) << postString;
+                }
             }
         }
         while (!stopFlag && !gContext->config.hunter().forcePrivateXPart);
