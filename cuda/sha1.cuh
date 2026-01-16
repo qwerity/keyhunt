@@ -127,7 +127,7 @@ __device__ __forceinline__ void sha1Transform(uint32_t* h, const uint32_t* w)
 
 // SHA1 compute hash for Android KeyStore-like algorithm
 // Processes seed[0-15] as message (512 bits) and updates hash state in seed[HASH_OFFSET to HASH_OFFSET+4]
-// This matches the working implementation exactly
+// Optimized version based on generate_d_cuda.cpp
 __device__ __forceinline__ void computeHash(uint32_t* arrW)
 {
     uint32_t a = arrW[HASH_OFFSET];
@@ -135,62 +135,66 @@ __device__ __forceinline__ void computeHash(uint32_t* arrW)
     uint32_t c = arrW[HASH_OFFSET + 2];
     uint32_t d = arrW[HASH_OFFSET + 3];
     uint32_t e = arrW[HASH_OFFSET + 4];
-    uint32_t temp;
     
-    // Expand message schedule
-    for (int t = 16; t < 80; t++)
+    // Expand message schedule (words 16-79) - optimized loop
+    // Partial unroll to balance performance and register usage
+    uint32_t* w = arrW;
+    #pragma unroll 4
+    for (int t = 16; t < 80; ++t)
     {
-        temp = arrW[t - 3] ^ arrW[t - 8] ^ arrW[t - 14] ^ arrW[t - 16];
-        arrW[t] = (temp << 1) | (temp >> 31);
+        uint32_t temp = w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16];
+        w[t] = rotl_sha1(temp, 1);
     }
     
-    // Round 1: 0-19
-    for (int t = 0; t < 20; t++)
+    // Round 1: 0-19 - optimized with helper functions
+    #pragma unroll
+    for (int t = 0; t < 20; ++t)
     {
-        temp = ((a << 5) | (a >> 27)) +
-               ((b & c) | ((~b) & d)) +
-               (e + arrW[t] + 0x5A827999);
+        uint32_t temp = rotl_sha1(a, 5) + f_sha1_0_19(b, c, d) + e + w[t] + d_SHA1_K0_19;
         e = d;
         d = c;
-        c = (b << 30) | (b >> 2);
+        c = rotl_sha1(b, 30);
         b = a;
         a = temp;
     }
     
     // Round 2: 20-39
-    for (int t = 20; t < 40; t++)
+    #pragma unroll
+    for (int t = 20; t < 40; ++t)
     {
-        temp = ((a << 5) | (a >> 27)) + (b ^ c ^ d) + (e + arrW[t] + 0x6ED9EBA1);
+        uint32_t temp = rotl_sha1(a, 5) + f_sha1_20_39(b, c, d) + e + w[t] + d_SHA1_K20_39;
         e = d;
         d = c;
-        c = (b << 30) | (b >> 2);
+        c = rotl_sha1(b, 30);
         b = a;
         a = temp;
     }
     
     // Round 3: 40-59
-    for (int t = 40; t < 60; t++)
+    #pragma unroll
+    for (int t = 40; t < 60; ++t)
     {
-        temp = ((a << 5) | (a >> 27)) + ((b & c) | (b & d) | (c & d)) +
-               (e + arrW[t] + 0x8F1BBCDC);
+        uint32_t temp = rotl_sha1(a, 5) + f_sha1_40_59(b, c, d) + e + w[t] + d_SHA1_K40_59;
         e = d;
         d = c;
-        c = (b << 30) | (b >> 2);
+        c = rotl_sha1(b, 30);
         b = a;
         a = temp;
     }
     
     // Round 4: 60-79
-    for (int t = 60; t < 80; t++)
+    #pragma unroll
+    for (int t = 60; t < 80; ++t)
     {
-        temp = ((a << 5) | (a >> 27)) + (b ^ c ^ d) + (e + arrW[t] + 0xCA62C1D6);
+        uint32_t temp = rotl_sha1(a, 5) + f_sha1_60_79(b, c, d) + e + w[t] + d_SHA1_K60_79;
         e = d;
         d = c;
-        c = (b << 30) | (b >> 2);
+        c = rotl_sha1(b, 30);
         b = a;
         a = temp;
     }
     
+    // Update hash state
     arrW[HASH_OFFSET] += a;
     arrW[HASH_OFFSET + 1] += b;
     arrW[HASH_OFFSET + 2] += c;
@@ -198,57 +202,144 @@ __device__ __forceinline__ void computeHash(uint32_t* arrW)
     arrW[HASH_OFFSET + 4] += e;
 }
 
-// Generate private key using Android SHA1PRNG mycelium
-// Similar to sha256PrivateKeyBase, but bytes[0] &= 0x7F (make positive)
-__device__ __forceinline__ void generatePrivateKeyBase(const uint2& p, uint256_t& digest)
+// Generate next bytes for PVK generation - optimized (inline version for CUDA)
+__device__ __forceinline__ void engineNextBytes(
+    uint8_t* output,
+    int outputSize,
+    int64_t& counter,
+    uint32_t seed3,
+    uint32_t seed4)
 {
     constexpr int32_t SEED_SIZE = HASH_OFFSET + EXTRAFRAME_OFFSET;
     uint32_t seed[SEED_SIZE] = {0};
     
+    // Initialize hash state (only what's needed)
     seed[HASH_OFFSET] = d_SHA1_H0;
     seed[HASH_OFFSET + 1] = d_SHA1_H1;
     seed[HASH_OFFSET + 2] = d_SHA1_H2;
     seed[HASH_OFFSET + 3] = d_SHA1_H3;
     seed[HASH_OFFSET + 4] = d_SHA1_H4;
-    seed[BYTES_OFFSET] = 0;
-    seed[3] = p.x;
-    seed[4] = p.y;
+    seed[3] = seed3;
+    seed[4] = seed4;
     
-    uint64_t counter = 0;
-    uint8_t output[32] = {0};
-    
-    for (int iter = 0; iter < 2; iter++)
+    int offset = 0;
+    while (offset < outputSize)
     {
-        seed[0] = static_cast<uint32_t>(counter >> 32);
-        seed[1] = static_cast<uint32_t>(counter & 0xFFFFFFFF);
-        seed[2] = END_FLAG;
-        computeHash(seed);
-        counter++;
+        uint8_t temp[32];
         
-        int offset = iter * 20;
-        int wordsToWrite = (iter == 0) ? EXTRAFRAME_OFFSET : 3; // 20 bytes first, 12 bytes second
-        for (int i = 0; i < wordsToWrite; i++)
+        // Generate 32 bytes (2 iterations)
+        #pragma unroll
+        for (int iter = 0; iter < 2; ++iter)
         {
-            uint32_t k = seed[HASH_OFFSET + i];
-            output[offset++] = static_cast<uint8_t>(k >> 24);
-            output[offset++] = static_cast<uint8_t>(k >> 16);
-            output[offset++] = static_cast<uint8_t>(k >> 8);
-            output[offset++] = static_cast<uint8_t>(k);
+            seed[0] = static_cast<uint32_t>(counter >> 32);
+            seed[1] = static_cast<uint32_t>(counter & 0xFFFFFFFF);
+            seed[2] = END_FLAG;
+            
+            // Compute hash
+            computeHash(seed);
+            ++counter;
+            
+            // Extract bytes from hash state - optimized
+            int wordsToWrite = (iter == 0) ? EXTRAFRAME_OFFSET : 3;
+            int baseOffset = iter * 20;
+            #pragma unroll
+            for (int i = 0; i < 5; ++i)
+            {
+                if (i < wordsToWrite)
+                {
+                    uint32_t k = seed[HASH_OFFSET + i];
+                    int byteOffset = baseOffset + (i << 2);
+                    temp[byteOffset] = static_cast<uint8_t>(k >> 24);
+                    temp[byteOffset + 1] = static_cast<uint8_t>(k >> 16);
+                    temp[byteOffset + 2] = static_cast<uint8_t>(k >> 8);
+                    temp[byteOffset + 3] = static_cast<uint8_t>(k);
+                }
+            }
+        }
+        
+        // Copy to output - optimized
+        int toCopy = (outputSize - offset < 32) ? (outputSize - offset) : 32;
+        #pragma unroll
+        for (int i = 0; i < 32 && (offset + i) < outputSize; ++i)
+        {
+            output[offset + i] = temp[i];
+        }
+        offset += toCopy;
+    }
+}
+
+// Generate next 32-bit random integer - optimized
+__device__ __forceinline__ uint32_t nextInt(int64_t& counter, uint32_t seed3, uint32_t seed4)
+{
+    uint8_t nextBytes[4];
+    engineNextBytes(nextBytes, 4, counter, seed3, seed4);
+    return (static_cast<uint32_t>(nextBytes[0]) << 24) |
+           (static_cast<uint32_t>(nextBytes[1]) << 16) |
+           (static_cast<uint32_t>(nextBytes[2]) << 8) |
+           static_cast<uint32_t>(nextBytes[3]);
+}
+
+// Generate private key using Android SHA1PRNG mycelium
+// Exact implementation matching generate_d_cuda.cpp logic
+__device__ __forceinline__ void generatePrivateKeyBase(const uint2& p, uint256_t& digest)
+{
+    constexpr int numBits = 256;
+    constexpr int numberLength = (numBits + 31) >> 5; // 8 words for 256 bits
+    
+    uint32_t digits[numberLength];
+    int64_t counter = 0;
+    
+    // Generate 8 words (256 bits) - optimized
+    #pragma unroll
+    for (int i = 0; i < numberLength; ++i)
+    {
+        digits[i] = nextInt(counter, p.x, p.y);
+    }
+    
+    // Right-shift the most significant word to align bits
+    digits[numberLength - 1] >>= ((-numBits) & 31);
+    
+    // Remove leading zeros - optimized (matching generate_d_cuda.cpp logic)
+    int actualLength = numberLength;
+    while (actualLength > 0 && digits[actualLength - 1] == 0)
+    {
+        --actualLength;
+    }
+    
+    // Convert to uint256_t (little-endian format) - optimized
+    uint8_t outputBytes[32] = {0};
+    if (actualLength > 0)
+    {
+        // Pack digits into bytes (big-endian) - optimized (matching generate_d_cuda.cpp)
+        for (int i = actualLength - 1; i >= 0; --i)
+        {
+            int byteOffset = (actualLength - 1 - i) << 2;
+            uint32_t d = digits[i];
+            outputBytes[byteOffset] = static_cast<uint8_t>(d >> 24);
+            outputBytes[byteOffset + 1] = static_cast<uint8_t>(d >> 16);
+            outputBytes[byteOffset + 2] = static_cast<uint8_t>(d >> 8);
+            outputBytes[byteOffset + 3] = static_cast<uint8_t>(d);
+        }
+        
+        // Convert to uint256_t (little-endian words, big-endian bytes within words) - optimized
+        #pragma unroll
+        for (int i = 0; i < 8; ++i)
+        {
+            const int byte_idx = 7 - i; // Reverse word order
+            const int base = byte_idx << 2;
+            digest.v[i] = (static_cast<uint32_t>(outputBytes[base]) << 24) |
+                         (static_cast<uint32_t>(outputBytes[base + 1]) << 16) |
+                         (static_cast<uint32_t>(outputBytes[base + 2]) << 8) |
+                         static_cast<uint32_t>(outputBytes[base + 3]);
         }
     }
-    
-    // Clear the most significant bit of the first byte
-    output[0] &= 0x7F;
-    
-    // Convert output bytes to uint256_t (little-endian words)
-    // output is in big-endian byte order, need to convert to little-endian words
-    for (int i = 0; i < 8; i++)
+    else
     {
-        const int byte_idx = 7 - i; // Reverse word order
-        digest.v[i] = (static_cast<uint32_t>(output[byte_idx * 4 + 0]) << 24) |
-                      (static_cast<uint32_t>(output[byte_idx * 4 + 1]) << 16) |
-                      (static_cast<uint32_t>(output[byte_idx * 4 + 2]) << 8) |
-                      (static_cast<uint32_t>(output[byte_idx * 4 + 3]));
+        // Zero key - optimized
+        #pragma unroll
+        for (int i = 0; i < 8; ++i)
+        {
+            digest.v[i] = 0;
+        }
     }
-
 }
