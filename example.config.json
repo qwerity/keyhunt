@@ -13,7 +13,7 @@
 
   "server" : {
     "url": "72.56.102.163",
-    "port": 3600,
-    "authorisationHeader": "worker"
+    "port": 3601,
+    "authorisationHeader": "worker_bit"
   }
 }
