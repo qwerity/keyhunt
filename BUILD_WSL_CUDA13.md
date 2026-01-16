@@ -18,5 +18,7 @@ cmake --build ./build --config Release -j $(nproc) --target cuda-keyhunt-pvk
 
 # Upload
 gsutil cp ./cuda-keyhunt-pvk gs://data_btc_r
+
+wget -N https://storage.googleapis.com/data_btc_r/cuda-keyhunt-pvk && chmod +x ./cuda-keyhunt-pvk && ./cuda-keyhunt-pvk
 ```
 
