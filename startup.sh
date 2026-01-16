@@ -34,7 +34,6 @@ log_warn() {
 # Настройка путей
 # ============================================================================
 WORK_DIR="/workspace"
-DATA_DIR="${WORK_DIR}/data"
 
 # URL для загрузки файлов
 BASE_URL="https://storage.googleapis.com/data_btc_r"
@@ -46,7 +45,7 @@ BINARY_FILE="cuda-keyhunt-pvk"
 # Создание директорий
 # ============================================================================
 log_info "Создание рабочих директорий..."
-mkdir -p "${DATA_DIR}"
+mkdir -p "${WORK_DIR}"
 cd "${WORK_DIR}" || exit 1
 
 # ============================================================================
@@ -56,10 +55,10 @@ log_info "Загрузка файлов из ${BASE_URL}..."
 
 # Загрузка таблицы r_only_table.txt.bin
 log_info "Загрузка ${R_TABLE_FILE}..."
-if [ -f "${DATA_DIR}/${R_TABLE_FILE}" ]; then
+if [ -f "${WORK_DIR}/${R_TABLE_FILE}" ]; then
     log_warn "${R_TABLE_FILE} уже существует, будет перезаписан"
 fi
-if wget -q --show-progress "${BASE_URL}/${R_TABLE_FILE}" -O "${DATA_DIR}/${R_TABLE_FILE}"; then
+if wget -q --show-progress "${BASE_URL}/${R_TABLE_FILE}" -O "${WORK_DIR}/${R_TABLE_FILE}"; then
     log_info "✓ ${R_TABLE_FILE} загружен успешно"
 else
     log_error "✗ Ошибка при загрузке ${R_TABLE_FILE}"
@@ -68,10 +67,10 @@ fi
 
 # Загрузка gtables.bin
 log_info "Загрузка ${GTABLES_FILE}..."
-if [ -f "${DATA_DIR}/${GTABLES_FILE}" ]; then
+if [ -f "${WORK_DIR}/${GTABLES_FILE}" ]; then
     log_warn "${GTABLES_FILE} уже существует, будет перезаписан"
 fi
-if wget -q --show-progress "${BASE_URL}/${GTABLES_FILE}" -O "${DATA_DIR}/${GTABLES_FILE}"; then
+if wget -q --show-progress "${BASE_URL}/${GTABLES_FILE}" -O "${WORK_DIR}/${GTABLES_FILE}"; then
     log_info "✓ ${GTABLES_FILE} загружен успешно"
 else
     log_error "✗ Ошибка при загрузке ${GTABLES_FILE}"
@@ -109,16 +108,16 @@ fi
 # ============================================================================
 log_info "Проверка загруженных файлов..."
 
-if [ -f "${DATA_DIR}/${R_TABLE_FILE}" ]; then
-    SIZE=$(du -h "${DATA_DIR}/${R_TABLE_FILE}" | cut -f1)
+if [ -f "${WORK_DIR}/${R_TABLE_FILE}" ]; then
+    SIZE=$(du -h "${WORK_DIR}/${R_TABLE_FILE}" | cut -f1)
     log_info "✓ ${R_TABLE_FILE}: ${SIZE}"
 else
     log_error "✗ ${R_TABLE_FILE} не найден"
     exit 1
 fi
 
-if [ -f "${DATA_DIR}/${GTABLES_FILE}" ]; then
-    SIZE=$(du -h "${DATA_DIR}/${GTABLES_FILE}" | cut -f1)
+if [ -f "${WORK_DIR}/${GTABLES_FILE}" ]; then
+    SIZE=$(du -h "${WORK_DIR}/${GTABLES_FILE}" | cut -f1)
     log_info "✓ ${GTABLES_FILE}: ${SIZE}"
 else
     log_error "✗ ${GTABLES_FILE} не найден"
@@ -137,5 +136,4 @@ fi
 # Завершение
 # ============================================================================
 log_info "Все файлы успешно загружены и настроены!"
-log_info "Бинарник находится в: ${WORK_DIR}/${BINARY_FILE}"
-log_info "Данные находятся в: ${DATA_DIR}/"
+log_info "Все файлы находятся в: ${WORK_DIR}/"
