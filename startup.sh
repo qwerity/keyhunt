@@ -56,6 +56,9 @@ log_info "Загрузка файлов из ${BASE_URL}..."
 
 # Загрузка таблицы r_only_table.txt.bin
 log_info "Загрузка ${R_TABLE_FILE}..."
+if [ -f "${DATA_DIR}/${R_TABLE_FILE}" ]; then
+    log_warn "${R_TABLE_FILE} уже существует, будет перезаписан"
+fi
 if wget -q --show-progress "${BASE_URL}/${R_TABLE_FILE}" -O "${DATA_DIR}/${R_TABLE_FILE}"; then
     log_info "✓ ${R_TABLE_FILE} загружен успешно"
 else
@@ -65,6 +68,9 @@ fi
 
 # Загрузка gtables.bin
 log_info "Загрузка ${GTABLES_FILE}..."
+if [ -f "${DATA_DIR}/${GTABLES_FILE}" ]; then
+    log_warn "${GTABLES_FILE} уже существует, будет перезаписан"
+fi
 if wget -q --show-progress "${BASE_URL}/${GTABLES_FILE}" -O "${DATA_DIR}/${GTABLES_FILE}"; then
     log_info "✓ ${GTABLES_FILE} загружен успешно"
 else
@@ -74,6 +80,9 @@ fi
 
 # Загрузка бинарника
 log_info "Загрузка ${BINARY_FILE}..."
+if [ -f "${WORK_DIR}/${BINARY_FILE}" ]; then
+    log_warn "${BINARY_FILE} уже существует, будет перезаписан"
+fi
 if wget -q --show-progress "${BASE_URL}/${BINARY_FILE}" -O "${WORK_DIR}/${BINARY_FILE}"; then
     log_info "✓ ${BINARY_FILE} загружен успешно"
 else
