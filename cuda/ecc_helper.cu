@@ -103,45 +103,47 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
             }
         }
 
-        // if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
-        // {
-        //     uint256_t sha256Digest;
-        //     sha256PublicKeyCompressed(publicX, readUInt256LSW(d_publicKeyYPtr, i), sha256Digest);
-        //     uint32_t swapped[8];
-        //     #pragma unroll
-        //     for (int j = 0; j < 8; ++j)
-        //     {
-        //         uint32_t x = sha256Digest.v[j];
-        //         swapped[j] = (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
-        //     }
-        //     ripemd160sha256(swapped, hash160.h);
+        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+        {
+            hash160 hash160;
+            uint256_t sha256Digest;
+            sha256PublicKeyCompressed(publicX, readUInt256LSW(d_publicKeyYPtr, i), sha256Digest);
+            uint32_t swapped[8];
+            #pragma unroll
+            for (int j = 0; j < 8; ++j)
+            {
+                uint32_t x = sha256Digest.v[j];
+                swapped[j] = (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
+            }
+            ripemd160sha256(swapped, hash160.h);
             
-        //     if (checkHash(hash160))
-        //     {
-        //         setResultFound(index, true, privateKey, hash160.h);
-        //     }
-        // }
+            if (checkHash(hash160))
+            {
+                setResultFound(index, true, privateKey, hash160.h);
+            }
+        }
 
-        // if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
-        // {
-        //     readUInt256(d_publicKeyYPtr, i, publicY);
+        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+        {
+            readUInt256(d_publicKeyYPtr, i, publicY);
 
-        //     uint256_t sha256Digest;
-        //     sha256PublicKey(publicX, publicY, sha256Digest);
-        //     uint32_t swapped[8];
-        //     #pragma unroll
-        //     for (int j = 0; j < 8; ++j)
-        //     {
-        //         uint32_t x = sha256Digest.v[j];
-        //         swapped[j] = (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
-        //     }
-        //     ripemd160sha256(swapped, hash160.h);
+            hash160 hash160;
+            uint256_t sha256Digest;
+            sha256PublicKey(publicX, publicY, sha256Digest);
+            uint32_t swapped[8];
+            #pragma unroll
+            for (int j = 0; j < 8; ++j)
+            {
+                uint32_t x = sha256Digest.v[j];
+                swapped[j] = (x << 24) | ((x << 8) & 0x00ff0000) | ((x >> 8) & 0x0000ff00) | (x >> 24);
+            }
+            ripemd160sha256(swapped, hash160.h);
             
-        //     if (checkHash(hash160))
-        //     {
-        //         setResultFound(index, false, privateKey, hash160.h);
-        //     }
-        // }
+            if (checkHash(hash160))
+            {
+                setResultFound(index, false, privateKey, hash160.h);
+            }
+        }
     }
 }
 
