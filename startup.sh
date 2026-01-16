@@ -42,6 +42,18 @@ GTABLES_FILE="gtables.bin"
 BINARY_FILE="cuda-keyhunt-pvk"
 
 # ============================================================================
+# Настройка локали
+# ============================================================================
+log_info "Настройка локали..."
+if command -v locale-gen >/dev/null 2>&1; then
+    sudo locale-gen en_US.UTF-8 || true
+    sudo update-locale LANG=en_US.UTF-8 || true
+    log_info "✓ Локаль настроена"
+else
+    log_warn "locale-gen не найден, пропускаем настройку локали"
+fi
+
+# ============================================================================
 # Создание директорий
 # ============================================================================
 log_info "Создание рабочих директорий..."
@@ -89,6 +101,18 @@ else
     exit 1
 fi
 
+# Загрузка конфигурационного файла
+log_info "Загрузка example.config.json..."
+if [ -f "${WORK_DIR}/config.json" ]; then
+    log_warn "config.json уже существует, будет перезаписан"
+fi
+if wget -q --show-progress "${BASE_URL}/example.config.json" -O "${WORK_DIR}/config.json"; then
+    log_info "✓ config.json загружен успешно"
+else
+    log_error "✗ Ошибка при загрузке example.config.json"
+    exit 1
+fi
+
 # ============================================================================
 # Установка прав на выполнение
 # ============================================================================
@@ -129,6 +153,14 @@ if [ -f "${WORK_DIR}/${BINARY_FILE}" ]; then
     log_info "✓ ${BINARY_FILE}: ${SIZE}"
 else
     log_error "✗ ${BINARY_FILE} не найден"
+    exit 1
+fi
+
+if [ -f "${WORK_DIR}/config.json" ]; then
+    SIZE=$(du -h "${WORK_DIR}/config.json" | cut -f1)
+    log_info "✓ config.json: ${SIZE}"
+else
+    log_error "✗ config.json не найден"
     exit 1
 fi
 

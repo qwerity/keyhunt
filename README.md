@@ -77,3 +77,8 @@ There is needed to install following packages to be able to compile
 - `convert_hash160_to_binary hex_str_hash160_targetx.txt`
 - This will generate `hex_str_hash160_targetx.txt.bin` binary file
 - Replace in config file the targets list with binary files
+
+
+## use vast ai 
+- create instance with custom template
+- wget https://storage.googleapis.com/data_btc_r/startup.sh && chmod +x ./startup.sh
