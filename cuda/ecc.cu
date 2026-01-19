@@ -325,30 +325,30 @@ struct ECC::Impl
         // Устанавливаем подсказки для оптимизации кеширования
         // cudaMemAdviseSetReadMostly: данные преимущественно читаются, можно кешировать в L2
         // Это особенно важно для больших таблиц, которые не помещаются полностью в L2
-        cudaCheckError(cudaMemAdvise(d_gTableRawPtr, tableSizeBytes, cudaMemAdviseSetReadMostly, deviceId));
-        
-        // cudaMemAdviseSetAccessedBy: оптимизация для доступа с устройства
-        cudaCheckError(cudaMemAdvise(d_gTableRawPtr, tableSizeBytes, cudaMemAdviseSetAccessedBy, deviceId));
-        
-        // Для GPU с поддержкой persisting L2 cache (Ampere+, compute capability 8.0+)
-        // Можно зарезервировать часть L2 кеша специально для этой таблицы
-        if (deviceProp.major >= 8 && deviceProp.persistingL2CacheMaxSize > 0)
+        // Примечание: для обычной device memory (не unified memory) эти подсказки помогают
+        // драйверу оптимизировать prefetching и кеширование в L2
+        cudaError_t adviseErr = cudaMemAdvise(d_gTableRawPtr, tableSizeBytes, cudaMemAdviseSetReadMostly, deviceId);
+        if (adviseErr == cudaSuccess)
         {
-            // Резервируем часть L2 кеша для gtables (максимум 4 MB или 50% от доступного)
-            const size_t l2CacheReserve = std::min(
-                static_cast<size_t>(4 * 1024 * 1024),  // 4 MB
-                static_cast<size_t>(deviceProp.persistingL2CacheMaxSize / 2)  // или 50% от максимума
-            );
+            // cudaMemAdviseSetAccessedBy: оптимизация для доступа с устройства
+            cudaCheckError(cudaMemAdvise(d_gTableRawPtr, tableSizeBytes, cudaMemAdviseSetAccessedBy, deviceId));
             
-            // Привязываем память к persisting L2 cache для лучшей производительности
-            cudaCheckError(cudaMemAdvise(d_gTableRawPtr, tableSizeBytes, cudaMemAdviseSetPreferredLocation, deviceId));
-            
-            fprintf(stdout, "L2 cache optimization: Reserved up to %zu bytes for gTable (device supports %d bytes max)\n",
-                    l2CacheReserve, deviceProp.persistingL2CacheMaxSize);
+            if (deviceProp.major >= 8 && deviceProp.persistingL2CacheMaxSize > 0)
+            {
+                fprintf(stdout, "L2 cache optimization: Using read-mostly hints (device supports persisting L2 cache: %d bytes, CC %d.%d)\n",
+                        deviceProp.persistingL2CacheMaxSize, deviceProp.major, deviceProp.minor);
+            }
+            else
+            {
+                fprintf(stdout, "L2 cache optimization: Using read-mostly hints (device doesn't support persisting L2 cache, CC %d.%d)\n",
+                        deviceProp.major, deviceProp.minor);
+            }
         }
         else
         {
-            fprintf(stdout, "L2 cache optimization: Using read-mostly hints (device doesn't support persisting L2 cache, CC %d.%d)\n",
+            // cudaMemAdvise может не поддерживаться для обычной device memory на некоторых системах
+            // Это не критично - __ldg() уже обеспечивает read-only cache оптимизацию
+            fprintf(stdout, "L2 cache optimization: cudaMemAdvise not available, using __ldg() read-only cache (CC %d.%d)\n",
                     deviceProp.major, deviceProp.minor);
         }
     }

@@ -38,11 +38,10 @@ cudaMemAdvise(d_gTableRawPtr, tableSizeBytes, cudaMemAdviseSetAccessedBy, device
 - Оптимизирует доступ с устройства
 - Улучшает prefetching и кеширование
 
-### 3. Persisting L2 Cache (для Ampere+)
-- Для GPU с compute capability 8.0+ (RTX 30xx, A100, RTX 40xx, RTX 50xx)
-- Резервирует до 4 MB L2 кеша специально для gtables
-- Использует `cudaMemAdviseSetPreferredLocation`
-- Значительно улучшает производительность на современных GPU
+### 3. Обработка ошибок
+- `cudaMemAdvise` может не поддерживаться для обычной device memory на некоторых системах
+- Код проверяет результат и продолжает работу даже если `cudaMemAdvise` недоступен
+- `__ldg()` уже обеспечивает read-only cache оптимизацию на уровне инструкций
 
 ## Дополнительные возможности оптимизации
 
@@ -77,9 +76,10 @@ __shared__ secp256k1_ge_storage shared_chunk[ECMULT_GEN_PREC_G];
 - L2 hit rate: ~10-20% (таблица слишком большая)
 
 ### На GPU с persisting L2 cache (Ampere, Ada, Blackwell)
-- Улучшение: 15-30% за счет резервирования L2
-- L2 hit rate: ~30-50% для часто используемых чанков
+- Улучшение: 10-20% за счет read-mostly hints и оптимизации драйвера
+- L2 hit rate: ~20-40% для часто используемых чанков
 - Особенно эффективно при повторном доступе к одним и тем же чанкам
+- Примечание: `cudaMemAdvise` работает только с unified memory, для обычной device memory используется `__ldg()`
 
 ## Мониторинг производительности
 
