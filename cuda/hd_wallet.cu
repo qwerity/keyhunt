@@ -5,6 +5,9 @@
 
 #include "defines.h"
 
+#include <algorithm>
+#include <cuda_runtime.h>
+
 struct CUHDWallet::Impl
 {
     HDWalletGenerationMode mGenerationMode{HDWalletGenerationMode::MnemonicMasterKey};
@@ -64,8 +67,53 @@ struct CUHDWallet::Impl
                 printf("CUHDWallet: generation mode is wrong: %d", static_cast<int>(mGenerationMode));
         }
 
-        mBlockSize = (blockSize != 0) ? blockSize : recommendedBlockSize;
-        mGridSize = (gridSize != 0) ? gridSize : minGridSize;
+        const uint32_t actualBlockSize = (blockSize != 0) ? blockSize : static_cast<uint32_t>(recommendedBlockSize);
+        
+        if (gridSize != 0)
+        {
+            mGridSize = gridSize;
+            mBlockSize = actualBlockSize;
+        }
+        else
+        {
+            mBlockSize = actualBlockSize;
+            
+            // Get device properties to calculate optimal grid size
+            cudaDeviceProp deviceProp{};
+            int deviceId{};
+            cudaCheckError(cudaGetDevice(&deviceId));
+            cudaCheckError(cudaGetDeviceProperties(&deviceProp, deviceId));
+            
+            // Calculate number of blocks per SM for maximum occupancy
+            // Use the appropriate kernel based on generation mode
+            int numBlocksPerSM{};
+            int dynamicSMemSize = 0;
+            
+            switch (mGenerationMode)
+            {
+                case HDWalletGenerationMode::Mnemonic:
+                    cudaCheckError(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                        &numBlocksPerSM, hdWalletKernel, mBlockSize, dynamicSMemSize));
+                break;
+                case HDWalletGenerationMode::MnemonicsStepByStep:
+                case HDWalletGenerationMode::MnemonicMasterKey:
+                    cudaCheckError(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                        &numBlocksPerSM, extendedMasterKeysToDerivatedPublicKeysKernel, mBlockSize, dynamicSMemSize));
+                break;
+                case HDWalletGenerationMode::MnemonicsBTC:
+                    cudaCheckError(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                        &numBlocksPerSM, hdWalletBTCKernel, mBlockSize, dynamicSMemSize));
+                break;
+                default:
+                    numBlocksPerSM = 0;
+            }
+            
+            // Optimal grid size = number of SMs × blocks per SM
+            const int optimalGridSize = (numBlocksPerSM > 0) ? (deviceProp.multiProcessorCount * numBlocksPerSM) : minGridSize;
+            
+            // Use the larger of minGridSize and optimalGridSize
+            mGridSize = static_cast<uint32_t>(std::max(minGridSize, optimalGridSize));
+        }
 
         maxDataPerIteration = mGridSize * mBlockSize;
         std::fprintf(stderr, "minGridSize: %d, recommendedBlockSize: %d, set blockSize: %u, gridSize: %u, mnemonicsPerIteration: %u\n", minGridSize, recommendedBlockSize, mBlockSize, mGridSize, maxDataPerIteration);

@@ -10,6 +10,9 @@
 
 #include <fstream>
 #include <string>
+#include <algorithm>
+#include <cstdio>
+#include <cuda_runtime.h>
 
 extern __constant__ int d_publicKeyCompressionTypeToCheck;
 
@@ -73,8 +76,46 @@ struct ECC::Impl
 
         setPointsPerThread(pointsPerThread);
 
-        mBlockSize = (blockSize != 0) ? blockSize : recommendedBlockSize;
-        mGridSize = (gridSize != 0) ? gridSize : minGridSize;
+        // Set block size first (needed for occupancy calculation)
+        const uint32_t actualBlockSize = (blockSize != 0) ? blockSize : static_cast<uint32_t>(recommendedBlockSize);
+        
+        // Calculate optimal grid size based on number of SMs for maximum GPU utilization
+        // minGridSize is the minimum needed, but for high-end GPUs (like RTX 5090) we need more
+        if (gridSize != 0)
+        {
+            mGridSize = gridSize;
+            mBlockSize = actualBlockSize;
+        }
+        else
+        {
+            mBlockSize = actualBlockSize;
+            
+            // Get device properties to calculate optimal grid size
+            cudaDeviceProp deviceProp{};
+            int deviceId{};
+            cudaCheckError(cudaGetDevice(&deviceId));
+            cudaCheckError(cudaGetDeviceProperties(&deviceProp, deviceId));
+            
+            // Calculate number of blocks per SM for maximum occupancy
+            int numBlocksPerSM{};
+            int dynamicSMemSize = 0; // No dynamic shared memory used
+            cudaCheckError(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                &numBlocksPerSM, 
+                publicKeyGenerationKernel, 
+                mBlockSize, 
+                dynamicSMemSize));
+            
+            // Optimal grid size = number of SMs × blocks per SM
+            // This ensures all SMs are fully utilized
+            const int optimalGridSize = deviceProp.multiProcessorCount * numBlocksPerSM;
+            
+            // Use the larger of minGridSize and optimalGridSize to ensure we utilize all SMs
+            mGridSize = static_cast<uint32_t>(std::max(minGridSize, optimalGridSize));
+            
+            fprintf(stdout, "[GPU %d] Device: %s, SMs: %d, Blocks/SM: %d, minGridSize: %d, optimalGridSize: %d, using gridSize: %u, blockSize: %u\n",
+                    deviceId, deviceProp.name, deviceProp.multiProcessorCount, numBlocksPerSM, 
+                    minGridSize, optimalGridSize, mGridSize, mBlockSize);
+        }
 
         mKeysNumberPerIteration = mGridSize * mBlockSize * mPointsPerThread;
     }
