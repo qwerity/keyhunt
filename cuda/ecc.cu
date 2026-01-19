@@ -311,6 +311,46 @@ struct ECC::Impl
             // If loading failed, generate the table
             generateGTable();
         }
+        
+        // Оптимизация для L2 кеша: настраиваем память как read-only
+        // Это позволяет GPU более эффективно кешировать данные в L2
+        const secp256k1_ge_storage* d_gTableRawPtr = thrust::raw_pointer_cast(d_gTable.data());
+        const size_t tableSizeBytes = tableSize * sizeof(secp256k1_ge_storage);
+        
+        int deviceId{};
+        cudaCheckError(cudaGetDevice(&deviceId));
+        cudaDeviceProp deviceProp{};
+        cudaCheckError(cudaGetDeviceProperties(&deviceProp, deviceId));
+        
+        // Устанавливаем подсказки для оптимизации кеширования
+        // cudaMemAdviseSetReadMostly: данные преимущественно читаются, можно кешировать в L2
+        // Это особенно важно для больших таблиц, которые не помещаются полностью в L2
+        cudaCheckError(cudaMemAdvise(d_gTableRawPtr, tableSizeBytes, cudaMemAdviseSetReadMostly, deviceId));
+        
+        // cudaMemAdviseSetAccessedBy: оптимизация для доступа с устройства
+        cudaCheckError(cudaMemAdvise(d_gTableRawPtr, tableSizeBytes, cudaMemAdviseSetAccessedBy, deviceId));
+        
+        // Для GPU с поддержкой persisting L2 cache (Ampere+, compute capability 8.0+)
+        // Можно зарезервировать часть L2 кеша специально для этой таблицы
+        if (deviceProp.major >= 8 && deviceProp.persistingL2CacheMaxSize > 0)
+        {
+            // Резервируем часть L2 кеша для gtables (максимум 4 MB или 50% от доступного)
+            const size_t l2CacheReserve = std::min(
+                static_cast<size_t>(4 * 1024 * 1024),  // 4 MB
+                static_cast<size_t>(deviceProp.persistingL2CacheMaxSize / 2)  // или 50% от максимума
+            );
+            
+            // Привязываем память к persisting L2 cache для лучшей производительности
+            cudaCheckError(cudaMemAdvise(d_gTableRawPtr, tableSizeBytes, cudaMemAdviseSetPreferredLocation, deviceId));
+            
+            fprintf(stdout, "L2 cache optimization: Reserved up to %zu bytes for gTable (device supports %d bytes max)\n",
+                    l2CacheReserve, deviceProp.persistingL2CacheMaxSize);
+        }
+        else
+        {
+            fprintf(stdout, "L2 cache optimization: Using read-mostly hints (device doesn't support persisting L2 cache, CC %d.%d)\n",
+                    deviceProp.major, deviceProp.minor);
+        }
     }
 
     void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t gridSize, const uint32_t blockSize)
