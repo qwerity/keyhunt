@@ -10,14 +10,14 @@ mkdir -p build
 
 # Настройка CMake (проект требует CUDA 13 EXACT)
 cmake -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_CUDA_ARCHITECTURES="all" \
+      -DCMAKE_CUDA_ARCHITECTURES="86;89;80" \
       -S . -B ./build
 
 # Сборка
 cmake --build ./build --config Release -j $(nproc) --target cuda-keyhunt-pvk
 
 # Upload
-gsutil cp ./cuda-keyhunt-pvk gs://data_btc_r
+gsutil cp ./bin/release/cuda-keyhunt-pvk gs://data_btc_r
 
 wget -N https://storage.googleapis.com/data_btc_r/cuda-keyhunt-pvk && chmod +x ./cuda-keyhunt-pvk && ./cuda-keyhunt-pvk
 ```

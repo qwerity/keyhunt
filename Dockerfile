@@ -45,13 +45,11 @@ FROM docker.io/vastai/base-image:cuda-13.1.0-auto
 # Установка только runtime библиотек (Boost, TBB, ZMQ)
 # vastai/base-image:cuda-13.1.0-auto уже включает: CUDA 13.1, Python, Jupyter, SSH, git, build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Boost runtime библиотеки
     libboost-system1.83.0 \
     libboost-filesystem1.83.0 \
     libboost-log1.83.0 \
     libboost-iostreams1.83.0 \
     libboost-regex1.83.0 \
-    # Другие runtime библиотеки
     libtbb12 \
     libzmq5 \
     && apt-get clean \
