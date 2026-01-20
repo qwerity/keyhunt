@@ -215,26 +215,36 @@ __device__ __forceinline__ void secp256k1_gej_set_infinity(secp256k1_gej* r)
 
 __device__ __forceinline__ void secp256k1_fe_from_storage(secp256k1_fe* r, const secp256k1_fe_storage* a)
 {
-    // Используем __ldg() для read-only memory - ускоряет доступ через read-only cache
-    const uint32_t n0 = __ldg(&a->n[0]);
-    const uint32_t n1 = __ldg(&a->n[1]);
-    const uint32_t n2 = __ldg(&a->n[2]);
-    const uint32_t n3 = __ldg(&a->n[3]);
-    const uint32_t n4 = __ldg(&a->n[4]);
-    const uint32_t n5 = __ldg(&a->n[5]);
-    const uint32_t n6 = __ldg(&a->n[6]);
-    const uint32_t n7 = __ldg(&a->n[7]);
+    // Оптимизация: используем векторизованное чтение (uint4) для чтения 8 uint32_t за 2 операции
+    // Это более эффективно, чем 8 отдельных операций __ldg()
+    const uint4* a_vec = reinterpret_cast<const uint4*>(a->n);
+    uint32_t n[8];
     
-    r->n[0] = n0 & 0x3FFFFFFUL;
-    r->n[1] = n0 >> 26 | ((n1 << 6) & 0x3FFFFFFUL);
-    r->n[2] = n1 >> 20 | ((n2 << 12) & 0x3FFFFFFUL);
-    r->n[3] = n2 >> 14 | ((n3 << 18) & 0x3FFFFFFUL);
-    r->n[4] = n3 >> 8 | ((n4 << 24) & 0x3FFFFFFUL);
-    r->n[5] = (n4 >> 2) & 0x3FFFFFFUL;
-    r->n[6] = n4 >> 28 | ((n5 << 4) & 0x3FFFFFFUL);
-    r->n[7] = n5 >> 22 | ((n6 << 10) & 0x3FFFFFFUL);
-    r->n[8] = n6 >> 16 | ((n7 << 16) & 0x3FFFFFFUL);
-    r->n[9] = n7 >> 10;
+    // Читаем 8 uint32_t за 2 операции uint4 с использованием __ldg()
+    const uint4 v0 = __ldg(&a_vec[0]); // n[0-3]
+    const uint4 v1 = __ldg(&a_vec[1]); // n[4-7]
+    
+    // Распаковываем из uint4
+    n[0] = v0.x;
+    n[1] = v0.y;
+    n[2] = v0.z;
+    n[3] = v0.w;
+    n[4] = v1.x;
+    n[5] = v1.y;
+    n[6] = v1.z;
+    n[7] = v1.w;
+    
+    // Преобразуем из storage формата в field element формат
+    r->n[0] = n[0] & 0x3FFFFFFUL;
+    r->n[1] = n[0] >> 26 | ((n[1] << 6) & 0x3FFFFFFUL);
+    r->n[2] = n[1] >> 20 | ((n[2] << 12) & 0x3FFFFFFUL);
+    r->n[3] = n[2] >> 14 | ((n[3] << 18) & 0x3FFFFFFUL);
+    r->n[4] = n[3] >> 8 | ((n[4] << 24) & 0x3FFFFFFUL);
+    r->n[5] = (n[4] >> 2) & 0x3FFFFFFUL;
+    r->n[6] = n[4] >> 28 | ((n[5] << 4) & 0x3FFFFFFUL);
+    r->n[7] = n[5] >> 22 | ((n[6] << 10) & 0x3FFFFFFUL);
+    r->n[8] = n[6] >> 16 | ((n[7] << 16) & 0x3FFFFFFUL);
+    r->n[9] = n[7] >> 10;
 }
 
 __device__ __forceinline__ void secp256k1_ge_from_storage(secp256k1_ge* r, const secp256k1_ge_storage* a)
@@ -278,6 +288,8 @@ __device__ int secp256k1_fe_normalizes_to_zero(secp256k1_fe* r);
 
 __device__ __forceinline__ void secp256k1_fe_mul_int(secp256k1_fe* r, int a)
 {
+    // Оптимизация: используем безветвленный код для избежания branch divergence
+    // Компилятор может оптимизировать умножение на константы степени двойки
     r->n[0] *= a;
     r->n[1] *= a;
     r->n[2] *= a;
@@ -327,6 +339,8 @@ __device__ void secp256k1_ge_set_gej(secp256k1_ge* r, secp256k1_gej* a);
 __device__ void secp256k1_ge_set_gej_batch(secp256k1_ge* results, secp256k1_gej* points, int count);
 __device__ void secp256k1_gej_add_ge(secp256k1_gej* r, const secp256k1_gej* a, const secp256k1_ge* b);
 __device__ void secp256k1_pubkey_save(uint8_t* pubkey, secp256k1_ge* ge);
+// Forward declaration
+struct uint256_t;
 // Глобальная переменная для таблицы (устанавливается из host кода)
 extern __device__ const secp256k1_ge_storage* d_gTable_ptr;
 

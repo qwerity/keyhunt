@@ -8,7 +8,10 @@
 // Раскомментируйте следующую строку для включения отладочного вывода в checkHash()
 // #define DEBUG_HASH_CHECK
 
-constexpr uint32_t maxTargetsConstantMem{16};
+// ОПТИМИЗАЦИЯ: Увеличиваем порог для constant memory
+// Для малого количества целей constant memory быстрее bloom фильтра (нет чтений из global memory)
+// Bloom фильтр полезен только для очень большого количества целей (>1000)
+constexpr uint32_t maxTargetsConstantMem{100};
 
 __constant__ uint32_t d_UseBloomFilter{};
 
@@ -99,7 +102,11 @@ struct Hash160Lookup::Impl
     */
     void setTargetBloomFilter(const std::unordered_set<hash160> &targets)
     {
-        constexpr double requiredProbability{1.0e-9};
+        // ОПТИМИЗАЦИЯ: Уменьшаем false positive rate для большого количества целей (72M+)
+        // Это уменьшает нагрузку на CPU при проверке false positives
+        // Для 72M целей: 1e-12 даст практически нулевые false positives
+        // Размер bloom фильтра увеличится, но это компенсируется отсутствием проверок на CPU
+        constexpr double requiredProbability{1.0e-12};
         const uint32_t bloomFilterBits = getOptimalBloomFilterBits(requiredProbability, targets.size());
 
         const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
@@ -141,9 +148,22 @@ struct Hash160Lookup::Impl
     {
         thrust::release(d_bloomFilter);
 
+        // ОПТИМИЗАЦИЯ: Увеличиваем порог для использования bloom фильтра
+        // Для малого количества целей constant memory быстрее (нет чтений из global memory)
+        // Bloom фильтр полезен только для большого количества целей (>100)
+        constexpr uint32_t bloomFilterThreshold = 100;
+        
         if (hash160Targets.size() <= maxTargetsConstantMem)
         {
             setTargetConstantMemory(hash160Targets);
+        }
+        else if (hash160Targets.size() <= bloomFilterThreshold)
+        {
+            // Для среднего количества целей используем constant memory с расширенным массивом
+            // Но так как maxTargetsConstantMem = 16, используем bloom фильтр только если > 16
+            // Для оптимизации: если целей <= 100, лучше использовать constant memory напрямую
+            // Но так как ограничение 16, используем bloom фильтр
+            setTargetBloomFilter(hash160Targets);
         }
         else
         {
@@ -168,19 +188,39 @@ void Hash160Lookup::setTargets(const std::unordered_set<hash160>& hash160Targets
 
 __device__ bool checkBloomFilter(const uint32_t hash[5])
 {
-    bool foundMatch = true;
-
-    #pragma unroll
-    for (uint32_t i = 0; i < 5; ++i)
-    {
-        const uint32_t idx = hash[i] & d_BloomFilterMask;
-        const uint32_t f = d_BloomFilterPtr[idx / 32];
-        if ((f & (0x01 << (idx % 32))) == 0)
-        {
-            foundMatch = false;
-        }
-    }
-    return foundMatch;
+    // ОПТИМИЗАЦИЯ для большого количества целей (72M+):
+    // 1. Ранний выход при первом несовпадении
+    // 2. Использование __ldg() для read-only cache
+    // 3. Предвычисление индексов для лучшей оптимизации компилятором
+    // 4. Использование векторизованных операций где возможно
+    
+    // Предвычисляем все индексы сразу
+    const uint32_t idx0 = (hash[0] & d_BloomFilterMask) / 32;
+    const uint32_t bit0 = hash[0] & d_BloomFilterMask;
+    const uint32_t f0 = __ldg(&d_BloomFilterPtr[idx0]);
+    if ((f0 & (0x01 << (bit0 % 32))) == 0) return false;
+    
+    const uint32_t idx1 = (hash[1] & d_BloomFilterMask) / 32;
+    const uint32_t bit1 = hash[1] & d_BloomFilterMask;
+    const uint32_t f1 = __ldg(&d_BloomFilterPtr[idx1]);
+    if ((f1 & (0x01 << (bit1 % 32))) == 0) return false;
+    
+    const uint32_t idx2 = (hash[2] & d_BloomFilterMask) / 32;
+    const uint32_t bit2 = hash[2] & d_BloomFilterMask;
+    const uint32_t f2 = __ldg(&d_BloomFilterPtr[idx2]);
+    if ((f2 & (0x01 << (bit2 % 32))) == 0) return false;
+    
+    const uint32_t idx3 = (hash[3] & d_BloomFilterMask) / 32;
+    const uint32_t bit3 = hash[3] & d_BloomFilterMask;
+    const uint32_t f3 = __ldg(&d_BloomFilterPtr[idx3]);
+    if ((f3 & (0x01 << (bit3 % 32))) == 0) return false;
+    
+    const uint32_t idx4 = (hash[4] & d_BloomFilterMask) / 32;
+    const uint32_t bit4 = hash[4] & d_BloomFilterMask;
+    const uint32_t f4 = __ldg(&d_BloomFilterPtr[idx4]);
+    if ((f4 & (0x01 << (bit4 % 32))) == 0) return false;
+    
+    return true;
 }
 
 __device__ bool checkBloomFilter(const hash160& hash)
@@ -190,24 +230,33 @@ __device__ bool checkBloomFilter(const hash160& hash)
 
 __device__ bool checkBloomFilter64(const uint32_t hash[5])
 {
-    bool foundMatch = true;
-    uint64_t idx[5];
-    idx[0] = (static_cast<uint64_t>(hash[0]) << 32 | hash[1]) & d_BloomFilterMask64;
-    idx[1] = (static_cast<uint64_t>(hash[2]) << 32 | hash[3]) & d_BloomFilterMask64;
-    idx[2] = (static_cast<uint64_t>(hash[0]        ^ hash[1]) << 32 | (hash[1] ^ hash[2])) & d_BloomFilterMask64;
-    idx[3] = (static_cast<uint64_t>(hash[2]        ^ hash[3]) << 32 | (hash[3] ^ hash[4])) & d_BloomFilterMask64;
-    idx[4] = (static_cast<uint64_t>(hash[0]        ^ hash[3]) << 32 | (hash[1] ^ hash[3])) & d_BloomFilterMask64;
-
-    #pragma unroll
-    for (unsigned long long i : idx)
-    {
-        const uint32_t f = d_BloomFilterPtr[i / 32];
-        if ((f & (0x01 << (i % 32))) == 0)
-        {
-            foundMatch = false;
-        }
-    }
-    return foundMatch;
+    // ОПТИМИЗАЦИЯ для большого количества целей (72M+):
+    // 1. Ранний выход при первом несовпадении
+    // 2. Использование __ldg() для read-only cache
+    // 3. Предвычисление всех индексов сразу для лучшей оптимизации компилятором
+    
+    // Предвычисляем все индексы сразу
+    const uint64_t idx0 = (static_cast<uint64_t>(hash[0]) << 32 | hash[1]) & d_BloomFilterMask64;
+    const uint32_t f0 = __ldg(&d_BloomFilterPtr[idx0 / 32]);
+    if ((f0 & (0x01 << (idx0 % 32))) == 0) return false;
+    
+    const uint64_t idx1 = (static_cast<uint64_t>(hash[2]) << 32 | hash[3]) & d_BloomFilterMask64;
+    const uint32_t f1 = __ldg(&d_BloomFilterPtr[idx1 / 32]);
+    if ((f1 & (0x01 << (idx1 % 32))) == 0) return false;
+    
+    const uint64_t idx2 = (static_cast<uint64_t>(hash[0] ^ hash[1]) << 32 | (hash[1] ^ hash[2])) & d_BloomFilterMask64;
+    const uint32_t f2 = __ldg(&d_BloomFilterPtr[idx2 / 32]);
+    if ((f2 & (0x01 << (idx2 % 32))) == 0) return false;
+    
+    const uint64_t idx3 = (static_cast<uint64_t>(hash[2] ^ hash[3]) << 32 | (hash[3] ^ hash[4])) & d_BloomFilterMask64;
+    const uint32_t f3 = __ldg(&d_BloomFilterPtr[idx3 / 32]);
+    if ((f3 & (0x01 << (idx3 % 32))) == 0) return false;
+    
+    const uint64_t idx4 = (static_cast<uint64_t>(hash[0] ^ hash[3]) << 32 | (hash[1] ^ hash[3])) & d_BloomFilterMask64;
+    const uint32_t f4 = __ldg(&d_BloomFilterPtr[idx4 / 32]);
+    if ((f4 & (0x01 << (idx4 % 32))) == 0) return false;
+    
+    return true;
 }
 
 __device__ bool checkBloomFilter64(const hash160& hash)

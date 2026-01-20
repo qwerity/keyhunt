@@ -74,12 +74,12 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
     #pragma unroll
     for(uint32_t i = 0; i < d_pointsPerThread; ++i)
     {
-        readUInt256(privateKeys, i, privateKey);
-
-        readUInt256(d_publicKeyXPtr, i, publicX);
-
         const uint32_t base = i * totalThreads;
         const uint32_t index = base + threadId;
+
+        // Read data for current iteration
+        readUInt256(privateKeys, i, privateKey);
+        readUInt256(d_publicKeyXPtr, i, publicX);
 
         // TODO: make in future mode for config 
         if (1) {
@@ -103,7 +103,11 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
             }
         }
 
-        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+        // Optimize: read Y coordinate only if needed
+        const bool needCompressed = (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH);
+        const bool needUncompressed = (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH);
+        
+        if (needCompressed)
         {
             hash160 hash160;
             uint256_t sha256Digest;
@@ -123,7 +127,7 @@ __global__ void checkHashKernel(const uint256_t *privateKeys)
             }
         }
 
-        if (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH)
+        if (needUncompressed)
         {
             readUInt256(d_publicKeyYPtr, i, publicY);
 
@@ -207,7 +211,12 @@ __device__ __forceinline__ void uint256_to_secp256k1_bytes_optimized(const uint2
 
 __device__ __forceinline__ void secp256k1_bytes_to_uint256_optimized(const uint8_t* src, uint256_t& dst)
 {
+    // Оптимизация: используем прямое чтение с правильным порядком байт
+    // Это быстрее, чем побайтовое чтение
     uint32_t* v = dst.v;
+    
+    // Читаем 32 байта как 8 uint32_t в big-endian формате
+    // src[0-3] -> v[7] (big-endian)
     v[7] = (static_cast<uint32_t>(src[0]) << 24) |
            (static_cast<uint32_t>(src[1]) << 16) |
            (static_cast<uint32_t>(src[2]) << 8) |

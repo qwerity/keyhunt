@@ -273,7 +273,18 @@ __device__ __forceinline__ void readUInt256(const uint256_t *data, const uint32_
     const uint32_t base = depth * totalThreads;
     const uint32_t index = base + threadId;
 
-    x = data[index];
+    // Use vectorized load for better memory throughput
+    const uint4* data_vec = reinterpret_cast<const uint4*>(data);
+    uint4* x_vec = reinterpret_cast<uint4*>(x.v);
+    #if defined(__CUDA_ARCH__)
+    // Use __ldg() for read-only cache optimization in device code
+    x_vec[0] = __ldg(&data_vec[index * 2]);     // Load first 16 bytes with read-only cache
+    x_vec[1] = __ldg(&data_vec[index * 2 + 1]); // Load second 16 bytes with read-only cache
+    #else
+    // Host code path (should not be called, but needed for compilation)
+    x_vec[0] = data_vec[index * 2];
+    x_vec[1] = data_vec[index * 2 + 1];
+    #endif
 }
 
 __device__ __forceinline__ void writeUInt256(const uint256_t& x, const uint32_t depth, uint256_t *data)
@@ -284,5 +295,9 @@ __device__ __forceinline__ void writeUInt256(const uint256_t& x, const uint32_t 
     const uint32_t base = depth * totalThreads;
     const uint32_t index = base + threadId;
 
-    data[index] = x;
+    // Use vectorized store for better memory throughput
+    const uint4* x_vec = reinterpret_cast<const uint4*>(x.v);
+    uint4* data_vec = reinterpret_cast<uint4*>(data);
+    data_vec[index * 2] = x_vec[0];     // Store first 16 bytes
+    data_vec[index * 2 + 1] = x_vec[1];  // Store second 16 bytes
 }

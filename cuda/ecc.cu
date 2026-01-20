@@ -311,46 +311,6 @@ struct ECC::Impl
             // If loading failed, generate the table
             generateGTable();
         }
-        
-        // Оптимизация для L2 кеша: настраиваем память как read-only
-        // Это позволяет GPU более эффективно кешировать данные в L2
-        const secp256k1_ge_storage* d_gTableRawPtr = thrust::raw_pointer_cast(d_gTable.data());
-        const size_t tableSizeBytes = tableSize * sizeof(secp256k1_ge_storage);
-        
-        int deviceId{};
-        cudaCheckError(cudaGetDevice(&deviceId));
-        cudaDeviceProp deviceProp{};
-        cudaCheckError(cudaGetDeviceProperties(&deviceProp, deviceId));
-        
-        // Устанавливаем подсказки для оптимизации кеширования
-        // cudaMemAdviseSetReadMostly: данные преимущественно читаются, можно кешировать в L2
-        // Это особенно важно для больших таблиц, которые не помещаются полностью в L2
-        // Примечание: для обычной device memory (не unified memory) эти подсказки помогают
-        // драйверу оптимизировать prefetching и кеширование в L2
-        cudaError_t adviseErr = cudaMemAdvise(d_gTableRawPtr, tableSizeBytes, cudaMemAdviseSetReadMostly, deviceId);
-        if (adviseErr == cudaSuccess)
-        {
-            // cudaMemAdviseSetAccessedBy: оптимизация для доступа с устройства
-            cudaCheckError(cudaMemAdvise(d_gTableRawPtr, tableSizeBytes, cudaMemAdviseSetAccessedBy, deviceId));
-            
-            if (deviceProp.major >= 8 && deviceProp.persistingL2CacheMaxSize > 0)
-            {
-                fprintf(stdout, "L2 cache optimization: Using read-mostly hints (device supports persisting L2 cache: %d bytes, CC %d.%d)\n",
-                        deviceProp.persistingL2CacheMaxSize, deviceProp.major, deviceProp.minor);
-            }
-            else
-            {
-                fprintf(stdout, "L2 cache optimization: Using read-mostly hints (device doesn't support persisting L2 cache, CC %d.%d)\n",
-                        deviceProp.major, deviceProp.minor);
-            }
-        }
-        else
-        {
-            // cudaMemAdvise может не поддерживаться для обычной device memory на некоторых системах
-            // Это не критично - __ldg() уже обеспечивает read-only cache оптимизацию
-            fprintf(stdout, "L2 cache optimization: cudaMemAdvise not available, using __ldg() read-only cache (CC %d.%d)\n",
-                    deviceProp.major, deviceProp.minor);
-        }
     }
 
     void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t gridSize, const uint32_t blockSize)
@@ -373,27 +333,40 @@ struct ECC::Impl
 
     void calculatePublicKeysAndCheckHash160()
     {
-        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
-        {
-            constexpr uint256_t infinite{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
-            thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), infinite);
-            thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), infinite);
-        }, "Initialize public keys"));
+        // Initialize public keys asynchronously
+        constexpr uint256_t infinite{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), infinite);
+        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), infinite);
 
+        // Copy gTable pointer to constant memory
         const secp256k1_ge_storage* d_gTableRawPtr = thrust::raw_pointer_cast(d_gTable.data());
         cudaCheckError(cudaMemcpyToSymbol(d_gTable_ptr, &d_gTableRawPtr, sizeof(secp256k1_ge_storage*)));
         
+        // Launch kernels asynchronously - no synchronization between kernels
         constexpr uint32_t mSharedMemSize{0};
         const uint256_t *privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys.data());
-        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
+        
+        publicKeyGenerationKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+        cudaError_t err1 = cudaGetLastError();
+        if (err1 != cudaSuccess)
         {
-            publicKeyGenerationKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
-        }, "publicKeyGenerationKernel"));
-
-        cudaCheckError(cudaKernelSyncLaunch(mGeneratorStream, [&]()
+            fprintf(stderr, "publicKeyGenerationKernel: CUDA error: %s\n", cudaGetErrorString(err1));
+        }
+        
+        checkHashKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+        cudaError_t err2 = cudaGetLastError();
+        if (err2 != cudaSuccess)
         {
-            checkHashKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
-        }, "checkHashKernel"));
+            fprintf(stderr, "checkHashKernel: CUDA error: %s\n", cudaGetErrorString(err2));
+        }
+        
+        // Synchronize only once at the end
+        cudaError_t syncErr = cudaStreamSynchronize(mGeneratorStream);
+        if (syncErr != cudaSuccess)
+        {
+            fprintf(stderr, "calculatePublicKeysAndCheckHash160: CUDA sync error: %s\n", cudaGetErrorString(syncErr));
+            cudaCheckError(syncErr);
+        }
     }
 };
 

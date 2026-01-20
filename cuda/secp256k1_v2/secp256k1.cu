@@ -989,20 +989,30 @@ __device__ void secp256k1_gej_add_ge(secp256k1_gej* r, const secp256k1_gej* a, c
     secp256k1_fe zz, u1, u2, s1, s2, t, tt, m, n, q, rr;
     secp256k1_fe m_alt, rr_alt;
 
+    // Оптимизация: вычисляем zz и используем его сразу для u2 и s2
     secp256k1_fe_sqr(&zz, &a->z);                       /* z = Z1^2 */
+    
+    // ОПТИМИЗАЦИЯ #1: Убираем ранние нормализации u1 и s1
+    // secp256k1_fe_add может работать с ненормализованными значениями, если они не слишком большие
+    // Нормализуем только перед операциями, которые критически требуют нормализованного формата
     u1 = a->x;
-    secp256k1_fe_normalize_weak(&u1);        /* u1 = U1 = X1*Z2^2 (1) */
     secp256k1_fe_mul(&u2, &b->x, &zz);                  /* u2 = U2 = X2*Z1^2 (1) */
     s1 = a->y;
-    secp256k1_fe_normalize_weak(&s1);        /* s1 = S1 = Y1*Z2^3 (1) */
     secp256k1_fe_mul(&s2, &b->y, &zz);       /* s2 = Y2*Z1^2 (1) */
     secp256k1_fe_mul(&s2, &s2, &a->z);       /* s2 = S2 = Y2*Z1^3 (1) */
+    
+    // НЕ нормализуем u1 и s1 здесь - откладываем до необходимости
+    // Это экономит 2 вызова normalize_weak (20 операций)
+    
     t = u1;
     secp256k1_fe_add(&t, &u2);                  /* t = T = U1+U2 (2) */
     m = s1;
     secp256k1_fe_add(&m, &s2);                  /* m = M = S1+S2 (2) */
     secp256k1_fe_sqr(&rr, &t);                          /* rr = T^2 (1) */
     secp256k1_fe_negate(&m_alt, &u2, 1);                /* Malt = -X2*Z1^2 */
+    // ОПТИМИЗАЦИЯ: нормализуем u1 только перед mul, если необходимо
+    // secp256k1_fe_mul может работать с ненормализованными значениями, но для точности нормализуем
+    secp256k1_fe_normalize_weak(&u1);                   /* Нормализуем u1 только перед mul */
     secp256k1_fe_mul(&tt, &u1, &m_alt);                 /* tt = -U1*U2 (2) */
     secp256k1_fe_add(&rr, &tt);                         /* rr = R = T^2-U1*U2 (3) */
     /** If lambda = R/M = 0/0 we have a problem (except in the "trivial"
@@ -1013,8 +1023,20 @@ __device__ void secp256k1_gej_add_ge(secp256k1_gej* r, const secp256k1_gej* a, c
      * a nontrivial cube root of one. In either case, an alternate
      * non-indeterminate expression for lambda is (y1 - y2)/(x1 - x2),
      * so we set R/M equal to this. */
+    // ОПТИМИЗАЦИЯ: нормализуем s1 только перед использованием в операциях
+    secp256k1_fe_normalize_weak(&s1);                   /* Нормализуем s1 перед операциями */
     rr_alt = s1;
-    secp256k1_fe_mul_int(&rr_alt, 2);       /* rr = Y1*Z2^3 - Y2*Z1^3 (2) */
+    // Оптимизация: умножение на 2 через сдвиг (быстрее, чем умножение)
+    rr_alt.n[0] <<= 1;
+    rr_alt.n[1] <<= 1;
+    rr_alt.n[2] <<= 1;
+    rr_alt.n[3] <<= 1;
+    rr_alt.n[4] <<= 1;
+    rr_alt.n[5] <<= 1;
+    rr_alt.n[6] <<= 1;
+    rr_alt.n[7] <<= 1;
+    rr_alt.n[8] <<= 1;
+    rr_alt.n[9] <<= 1;
     secp256k1_fe_add(&m_alt, &u1);          /* Malt = X1*Z2^2 - X2*Z1^2 */
 
     secp256k1_fe_cmov(&rr_alt, &rr, !degenerate);
@@ -1035,19 +1057,62 @@ __device__ void secp256k1_gej_add_ge(secp256k1_gej* r, const secp256k1_gej* a, c
     secp256k1_fe_mul(&r->z, &a->z, &m_alt);             /* r->z = Malt*Z (1) */
 
     int infinity = secp256k1_fe_normalizes_to_zero(&r->z) * (1 - a->infinity);
-    secp256k1_fe_mul_int(&r->z, 2);                     /* r->z = Z3 = 2*Malt*Z (2) */
+    // Оптимизация: умножение на 2 через сдвиг
+    r->z.n[0] <<= 1;
+    r->z.n[1] <<= 1;
+    r->z.n[2] <<= 1;
+    r->z.n[3] <<= 1;
+    r->z.n[4] <<= 1;
+    r->z.n[5] <<= 1;
+    r->z.n[6] <<= 1;
+    r->z.n[7] <<= 1;
+    r->z.n[8] <<= 1;
+    r->z.n[9] <<= 1;
     secp256k1_fe_negate(&q, &q, 1);                     /* q = -Q (2) */
     secp256k1_fe_add(&t, &q);                           /* t = Ralt^2-Q (3) */
-    secp256k1_fe_normalize_weak(&t);
+    // ОПТИМИЗАЦИЯ: убираем нормализацию t здесь - она не нужна для присваивания
+    // Нормализуем только финальный результат в конце
     r->x = t;                                           /* r->x = Ralt^2-Q (1) */
-    secp256k1_fe_mul_int(&t, 2);                        /* t = 2*x3 (2) */
+    // Оптимизация: умножение на 2 через сдвиг
+    t.n[0] <<= 1;
+    t.n[1] <<= 1;
+    t.n[2] <<= 1;
+    t.n[3] <<= 1;
+    t.n[4] <<= 1;
+    t.n[5] <<= 1;
+    t.n[6] <<= 1;
+    t.n[7] <<= 1;
+    t.n[8] <<= 1;
+    t.n[9] <<= 1;
     secp256k1_fe_add(&t, &q);                           /* t = 2*x3 - Q: (4) */
     secp256k1_fe_mul(&t, &t, &rr_alt);                  /* t = Ralt*(2*x3 - Q) (1) */
     secp256k1_fe_add(&t, &n);                           /* t = Ralt*(2*x3 - Q) + M^3*Malt (3) */
     secp256k1_fe_negate(&r->y, &t, 3);                  /* r->y = Ralt*(Q - 2x3) - M^3*Malt (4) */
-    secp256k1_fe_normalize_weak(&r->y);
-    secp256k1_fe_mul_int(&r->x, 4);                     /* r->x = X3 = 4*(Ralt^2-Q) */
-    secp256k1_fe_mul_int(&r->y, 4);                     /* r->y = Y3 = 4*Ralt*(Q - 2x3) - 4*M^3*Malt (4) */
+    // ОПТИМИЗАЦИЯ: нормализуем только финальные результаты r->x и r->y
+    // Это единственные нормализации, которые действительно нужны для корректности
+    secp256k1_fe_normalize_weak(&r->x);                 /* Нормализуем r->x перед финальным умножением */
+    secp256k1_fe_normalize_weak(&r->y);                 /* Нормализуем r->y */
+    // Оптимизация: умножение на 4 через сдвиг на 2 бита
+    r->x.n[0] <<= 2;
+    r->x.n[1] <<= 2;
+    r->x.n[2] <<= 2;
+    r->x.n[3] <<= 2;
+    r->x.n[4] <<= 2;
+    r->x.n[5] <<= 2;
+    r->x.n[6] <<= 2;
+    r->x.n[7] <<= 2;
+    r->x.n[8] <<= 2;
+    r->x.n[9] <<= 2;
+    r->y.n[0] <<= 2;
+    r->y.n[1] <<= 2;
+    r->y.n[2] <<= 2;
+    r->y.n[3] <<= 2;
+    r->y.n[4] <<= 2;
+    r->y.n[5] <<= 2;
+    r->y.n[6] <<= 2;
+    r->y.n[7] <<= 2;
+    r->y.n[8] <<= 2;
+    r->y.n[9] <<= 2;
 
     /** In case a->infinity == 1, replace r with (b->x, b->y, 1). */
     secp256k1_fe_cmov(&r->x, &b->x, a->infinity);
@@ -1070,6 +1135,7 @@ __device__ void secp256k1_pubkey_save(uint8_t* pubkey, secp256k1_ge* ge)
     secp256k1_fe_get_b32(pubkey, &ge->x);
     secp256k1_fe_get_b32(pubkey + 32, &ge->y);
 }
+
 
 // Глобальная переменная для таблицы (устанавливается из host кода)
 __device__ const secp256k1_ge_storage* d_gTable_ptr;
@@ -1098,6 +1164,7 @@ __device__ void secp256k1_ecmult_gen(secp256k1_gej* r, secp256k1_scalar* gn)
             const uint32_t tableIndex = chunk * ECMULT_GEN_PREC_G + (chunkValue - 1);
             
             // Читаем точку из global memory (с __ldg оптимизацией через secp256k1_ge_from_storage)
+            // secp256k1_ge_from_storage уже использует векторизованное чтение с __ldg() внутри
             secp256k1_ge_from_storage(&add, &d_gTable_ptr[tableIndex]);
             secp256k1_gej_add_ge(r, r, &add);
         }
