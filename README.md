@@ -81,4 +81,16 @@ There is needed to install following packages to be able to compile
 
 ## use vast ai 
 - create instance with custom template
+
+apt-get update && apt-get install -y --no-install-recommends \
+    libboost-system1.83.0 \
+    libboost-filesystem1.83.0 \
+    libboost-log1.83.0 \
+    libboost-iostreams1.83.0 \
+    libboost-regex1.83.0 \
+    libtbb12 \
+    libzmq5 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 - wget https://storage.googleapis.com/data_btc_r/startup.sh && chmod +x ./startup.sh && ./startup.sh
