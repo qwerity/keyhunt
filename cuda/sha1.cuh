@@ -206,8 +206,6 @@ struct SecureRandomState
     int nextBIndex;
     uint64_t counter;  // uint64_t as in generate_d_cuda.cpp (not int64_t)
     int firstCall;
-    uint32_t seed3;  // Сохраняем для установки в nextBytes
-    uint32_t seed4;  // Сохраняем для установки в nextBytes
 };
 
 // Initialize SecureRandom state (matching generate_d_cuda.cpp initSecureRandom)
@@ -240,8 +238,9 @@ __device__ __forceinline__ void initSecureRandomState(SecureRandomState* state, 
     state->seed[HASH_OFFSET + 3] = d_SHA1_H3;
     state->seed[HASH_OFFSET + 4] = d_SHA1_H4;
     
-    state->seed3 = x;
-    state->seed4 = y;
+    // Set seed[3] and seed[4] from parameters
+    state->seed[3] = x;
+    state->seed[4] = y;
 }
 
 // Generate next bytes (matching generate_d_cuda.cpp nextBytes exactly)
@@ -295,9 +294,6 @@ __device__ __forceinline__ void nextBytes(SecureRandomState* state, uint8_t* byt
     }
     
     if (nextByteToReturn >= bytesLen) return;
-    
-    state->seed[3] = state->seed3;
-    state->seed[4] = state->seed4;
     
     // Main loop to generate bytes (optimized, matching generate_d_cuda.cpp)
     uint32_t* seed = state->seed;
@@ -454,25 +450,6 @@ __device__ __forceinline__ void generatePrivateKeyBase(const uint2& p, uint256_t
         bytes[offset + 1] = static_cast<uint8_t>(digits[i] >> 16);
         bytes[offset + 2] = static_cast<uint8_t>(digits[i] >> 8);
         bytes[offset + 3] = static_cast<uint8_t>(digits[i]);
-    }
-    
-    // Handle negative numbers (matching generate_d_cuda.cpp)
-    if (bytes[0] & 0x80)
-    {
-        uint8_t abs_bytes[32];
-        int carry = 1;
-        for (int i = 31; i >= 0; i--)
-        {
-            int sum = ((~bytes[i]) & 0xFF) + carry;
-            abs_bytes[i] = static_cast<uint8_t>(sum);
-            carry = sum >> 8;
-        }
-        // Copy abs_bytes back to bytes
-        #pragma unroll
-        for (int i = 0; i < 32; i++)
-        {
-            bytes[i] = abs_bytes[i];
-        }
     }
     
     // Convert to uint256_t (little-endian words format used in the codebase)

@@ -40,8 +40,6 @@ struct SecureRandomState {
     int nextBIndex;
     uint64_t counter;
     int firstCall;
-    uint32_t seed3;  // Сохраняем для установки в nextBytes
-    uint32_t seed4;  // Сохраняем для установки в nextBytes
 };
 
 // Битовые операции (inline для оптимизации)
@@ -154,17 +152,19 @@ void initSecureRandom(SecureRandomState* state, uint32_t x, uint32_t y) {
     state->seed[HASH_OFFSET + 3] = H3;
     state->seed[HASH_OFFSET + 4] = H4;
     
-    state->seed3 = x;
-    state->seed4 = y;
+    // Устанавливаем seed[3] и seed[4] из параметров
+    state->seed[3] = x;
+    state->seed[4] = y;
 }
 
-// Генерация случайных байтов
+// Генерация случайных байтов (оптимизированная версия)
 void nextBytes(SecureRandomState* state, uint8_t* bytes, int bytesLen) {
     if (bytesLen == 0) return;
     
-    int extrabytes = 7;
-    int lastWord = (state->seed[BYTES_OFFSET] == 0) ? 0 
-                   : ((state->seed[BYTES_OFFSET] + extrabytes) >> 3 - 1);
+    // Предвычисляем lastWord один раз
+    const int extrabytes = 7;
+    const int lastWord = (state->seed[BYTES_OFFSET] == 0) ? 0 
+                        : ((state->seed[BYTES_OFFSET] + extrabytes) >> 3 - 1);  // БАГ!
     
     if (state->firstCall) {
         state->seed[81] = 20;
@@ -173,11 +173,21 @@ void nextBytes(SecureRandomState* state, uint8_t* bytes, int bytesLen) {
     
     int nextByteToReturn = 0;
     
+    // Используем оставшиеся байты из предыдущего вызова
     if (state->nextBIndex < HASHBYTES_TO_USE) {
         int remaining = HASHBYTES_TO_USE - state->nextBIndex;
         int n = (remaining < bytesLen - nextByteToReturn) ? remaining : (bytesLen - nextByteToReturn);
         if (n > 0) {
-            memcpy(bytes + nextByteToReturn, state->nextBytes + state->nextBIndex, n);
+            // Для маленьких размеров используем прямые присваивания вместо memcpy
+            if (n <= 8) {
+                uint8_t* src = state->nextBytes + state->nextBIndex;
+                uint8_t* dst = bytes + nextByteToReturn;
+                for (int i = 0; i < n; i++) {
+                    dst[i] = src[i];
+                }
+            } else {
+                memcpy(bytes + nextByteToReturn, state->nextBytes + state->nextBIndex, n);
+            }
             state->nextBIndex += n;
             nextByteToReturn += n;
         }
@@ -185,13 +195,12 @@ void nextBytes(SecureRandomState* state, uint8_t* bytes, int bytesLen) {
     
     if (nextByteToReturn >= bytesLen) return;
     
-    state->seed[3] = state->seed3;
-    state->seed[4] = state->seed4;
-    
+    // Основной цикл генерации байтов (оптимизированный)
     uint32_t* seed = state->seed;
     uint64_t counter = state->counter;
     
     while (nextByteToReturn < bytesLen) {
+        // Вставляем counter в frame (используем локальные переменные)
         seed[lastWord] = (uint32_t)(counter >> 32);
         seed[lastWord + 1] = (uint32_t)(counter & 0xFFFFFFFF);
         seed[lastWord + 2] = END_FLAG;
@@ -199,29 +208,60 @@ void nextBytes(SecureRandomState* state, uint8_t* bytes, int bytesLen) {
         computeHash(seed);
         counter++;
         
+        // Извлекаем байты из хеша (big-endian как в Java) - развернутый цикл для скорости
         uint32_t* h = state->seed + HASH_OFFSET;
         uint8_t* nb = state->nextBytes;
-        for (int i = 0; i < EXTRAFRAME_OFFSET; i++) {
-            uint32_t k = h[i];
-            nb[i*4] = (uint8_t)(k >> 24);
-            nb[i*4 + 1] = (uint8_t)(k >> 16);
-            nb[i*4 + 2] = (uint8_t)(k >> 8);
-            nb[i*4 + 3] = (uint8_t)k;
-        }
+        uint32_t k0 = h[0];
+        uint32_t k1 = h[1];
+        uint32_t k2 = h[2];
+        uint32_t k3 = h[3];
+        uint32_t k4 = h[4];
+        nb[0] = (uint8_t)(k0 >> 24);
+        nb[1] = (uint8_t)(k0 >> 16);
+        nb[2] = (uint8_t)(k0 >> 8);
+        nb[3] = (uint8_t)k0;
+        nb[4] = (uint8_t)(k1 >> 24);
+        nb[5] = (uint8_t)(k1 >> 16);
+        nb[6] = (uint8_t)(k1 >> 8);
+        nb[7] = (uint8_t)k1;
+        nb[8] = (uint8_t)(k2 >> 24);
+        nb[9] = (uint8_t)(k2 >> 16);
+        nb[10] = (uint8_t)(k2 >> 8);
+        nb[11] = (uint8_t)k2;
+        nb[12] = (uint8_t)(k3 >> 24);
+        nb[13] = (uint8_t)(k3 >> 16);
+        nb[14] = (uint8_t)(k3 >> 8);
+        nb[15] = (uint8_t)k3;
+        nb[16] = (uint8_t)(k4 >> 24);
+        nb[17] = (uint8_t)(k4 >> 16);
+        nb[18] = (uint8_t)(k4 >> 8);
+        nb[19] = (uint8_t)k4;
         
         state->nextBIndex = 0;
         int bytesToCopy = (HASHBYTES_TO_USE < bytesLen - nextByteToReturn) 
                          ? HASHBYTES_TO_USE 
                          : bytesLen - nextByteToReturn;
         if (bytesToCopy > 0) {
-            memcpy(bytes + nextByteToReturn, state->nextBytes, bytesToCopy);
+            // Для маленьких размеров используем прямые присваивания
+            if (bytesToCopy <= 8) {
+                uint8_t* src = state->nextBytes;
+                uint8_t* dst = bytes + nextByteToReturn;
+                for (int i = 0; i < bytesToCopy; i++) {
+                    dst[i] = src[i];
+                }
+            } else {
+                memcpy(bytes + nextByteToReturn, state->nextBytes, bytesToCopy);
+            }
             nextByteToReturn += bytesToCopy;
             state->nextBIndex += bytesToCopy;
         }
         
-        if (nextByteToReturn >= bytesLen) break;
+        if (nextByteToReturn >= bytesLen) {
+            break;
+        }
     }
     
+    // Сохраняем обновленный counter
     state->counter = counter;
 }
 
@@ -229,6 +269,9 @@ void nextBytes(SecureRandomState* state, uint8_t* bytes, int bytesLen) {
 uint32_t nextInt(SecureRandomState* state) {
     uint8_t bytes[4];
     nextBytes(state, bytes, 4);
+    // Java next() собирает: ret = (next[i] & 0xFF) | (ret << 8)
+    // Результат: next[0] << 24 | next[1] << 16 | next[2] << 8 | next[3]
+    // Используем прямые операции для скорости
     return ((uint32_t)bytes[0] << 24) |
            ((uint32_t)bytes[1] << 16) |
            ((uint32_t)bytes[2] << 8) |
@@ -248,7 +291,7 @@ void bytesToHex(uint8_t* bytes, int len, char* output) {
 int main() {
     SecureRandomState state;
     uint32_t x = 1;
-    uint32_t y = 2290218935;
+    uint32_t y = 1;
     initSecureRandom(&state, x, y);
     
     // Генерация 256 бит (8 int значений по 32 бита)
@@ -260,8 +303,10 @@ int main() {
         digits[i] = nextInt(&state);
     }
     
+    // Using only the necessary bits (как в Java)
     digits[numberLength - 1] >>= ((-numBits) & 31);
     
+    // Преобразуем в байты (big-endian, как в Java setJavaRepresentation)
     uint8_t bytes[32];
     for (int i = 0; i < numberLength; i++) {
         int offset = (numberLength - 1 - i) * 4;
@@ -271,23 +316,9 @@ int main() {
         bytes[offset + 3] = (uint8_t)digits[i];
     }
     
-    if (bytes[0] & 0x80) {
-        uint8_t abs_bytes[32];
-        int carry = 1;
-        for (int i = 31; i >= 0; i--) {
-            int sum = ((~bytes[i]) & 0xFF) + carry;
-            abs_bytes[i] = (uint8_t)sum;
-            carry = sum >> 8;
-        }
-        
-        char hex[65];
-        bytesToHex(abs_bytes, 32, hex);
-        printf("Random hex: %s\n", hex);
-    } else {
-        char hex[65];
-        bytesToHex(bytes, 32, hex);
-        printf("Random hex: %s\n", hex);
-    }
+    char hex[65];
+    bytesToHex(bytes, 32, hex);
+    printf("Random hex: %s\n", hex);
     
     return 0;
 }
