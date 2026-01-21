@@ -39,6 +39,10 @@ struct HunterConfig
     bool forcePrivateXPart{false};
     uint32_t privateXPart{1};
     uint32_t privateYOffset{0};
+
+    // Specific X values mode
+    bool useSpecificXValues{false};
+    std::vector<uint32_t> specificXValues;
 };
 
 struct HDWalletConfig

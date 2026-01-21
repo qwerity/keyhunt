@@ -11,6 +11,13 @@
   "privateX": 1,
   "publicKeyCompressionTypeToCheck": 2,
 
+  "specificXValues": [
+    12345,
+    67890,
+    0xABCD,
+    0x1234
+  ],
+
   "server" : {
     "url": "94.228.120.133",
     "port": 3600,

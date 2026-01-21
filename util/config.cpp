@@ -288,6 +288,33 @@ struct Config::Impl
             hunter.privateYOffset = configJson["privateYOffset"].get<uint32_t>();
         }
 
+        // Load specific X values array if present
+        if (configJson.contains("specificXValues") && configJson["specificXValues"].is_array())
+        {
+            hunter.useSpecificXValues = true;
+            hunter.specificXValues.clear();
+            for (const auto& xValue : configJson["specificXValues"])
+            {
+                if (xValue.is_number_unsigned())
+                {
+                    hunter.specificXValues.push_back(xValue.get<uint32_t>());
+                }
+                else
+                {
+                    BOOST_LOG_TRIVIAL(warning) << "Invalid value in specificXValues (must be unsigned integer), skipping";
+                }
+            }
+            if (!hunter.specificXValues.empty())
+            {
+                BOOST_LOG_TRIVIAL(info) << std::format("Loaded {:L} specific X values for checking", hunter.specificXValues.size());
+            }
+            else
+            {
+                hunter.useSpecificXValues = false;
+                BOOST_LOG_TRIVIAL(warning) << "specificXValues array is empty, ignoring";
+            }
+        }
+
         if (configJson.contains("publicKeyCompressionTypeToCheck") && configJson["publicKeyCompressionTypeToCheck"].is_number_unsigned())
         {
             if (const uint32_t compressionType = configJson["publicKeyCompressionTypeToCheck"].get<uint32_t>(); compressionType <= 2)

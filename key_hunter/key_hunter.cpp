@@ -206,6 +206,47 @@ struct KeyHunter::Impl
         resultAtomicList.init(sizeof(Hash160SearchResult), 256);
         cuECC->init(gContext->config.pointsPerThread(), gContext->config.publicKeyCompressionTypeToCheck(), gContext->config.gridSize(), gContext->config.blockSize());
 
+        const HunterConfig& hunter = gContext->config.hunter();
+
+        // Check if we should use specific X values mode
+        if (hunter.useSpecificXValues && !hunter.specificXValues.empty())
+        {
+            BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] Using specific X values mode: {:L} values to check",
+                                                    cudaInfo.id, hunter.specificXValues.size());
+
+            // Iterate through all specific X values
+            for (size_t i = 0; i < hunter.specificXValues.size() && !stopFlag; ++i)
+            {
+                const uint32_t privateXPart = hunter.specificXValues[i];
+                BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] [{}/{}] Generating for privateXPart: {:#x} [{:L} | {:L}]",
+                                                        cudaInfo.id, i + 1, hunter.specificXValues.size(), privateXPart, privateXPart, static_cast<int>(privateXPart));
+
+                startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
+
+                if (!gContext->config.devMode())
+                {
+                    // Use async marking if XPartManager is available (recommended for multi-GPU)
+                    if (gContext->xPartManager)
+                    {
+                        // XPartManager handles logging internally
+                        gContext->xPartManager->markXPartDoneAsync(privateXPart);
+                    }
+                    else
+                    {
+                        // Fallback to synchronous method (may block GPU threads)
+                        const std::string postString = std::format("markXPartDone for privateXPart: {}", privateXPart);
+                        utils::backupToTGAsync(postString);
+                        (void) gContext->httpClient->markXPartDone(privateXPart);
+                        BOOST_LOG_TRIVIAL(fatal) << postString;
+                    }
+                }
+            }
+
+            BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] Finished checking all {:L} specific X values", cudaInfo.id, hunter.specificXValues.size());
+            return;
+        }
+
+        // Original logic for normal mode
         do
         {
             const uint32_t privateXPart = getPrivateXPart();
@@ -232,7 +273,7 @@ struct KeyHunter::Impl
                 }
             }
         }
-        while (!stopFlag && !gContext->config.hunter().forcePrivateXPart);
+        while (!stopFlag && !hunter.forcePrivateXPart);
     }
 };
 
