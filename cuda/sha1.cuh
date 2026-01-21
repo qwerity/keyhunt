@@ -456,7 +456,7 @@ __device__ __forceinline__ void generatePrivateKeyBase(const uint2& p, uint256_t
         bytes[offset + 3] = static_cast<uint8_t>(digits[i]);
     }
     
-екн    // Handle negative numbers (matching generate_d_cuda.cpp)
+    // Handle negative numbers (matching generate_d_cuda.cpp)
     if (bytes[0] & 0x80)
     {
         uint8_t abs_bytes[32];
