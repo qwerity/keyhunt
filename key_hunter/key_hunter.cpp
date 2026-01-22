@@ -209,7 +209,7 @@ struct KeyHunter::Impl
         const HunterConfig& hunter = gContext->config.hunter();
 
         // Check if we should use specific X values mode
-        if (hunter.useSpecificXValues && !hunter.specificXValues.empty())
+        if (!hunter.specificXValues.empty())
         {
             BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] Using specific X values mode: {:L} values to check",
                                                     cudaInfo.id, hunter.specificXValues.size());

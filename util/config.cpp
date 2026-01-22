@@ -291,7 +291,6 @@ struct Config::Impl
         // Load specific X values array if present
         if (configJson.contains("specificXValues") && configJson["specificXValues"].is_array())
         {
-            hunter.useSpecificXValues = true;
             hunter.specificXValues.clear();
             for (const auto& xValue : configJson["specificXValues"])
             {
@@ -310,7 +309,6 @@ struct Config::Impl
             }
             else
             {
-                hunter.useSpecificXValues = false;
                 BOOST_LOG_TRIVIAL(warning) << "specificXValues array is empty, ignoring";
             }
         }

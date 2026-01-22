@@ -40,8 +40,7 @@ struct HunterConfig
     uint32_t privateXPart{1};
     uint32_t privateYOffset{0};
 
-    // Specific X values mode
-    bool useSpecificXValues{false};
+    // Specific X values mode - if array is not empty, will check only these X values
     std::vector<uint32_t> specificXValues;
 };
 
