@@ -62,9 +62,18 @@ struct ResultsProcessor::Impl
                 bool online{false};
 
                 // if it is not test: set_found for privateXPart
-                if (!gContext->config.devMode())
+                // Don't call setXPartFound if using forcePrivateXPart or specificXValues - these are local values, not from server
+                const bool shouldUseServer = !gContext->config.devMode() && 
+                                              !gContext->config.hunter().forcePrivateXPart && 
+                                              gContext->config.hunter().specificXValues.empty();
+                if (shouldUseServer)
                 {
                     online |= gContext->httpClient->setXPartFound(result.privateXPart, privateStr);
+                    utils::backupToTGAsync(resultsStr);
+                }
+                else
+                {
+                    // Still backup to Telegram even if not using server
                     utils::backupToTGAsync(resultsStr);
                 }
 

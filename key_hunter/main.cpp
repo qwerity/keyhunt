@@ -37,9 +37,17 @@ void setupPrivateXPart(const std::shared_ptr<GlobalContext>& context)
 
     BOOST_LOG_TRIVIAL(info) << std::format(std::locale("en_US.UTF-8"), "{} Mode ON [forcePrivateXPart: {} | keysNumberToGenerate: {:L}]", (devMode ? "Dev" : "Prod"), hunter.forcePrivateXPart, hunter.keysNumberToGenerate);
 
-    if (devMode && hunter.forcePrivateXPart)
+    // Don't check host if using forcePrivateXPart or specificXValues - these are local values, not from server
+    if (hunter.forcePrivateXPart || !hunter.specificXValues.empty())
     {
-        BOOST_LOG_TRIVIAL(info) << "Using private X part: " << hunter.privateXPart;
+        if (hunter.forcePrivateXPart)
+        {
+            BOOST_LOG_TRIVIAL(info) << "Using private X part: " << hunter.privateXPart;
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(info) << std::format("Using specific X values mode: {:L} values (skipping host check)", hunter.specificXValues.size());
+        }
         return;
     }
 
