@@ -85,15 +85,20 @@ int main()
 
     setupPrivateXPart(context);
 
+    // Get GPU count early for XPartManager initialization
+    const int gpuDevicesCount = cu::getDeviceCount();
+    BOOST_LOG_TRIVIAL(info) << std::format("Detected {} GPU device(s)", gpuDevicesCount);
+
     // Initialize XPartManager for async non-blocking X part distribution (improves multi-GPU performance)
-    // Only use it if not in forcePrivateXPart mode and HTTP is available
+    // Only use it if not in forcePrivateXPart mode, not using specificXValues, and HTTP is available
     const bool useXPartManager = !context->config.hunter().forcePrivateXPart && 
+                                  context->config.hunter().specificXValues.empty() &&
                                   !context->config.dataGenerationIsRandom() &&
                                   context->httpClient->hostAlive();
     if (useXPartManager)
     {
-        BOOST_LOG_TRIVIAL(info) << "Initializing XPartManager for async X part distribution (multi-GPU optimized)";
-        context->xPartManager = std::make_shared<XPartManager>(context->httpClient, context->config.dataGenerationIsRandom());
+        BOOST_LOG_TRIVIAL(info) << std::format("Initializing XPartManager for async X part distribution (multi-GPU optimized, queue size: {})", gpuDevicesCount);
+        context->xPartManager = std::make_shared<XPartManager>(context->httpClient, context->config.dataGenerationIsRandom(), static_cast<size_t>(gpuDevicesCount));
     }
     else
     {
@@ -112,8 +117,6 @@ int main()
     // Start generation checking and results processing
     const ResultsProcessor resultProcessor(context);
     resultProcessor.startHash160ResultsQueueProcessing();
-
-    const int gpuDevicesCount = cu::getDeviceCount();
     std::vector<std::thread> threads;
     std::vector<std::future<void>> futures;
 

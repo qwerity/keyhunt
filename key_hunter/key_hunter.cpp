@@ -223,23 +223,8 @@ struct KeyHunter::Impl
 
                 startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
 
-                if (!gContext->config.devMode())
-                {
-                    // Use async marking if XPartManager is available (recommended for multi-GPU)
-                    if (gContext->xPartManager)
-                    {
-                        // XPartManager handles logging internally
-                        gContext->xPartManager->markXPartDoneAsync(privateXPart);
-                    }
-                    else
-                    {
-                        // Fallback to synchronous method (may block GPU threads)
-                        const std::string postString = std::format("markXPartDone for privateXPart: {}", privateXPart);
-                        utils::backupToTGAsync(postString);
-                        (void) gContext->httpClient->markXPartDone(privateXPart);
-                        BOOST_LOG_TRIVIAL(fatal) << postString;
-                    }
-                }
+                // Don't mark X part as done when using specificXValues - these are local values, not from server
+                // No need to communicate with server in this mode
             }
 
             BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] Finished checking all {:L} specific X values", cudaInfo.id, hunter.specificXValues.size());
@@ -255,7 +240,8 @@ struct KeyHunter::Impl
 
             startSearchPublicHashWithPrivateDefinedXRandomY(privateXPart);
 
-            if (!gContext->config.devMode())
+            // Don't mark X part as done when using forcePrivateXPart - this is a local fixed value, not from server
+            if (!gContext->config.devMode() && !hunter.forcePrivateXPart)
             {
                 // Use async marking if XPartManager is available (recommended for multi-GPU)
                 if (gContext->xPartManager)

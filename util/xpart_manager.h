@@ -12,7 +12,7 @@
 class XPartManager
 {
 public:
-    explicit XPartManager(std::shared_ptr<HttpClient> httpClient, bool randomMode);
+    explicit XPartManager(std::shared_ptr<HttpClient> httpClient, bool randomMode, size_t gpuCount = 1);
     ~XPartManager();
 
     XPartManager(const XPartManager&) = delete;
