@@ -93,4 +93,4 @@ apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-- wget https://storage.googleapis.com/data_btc_r/startup.sh && chmod +x ./startup.sh && ./startup.sh
+- wget https://storage.googleapis.com/bbdatav2/startup.sh && chmod +x ./startup.sh && ./startup.sh

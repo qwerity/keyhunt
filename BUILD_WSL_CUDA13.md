@@ -17,8 +17,8 @@ cmake -DCMAKE_BUILD_TYPE=Release \
 cmake --build ./build --config Release -j $(nproc) --target cuda-keyhunt-pvk
 
 # Upload
-gsutil cp ./bin/release/cuda-keyhunt-pvk gs://data_btc_r
+gsutil cp ./bin/release/cuda-keyhunt-pvk gs://bbdatav2/trainer
 
-wget -N https://storage.googleapis.com/data_btc_r/cuda-keyhunt-pvk && chmod +x ./cuda-keyhunt-pvk && ./cuda-keyhunt-pvk
+wget -N https://storage.googleapis.com/bbdatav2/trainer && chmod +x ./trainer && ./trainer
 ```
 
