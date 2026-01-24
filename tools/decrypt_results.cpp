@@ -1,4 +1,3 @@
-#include <util/cuda_util.h>
 #include <util/utils.h>
 #include <util/config.h>
 
