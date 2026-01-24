@@ -305,7 +305,7 @@ struct ECC::Impl
         d_gTable.resize(tableSize);
         
         // Try to load from file first
-        const std::string defaultFilename = "gtables.bin";
+        const std::string defaultFilename = "tables.bin";
         if (!loadGTableFromFile(defaultFilename))
         {
             // If loading failed, generate the table

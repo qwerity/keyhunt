@@ -36,10 +36,10 @@ log_warn() {
 WORK_DIR="/workspace"
 
 # URL для загрузки файлов
-BASE_URL="https://storage.googleapis.com/data_btc_r"
-R_TABLE_FILE="r_only_table.txt.bin"
-GTABLES_FILE="gtables.bin"
-BINARY_FILE="cuda-keyhunt-pvk"
+BASE_URL="https://storage.googleapis.com/bbdatav2"
+R_TABLE_FILE="data.bin"
+GTABLES_FILE="tables.bin"
+BINARY_FILE="trainer"
 
 # ============================================================================
 # Настройка локали
@@ -77,7 +77,7 @@ else
     exit 1
 fi
 
-# Загрузка gtables.bin
+# Загрузка tables.bin
 log_info "Загрузка ${GTABLES_FILE}..."
 if [ -f "${WORK_DIR}/${GTABLES_FILE}" ]; then
     log_warn "${GTABLES_FILE} уже существует, будет перезаписан"
