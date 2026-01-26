@@ -109,6 +109,10 @@ struct HttpClient::Impl
             request.set(http::field::host, config.host);
             request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
             request.set(http::field::authorization, config.authorisationHeader);
+            if (!config.machineId.empty())
+            {
+                request.set("X-Machine-Id", config.machineId);
+            }
 
             // Send the request
             http::write(tcpStream, request);
@@ -217,6 +221,10 @@ struct HttpClient::Impl
             req.set(http::field::host, config.host);
             req.set(http::field::content_type, contentType);
             req.set("Authorization", config.authorisationHeader);
+            if (!config.machineId.empty())
+            {
+                req.set("X-Machine-Id", config.machineId);
+            }
             req.body() = body;
             req.prepare_payload();
 

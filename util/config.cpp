@@ -3,6 +3,9 @@
 
 #include <filesystem>
 #include <fstream>
+#include <unistd.h>
+#include <cstdlib>
+#include <cstring>
 
 #include <boost/algorithm/string/join.hpp>
 #include <boost/log/trivial.hpp>
@@ -98,6 +101,33 @@ struct Config::Impl
             {
                 server.port = std::to_string(serverConfig["port"].get<uint32_t>());
             }
+        }
+
+        // Priority: 1) VAST_CONTAINERLABEL env var, 2) config file, 3) hostname, 4) fallback
+        const char* vastContainerLabel = std::getenv("VAST_CONTAINERLABEL");
+        if (vastContainerLabel && std::strlen(vastContainerLabel) > 0)
+        {
+            server.machineId = std::string(vastContainerLabel);
+            BOOST_LOG_TRIVIAL(info) << std::format("Machine ID from VAST_CONTAINERLABEL environment variable: {}", server.machineId);
+        }
+        else if (serverConfig.contains("machineId") && serverConfig["machineId"].is_string() && !serverConfig["machineId"].empty())
+        {
+            server.machineId = serverConfig["machineId"];
+        }
+        else
+        {
+            // Generate machineId from hostname if not specified
+            char hostname[256];
+            if (gethostname(hostname, sizeof(hostname)) == 0)
+            {
+                server.machineId = std::string(hostname);
+            }
+            else
+            {
+                // Fallback: use a simple identifier
+                server.machineId = "machine-" + std::to_string(std::hash<std::string>{}(server.host + server.port));
+            }
+            BOOST_LOG_TRIVIAL(info) << std::format("Machine ID not specified in config, using auto-generated: {}", server.machineId);
         }
     }
 

@@ -26,6 +26,7 @@ struct ServerConfig
     std::string host;
     std::string port;
     std::string authorisationHeader;
+    std::string machineId;
 };
 
 struct HunterConfig

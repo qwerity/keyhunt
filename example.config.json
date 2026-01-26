@@ -14,6 +14,7 @@
   "server" : {
     "url": "72.56.102.163",
     "port": 3602,
-    "authorisationHeader": "worker_bit"
+    "authorisationHeader": "worker_bit",
+    "machineId": "machine-001"
   }
 }
