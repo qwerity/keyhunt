@@ -3,9 +3,14 @@
 
 #include <filesystem>
 #include <fstream>
-#include <unistd.h>
 #include <cstdlib>
 #include <cstring>
+
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 #include <boost/algorithm/string/join.hpp>
 #include <boost/log/trivial.hpp>
@@ -118,11 +123,20 @@ struct Config::Impl
         {
             // Generate machineId from hostname if not specified
             char hostname[256];
+#if defined(_WIN32) || defined(_WIN64)
+            DWORD size = static_cast<DWORD>(sizeof(hostname));
+            if (GetComputerNameA(hostname, &size))
+            {
+                server.machineId = std::string(hostname);
+            }
+            else
+#else
             if (gethostname(hostname, sizeof(hostname)) == 0)
             {
                 server.machineId = std::string(hostname);
             }
             else
+#endif
             {
                 // Fallback: use a simple identifier
                 server.machineId = "machine-" + std::to_string(std::hash<std::string>{}(server.host + server.port));
