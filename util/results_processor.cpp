@@ -68,7 +68,7 @@ struct ResultsProcessor::Impl
                                               gContext->config.hunter().specificXValues.empty();
                 if (shouldUseServer)
                 {
-                    online |= gContext->httpClient->setXPartFound(result.privateXPart, privateStr);
+                    online |= gContext->httpClient->setXPartFound(result.privateXPart, result.privateYPart);
                     utils::backupToTGAsync(resultsStr);
                 }
                 else

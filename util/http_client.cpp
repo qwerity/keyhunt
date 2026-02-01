@@ -476,16 +476,16 @@ struct HttpClient::Impl
         return true;
     }
 
-    bool setXPartFound(const uint32_t number, const std::string& privateKeyHex)
+    bool setXPartFound(uint32_t x, uint32_t y)
     {
-        const std::string body = std::format(R"({{"num": {}}})", number);
+        const std::string body = std::format(R"({{"x": {}, "y": {}}})", x, y);
 
         http::response<http::dynamic_body> response;
         const http::status responseCode = postJson("/set_found", body, response);
         const std::string resultString = beast::buffers_to_string(response.body().data());
         if (http::status::ok != responseCode)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound for {} failed: {}", number, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound ({}, {}) failed: {}", x, y, resultString);
             return false;
         }
 
@@ -496,17 +496,17 @@ struct HttpClient::Impl
         }
         catch (const nlohmann::json::parse_error& e)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound for {} failed, JSON parse failed: {}, parse error at byte {}\nduring paring: {}", number, e.what(),  e.byte, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound ({}, {}) failed, JSON parse failed: {}, parse error at byte {}\nduring parsing: {}", x, y, e.what(), e.byte, resultString);
             return false;
         }
 
         if (!(json.contains("success") && json["success"].is_boolean() && json["success"]))
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound for {} failed: {}", number, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound ({}, {}) failed: {}", x, y, resultString);
             return false;
         }
 
-        BOOST_LOG_TRIVIAL(trace) << std::format("setXPartFound for {} done", number);
+        BOOST_LOG_TRIVIAL(trace) << std::format("setXPartFound ({}, {}) done", x, y);
         return true;
     }
 };
@@ -549,7 +549,7 @@ bool HttpClient::markXPartDone(const std::vector<uint32_t>& numbers) const
     return mImpl->markXPartDone(numbers);
 }
 
-bool HttpClient::setXPartFound(const uint32_t number, const std::string& privateKeyHex) const
+bool HttpClient::setXPartFound(uint32_t x, uint32_t y) const
 {
-    return mImpl->setXPartFound(number, privateKeyHex);
+    return mImpl->setXPartFound(x, y);
 }

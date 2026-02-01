@@ -32,7 +32,8 @@ public:
     [[nodiscard]] bool markXPartDone(const uint32_t number) const;
     /** Mark multiple numbers done. Body: {"nums": [N1, N2, ...]}. Response: {"success": true, "marked": [...]} */
     [[nodiscard]] bool markXPartDone(const std::vector<uint32_t>& numbers) const;
-    [[nodiscard]] bool setXPartFound(const uint32_t number, const std::string& privateKeyHex) const;
+    /** POST /set_found — отметка ключа как найденного по координатам x, y. Body: {"x": N, "y": M} */
+    [[nodiscard]] bool setXPartFound(uint32_t x, uint32_t y) const;
 
 private:
     struct Impl;

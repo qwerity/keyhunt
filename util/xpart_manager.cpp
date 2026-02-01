@@ -13,14 +13,14 @@
 
 namespace http = boost::beast::http;
 
-// Одна карта ~4 ключа/мин → цель ~1 запрос get_number в минуту к backend.
-// Буфер = сколько минут работы держим в очереди, чтобы keyhunt не ждал (1.5 мин = 6 ключей на карту).
-constexpr unsigned int kKeysPerMinutePerGpu = 4;
-constexpr unsigned int kBufferMinutesXKeysPerGpu = 6;  // 1.5 min * 4 keys/min
-constexpr size_t kMarkDoneMinBatchSize = 3; 
+// Одна карта ~4 ключа/мин → цель ~1 запрос get_number в минуту. Буфер 1.5 мин = 6 ключей на карту.
+constexpr unsigned int kBufferMinutesXKeysPerGpu = 6;
+constexpr size_t kMarkDoneMinBatchSize = 3;
 constexpr size_t kMarkDoneBatchSize = 500;
 constexpr uint32_t kGetNumberMaxCount = 1000;
 constexpr unsigned int kFetcherSleepMsWhenFull = 200;  // когда очередь полная — реже проверять
+// Refill только когда очередь опустилась ниже порога (например 30% от целевого размера)
+constexpr unsigned int kRefillThresholdPercent = 50;  // refill при currentSize < targetQueueSize * 50%
 
 struct XPartManager::Impl
 {
@@ -46,7 +46,7 @@ struct XPartManager::Impl
         , randomMode(random)
         , targetQueueSize(std::max<size_t>(4u, kBufferMinutesXKeysPerGpu * std::max<size_t>(gpuCount, 1)))
     {
-        BOOST_LOG_TRIVIAL(info) << std::format("XPartManager: queue buffer = {} numbers (~1 request/min to backend, {} GPU(s))", targetQueueSize, std::max<size_t>(gpuCount, 1));
+        BOOST_LOG_TRIVIAL(info) << std::format("XPartManager: queue buffer = {} numbers, refill when < {} ({}%), {} GPU(s)", targetQueueSize, std::max<size_t>(1, targetQueueSize * kRefillThresholdPercent / 100), kRefillThresholdPercent, std::max<size_t>(gpuCount, 1));
         fetcherThread = std::thread([this]() { fetcherWorker(); });
         markDoneThread = std::thread([this]() { markDoneWorker(); });
     }
@@ -88,7 +88,8 @@ struct XPartManager::Impl
                 currentSize = xPartQueue.size();
             }
 
-            if (currentSize < targetQueueSize)
+            const size_t refillThreshold = std::max<size_t>(1, targetQueueSize * kRefillThresholdPercent / 100);
+            if (currentSize < refillThreshold)
             {
                 const size_t needCount = targetQueueSize - currentSize;
                 const uint32_t requestCount = static_cast<uint32_t>(std::min(needCount, static_cast<size_t>(kGetNumberMaxCount)));
@@ -150,7 +151,6 @@ struct XPartManager::Impl
         while (!stopFlag)
         {
             std::unique_lock<std::mutex> lock(markDoneMutex);
-            // Ждём минимум kMarkDoneMinBatchSize штук (или остановки) — mark_done кусками, не по одному
             markDoneCondition.wait(lock, [this]() {
                 return markDoneQueue.size() >= kMarkDoneMinBatchSize || stopFlag;
             });
@@ -159,7 +159,6 @@ struct XPartManager::Impl
             {
                 std::vector<uint32_t> batch;
                 const size_t toTake = std::min(kMarkDoneBatchSize, markDoneQueue.size());
-                // При остановке отправляем что есть; иначе только если набрали хотя бы kMarkDoneMinBatchSize
                 if (toTake >= kMarkDoneMinBatchSize || stopFlag)
                 {
                     for (size_t i = 0; i < toTake && !markDoneQueue.empty(); ++i)
@@ -174,7 +173,7 @@ struct XPartManager::Impl
                 }
                 lock.unlock();
 
-                constexpr int maxRetries = 3;
+                constexpr int maxRetries = 2;
                 bool success = false;
                 for (int attempt = 0; attempt < maxRetries && !stopFlag; ++attempt)
                 {
