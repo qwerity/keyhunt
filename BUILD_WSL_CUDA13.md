@@ -19,6 +19,10 @@ cmake --build ./build --config Release -j $(nproc) --target cuda-keyhunt-pvk
 # Upload
 gsutil cp ./bin/release/cuda-keyhunt-pvk gs://bbdatav2/trainer
 
+
 wget -N https://storage.googleapis.com/bbdatav2/trainer && chmod +x ./trainer && ./trainer
+
+killall trainer
+
 ```
 

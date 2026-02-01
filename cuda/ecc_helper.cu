@@ -1,5 +1,7 @@
 #include "ecc_helper.cuh"
 #include "common_kernels.cuh"
+#include "ec_4limb_math.cuh"
+#include "gpu_hash160.cuh"
 
 #include "secp256k1_v2/bip32.cuh"
 #include "secp256k1_v2/secp256k1.cuh"
@@ -11,6 +13,10 @@ extern __constant__ uint256_t *d_publicKeyXPtr;
 extern __constant__ uint256_t *d_publicKeyYPtr;
 
 __constant__ int d_publicKeyCompressionTypeToCheck{PointCompressionType::BOTH};
+
+// 4-limb GTable: each point = 4 uint64_t (X) + 4 uint64_t (Y). Index = (chunk*65536 + (val-1)) * 4 for uint64_t offset.
+__constant__ const uint64_t* d_gTableX_4limb_ptr = nullptr;
+__constant__ const uint64_t* d_gTableY_4limb_ptr = nullptr;
 
 // secp256k1 group order N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 __constant__ uint256_t secp256k1_N;
@@ -262,6 +268,146 @@ __device__ __forceinline__ void secp256k1_bytes_to_uint256_optimized(const uint8
            (static_cast<uint32_t>(src[29]) << 16) |
            (static_cast<uint32_t>(src[30]) << 8) |
            (static_cast<uint32_t>(src[31]));
+}
+
+// ---------------------------------------------------------------------------------
+// 4-limb path: extract 16-bit chunks from uint256_t (same layout as secp256k1 scalar)
+// ---------------------------------------------------------------------------------
+__device__ __forceinline__ void uint256_to_16bit_chunks(const uint256_t& key, uint16_t chunks[16])
+{
+    #pragma unroll
+    for (int c = 0; c < 16; c++) {
+        int w = c / 2;
+        int shift = (c & 1) ? 16 : 0;
+        chunks[c] = static_cast<uint16_t>((key.v[w] >> shift) & 0xFFFFu);
+    }
+}
+
+// Convert 4-limb (uint64_t[4], little-endian limbs) to uint256_t (v[0]=LSW)
+__device__ __forceinline__ void ec4limb_to_uint256(const uint64_t limb[4], uint256_t& out)
+{
+    out.v[0] = static_cast<uint32_t>(limb[0]);
+    out.v[1] = static_cast<uint32_t>(limb[0] >> 32);
+    out.v[2] = static_cast<uint32_t>(limb[1]);
+    out.v[3] = static_cast<uint32_t>(limb[1] >> 32);
+    out.v[4] = static_cast<uint32_t>(limb[2]);
+    out.v[5] = static_cast<uint32_t>(limb[2] >> 32);
+    out.v[6] = static_cast<uint32_t>(limb[3]);
+    out.v[7] = static_cast<uint32_t>(limb[3] >> 32);
+}
+
+// 4-limb point multiplication: GTable 16 chunks, mixed Jacobian-Affine
+__device__ __forceinline__ void ec4limb_PointMultiJacobianFast(
+    uint64_t* qx, uint64_t* qy, uint64_t* qz,
+    const uint16_t* privChunks,
+    const uint64_t* gTableX, const uint64_t* gTableY)
+{
+    constexpr int NUM_CHUNK = 16;
+    constexpr int CHUNK_SIZE = 65536;
+    constexpr int LIMBS_PER_POINT = 4;
+
+    qz[0] = 1; qz[1] = 0; qz[2] = 0; qz[3] = 0;
+    int chunk = 0;
+
+    for (; chunk < NUM_CHUNK; chunk++) {
+        if (privChunks[chunk] > 0) {
+            int idx = (chunk * CHUNK_SIZE + (privChunks[chunk] - 1)) * LIMBS_PER_POINT;
+            qx[0] = __ldg(&gTableX[idx+0]); qx[1] = __ldg(&gTableX[idx+1]); qx[2] = __ldg(&gTableX[idx+2]); qx[3] = __ldg(&gTableX[idx+3]);
+            qy[0] = __ldg(&gTableY[idx+0]); qy[1] = __ldg(&gTableY[idx+1]); qy[2] = __ldg(&gTableY[idx+2]); qy[3] = __ldg(&gTableY[idx+3]);
+            chunk++;
+            break;
+        }
+    }
+
+    for (; chunk < NUM_CHUNK; chunk++) {
+        if (privChunks[chunk] > 0) {
+            uint64_t gx[4], gy[4];
+            int idx = (chunk * CHUNK_SIZE + (privChunks[chunk] - 1)) * LIMBS_PER_POINT;
+            gx[0] = __ldg(&gTableX[idx+0]); gx[1] = __ldg(&gTableX[idx+1]); gx[2] = __ldg(&gTableX[idx+2]); gx[3] = __ldg(&gTableX[idx+3]);
+            gy[0] = __ldg(&gTableY[idx+0]); gy[1] = __ldg(&gTableY[idx+1]); gy[2] = __ldg(&gTableY[idx+2]); gy[3] = __ldg(&gTableY[idx+3]);
+            ec4limb_PointAddMixedAffine(qx, qy, qz, gx, gy);
+        }
+    }
+}
+
+/** Hash + check for one point; __noinline__ to reduce fused kernel register pressure and improve occupancy. */
+__device__ __noinline__ void fusedHashAndCheck(const uint256_t& publicX, const uint256_t& publicY, const uint256_t& privateKey, uint32_t index)
+{
+    if (1)
+    {
+        uint256_t publicR;
+        reduce_mod_N(publicX, publicR);
+        uint32_t publicRFirst5[5];
+        #pragma unroll
+        for (int j = 0; j < 5; ++j)
+            publicRFirst5[j] = publicR.v[j];
+        if (checkHash(publicRFirst5))
+            setResultFound(index, true, privateKey, publicRFirst5);
+    }
+
+    const bool needCompressed = (d_publicKeyCompressionTypeToCheck == PointCompressionType::COMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH);
+    const bool needUncompressed = (d_publicKeyCompressionTypeToCheck == PointCompressionType::UNCOMPRESSED || d_publicKeyCompressionTypeToCheck == PointCompressionType::BOTH);
+
+    if (needCompressed)
+    {
+        hash160 hash160;
+        gpuHash160Comp(publicX.v, static_cast<uint8_t>(publicY.v[0] & 1), hash160.h);
+        if (checkHash(hash160))
+            setResultFound(index, true, privateKey, hash160.h);
+    }
+
+    if (needUncompressed)
+    {
+        hash160 hash160;
+        gpuHash160Uncomp(publicX.v, publicY.v, hash160.h);
+        if (checkHash(hash160))
+            setResultFound(index, false, privateKey, hash160.h);
+    }
+}
+
+/**
+ * Fused kernel (4-limb): public key via 4-limb GTable + hash + check in one pass.
+ * No write of public keys to global memory. Uses d_gTableX_4limb_ptr / d_gTableY_4limb_ptr.
+ */
+__global__ void publicKeyAndCheckHash160FusedKernel(const uint256_t *privateKeys)
+{
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+    constexpr uint32_t MAX_BATCH_SIZE = 32;
+    const uint64_t* gTableX = d_gTableX_4limb_ptr;
+    const uint64_t* gTableY = d_gTableY_4limb_ptr;
+
+    for (uint32_t batchStart = 0; batchStart < d_pointsPerThread; batchStart += MAX_BATCH_SIZE)
+    {
+        const uint32_t batchSize = (MAX_BATCH_SIZE < (d_pointsPerThread - batchStart)) ? MAX_BATCH_SIZE : (d_pointsPerThread - batchStart);
+        uint64_t batchQx[MAX_BATCH_SIZE][4];
+        uint64_t batchQy[MAX_BATCH_SIZE][4];
+        uint64_t batchQz[MAX_BATCH_SIZE][4];
+        uint256_t batchPrivateKeys[MAX_BATCH_SIZE];
+        uint16_t chunks[16];
+
+        for (uint32_t i = 0; i < batchSize; ++i)
+        {
+            uint256_t privateKey;
+            readUInt256(privateKeys, batchStart + i, privateKey);
+            batchPrivateKeys[i] = privateKey;
+            uint256_to_16bit_chunks(privateKey, chunks);
+            ec4limb_PointMultiJacobianFast(
+                batchQx[i], batchQy[i], batchQz[i],
+                chunks, gTableX, gTableY);
+        }
+
+        ec4limb_BatchJacobianToAffine(batchQx, batchQy, batchQz, static_cast<int>(batchSize));
+
+        for (uint32_t i = 0; i < batchSize; ++i)
+        {
+            const uint32_t index = (batchStart + i) * totalThreads + threadId;
+            uint256_t publicX, publicY;
+            ec4limb_to_uint256(batchQx[i], publicX);
+            ec4limb_to_uint256(batchQy[i], publicY);
+            fusedHashAndCheck(publicX, publicY, batchPrivateKeys[i], index);
+        }
+    }
 }
 
 __global__ void publicKeyGenerationKernel(const uint256_t *privateKeys)

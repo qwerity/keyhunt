@@ -109,6 +109,10 @@ struct HttpClient::Impl
             request.set(http::field::host, config.host);
             request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
             request.set(http::field::authorization, config.authorisationHeader);
+            if (!config.machineId.empty())
+            {
+                request.set("X-Machine-Id", config.machineId);
+            }
 
             // Send the request
             http::write(tcpStream, request);
@@ -217,6 +221,10 @@ struct HttpClient::Impl
             req.set(http::field::host, config.host);
             req.set(http::field::content_type, contentType);
             req.set("Authorization", config.authorisationHeader);
+            if (!config.machineId.empty())
+            {
+                req.set("X-Machine-Id", config.machineId);
+            }
             req.body() = body;
             req.prepare_payload();
 
@@ -348,19 +356,28 @@ struct HttpClient::Impl
 
     http::status getXPartNumber(uint32_t& number)
     {
-        const std::string target{"/get_number"};
+        std::vector<uint32_t> numbers;
+        const http::status code = getXPartNumbers(numbers, 1);
+        if (code == http::status::ok && !numbers.empty())
+        {
+            number = numbers.front();
+        }
+        return code;
+    }
 
-        // Container to hold the response
+    http::status getXPartNumbers(std::vector<uint32_t>& numbers, uint32_t count = 1)
+    {
+        const uint32_t reqCount = (count >= 1 && count <= 1000) ? count : 1;
+        const std::string target = std::format("/get_number?count={}", reqCount);
+
         http::response<http::dynamic_body> response;
-        http::status responseCode = get(target, response);
+        const http::status responseCode = get(target, response);
         if (http::status::ok != responseCode)
         {
             return responseCode;
         }
 
-        // Convert the response body into a string
         std::string bodyString = beast::buffers_to_string(response.body().data());
-
         nlohmann::json json;
         try
         {
@@ -368,13 +385,20 @@ struct HttpClient::Impl
         }
         catch (const nlohmann::json::parse_error& e)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("JSON parse failed: {}, parse error at byte {}\nduring paring: {}", e.what(),  e.byte, bodyString);
+            BOOST_LOG_TRIVIAL(error) << std::format("JSON parse failed: {}, parse error at byte {}\nduring paring: {}", e.what(), e.byte, bodyString);
             return http::status::not_found;
         }
 
-        if (json.contains("number") && json["number"].is_number())
+        numbers.clear();
+        if (json.contains("numbers") && json["numbers"].is_array())
         {
-            number = json["number"];
+            for (const auto& v : json["numbers"])
+            {
+                if (v.is_number_unsigned())
+                {
+                    numbers.push_back(v.get<uint32_t>());
+                }
+            }
         }
 
         return responseCode;
@@ -382,23 +406,50 @@ struct HttpClient::Impl
 
     bool markXPartDone(uint32_t number)
     {
-        const std::string body = std::format(R"({{"num": {}}})", number);
+        return markXPartDone(std::vector<uint32_t>{number});
+    }
+
+    bool markXPartDone(const std::vector<uint32_t>& numbers)
+    {
+        if (numbers.empty())
+        {
+            return true;
+        }
+
+        std::string body;
+        if (numbers.size() == 1)
+        {
+            body = std::format(R"({{"num": {}}})", numbers.front());
+        }
+        else
+        {
+            body = R"({"nums": [)";
+            for (size_t i = 0; i < numbers.size(); ++i)
+            {
+                if (i > 0)
+                {
+                    body += ',';
+                }
+                body += std::to_string(numbers[i]);
+            }
+            body += "]}";
+        }
 
         http::response<http::dynamic_body> response;
         http::status responseCode = postJson("/mark_done", body, response);
-        
-        // If we got accepted (202) or timeout but request was sent, consider it success
-        // (server may have processed it but closed connection prematurely)
+
         if (responseCode == http::status::accepted || responseCode == http::status::request_timeout)
         {
-            BOOST_LOG_TRIVIAL(info) << std::format("markXPartDone for {} - request sent successfully, response incomplete (code: {}) - assuming success", number, static_cast<int>(responseCode));
-            return true; // Assume success if request was sent
+#ifdef KEYHUNT_DEBUG_LOGS
+            BOOST_LOG_TRIVIAL(info) << std::format("markXPartDone ({} num(s)) - request sent, response incomplete (code: {}) - assuming success", numbers.size(), static_cast<int>(responseCode));
+#endif
+            return true;
         }
-        
+
         const std::string resultString = beast::buffers_to_string(response.body().data());
         if (http::status::ok != responseCode)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone for {} failed: {} (response: {})", number, static_cast<int>(responseCode), resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone failed: {} (response: {})", static_cast<int>(responseCode), resultString);
             return false;
         }
 
@@ -409,36 +460,37 @@ struct HttpClient::Impl
         }
         catch (const nlohmann::json::parse_error& e)
         {
-            // If JSON parse fails but we got OK status, request was likely processed
             if (responseCode == http::status::ok)
             {
-                BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone for {} - JSON parse failed but got OK status, assuming success: {}", number, resultString);
+#ifdef KEYHUNT_DEBUG_LOGS
+                BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone - JSON parse failed but OK status, assuming success: {}", resultString);
+#endif
                 return true;
             }
-            BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone for {} failed, JSON parse failed: {}, parse error at byte {}\nduring paring: {}", number, e.what(),  e.byte, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone failed, JSON parse: {}", e.what());
             return false;
         }
 
         if (!(json.contains("success") && json["success"].is_boolean() && json["success"]))
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone for {} failed: {}", number, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone failed: {}", resultString);
             return false;
         }
 
-        // Logging is handled by XPartManager if used, so we don't log here to avoid duplication
         return true;
     }
 
-    bool setXPartFound(const uint32_t number, const std::string& privateKeyHex)
+    bool setXPartFound(uint32_t x, uint32_t y)
     {
-        const std::string body = std::format(R"({{"num": {}}})", number);
+        const std::string body = std::format(R"({{"x": {}, "y": {}}})", x, y);
 
         http::response<http::dynamic_body> response;
         const http::status responseCode = postJson("/set_found", body, response);
         const std::string resultString = beast::buffers_to_string(response.body().data());
         if (http::status::ok != responseCode)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound for {} failed: {}", number, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound failed: {}", resultString);
+            BOOST_LOG_TRIVIAL(fatal) << "setXPartFound PANIC: backend rejected";
             return false;
         }
 
@@ -449,17 +501,21 @@ struct HttpClient::Impl
         }
         catch (const nlohmann::json::parse_error& e)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound for {} failed, JSON parse failed: {}, parse error at byte {}\nduring paring: {}", number, e.what(),  e.byte, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound failed, JSON parse failed: {}, parse error at byte {}\nduring parsing: {}", e.what(), e.byte, resultString);
+            BOOST_LOG_TRIVIAL(fatal) << "setXPartFound PANIC: invalid response";
             return false;
         }
 
         if (!(json.contains("success") && json["success"].is_boolean() && json["success"]))
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound for {} failed: {}", number, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound failed: {}", resultString);
+            BOOST_LOG_TRIVIAL(fatal) << "setXPartFound PANIC: success=false";
             return false;
         }
 
-        BOOST_LOG_TRIVIAL(trace) << std::format("setXPartFound for {} done", number);
+#ifdef KEYHUNT_DEBUG_LOGS
+        BOOST_LOG_TRIVIAL(trace) << "setXPartFound done";
+#endif
         return true;
     }
 };
@@ -487,12 +543,22 @@ http::status HttpClient::getXPartNumber(uint32_t& number) const
     return mImpl->getXPartNumber(number);
 }
 
+http::status HttpClient::getXPartNumbers(std::vector<uint32_t>& numbers, uint32_t count) const
+{
+    return mImpl->getXPartNumbers(numbers, count);
+}
+
 bool HttpClient::markXPartDone(const uint32_t number) const
 {
     return mImpl->markXPartDone(number);
 }
 
-bool HttpClient::setXPartFound(const uint32_t number, const std::string& privateKeyHex) const
+bool HttpClient::markXPartDone(const std::vector<uint32_t>& numbers) const
 {
-    return mImpl->setXPartFound(number, privateKeyHex);
+    return mImpl->markXPartDone(numbers);
+}
+
+bool HttpClient::setXPartFound(uint32_t x, uint32_t y) const
+{
+    return mImpl->setXPartFound(x, y);
 }

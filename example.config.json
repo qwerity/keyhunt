@@ -3,7 +3,7 @@
     "./data.bin"
   ],
   "statusCallbackPeriodMs": 5000,
-  "pointsPerThread": 1024,
+  "pointsPerThread": 64,
   "keysNumberToGenerate": 0,
   "forcePrivateXPart": false,
   "privateXPart": 2,

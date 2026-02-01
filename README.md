@@ -1,5 +1,17 @@
 # cuda-keyhunt-pvk
 
+## CMake options
+| Option | Default | Description |
+|--------|---------|--------------|
+| `BUILD_TESTS` | OFF | Build test executables. |
+| `KEYHUNT_DEBUG_LOGS` | OFF | Enable verbose debug logging (Found, mark_done, trace, XPartManager). |
+
+Example with debug logs:
+```bash
+cmake -B build -DKEYHUNT_DEBUG_LOGS=ON
+cmake --build build --target cuda-keyhunt-pvk
+```
+
 ## How to compile for all GPU support
 - `cmake -G "Visual Studio 16 2019" -A x64 -DCMAKE_CUDA_ARCHITECTURES="all" -S . -B build`
 - `cmake --build .\build\ --config=Release -j 14 --target cuda-keyhunt-pvk`
@@ -64,12 +76,19 @@ There is needed to install following packages to be able to compile
   - `perl Configure VC-WIN64A -march=native enable-asm no-shared no-docs no-tests --prefix=C:\Users\ksh\workspace\openssl-3.4.0\build --openssldir=C:\Users\ksh\workspace\openssl-3.4.0\build`
   - `set CL=/MP && nmake install` // for multi-thread compilation
 
+## Build Linux / WSL
+- From project root:
+  - `cmake -B build -DCMAKE_CUDA_ARCHITECTURES=all`  (or e.g. `86` for one arch)
+  - `cmake --build build --config=Release -j $(nproc) --target cuda-keyhunt-pvk`
+- Binary: `bin/cuda-keyhunt-pvk` (or `bin/release/` if configured). Copy `config.json` next to the binary.
+
 ## Build Win x64
 - Open Terminal in project directory
-- `cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_CUDA_ARCHITECTURES=86 -S . -B build`
+- `cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_CUDA_ARCHITECTURES=86 -S . -B build`  
+  (опции: `-DKEYHUNT_DEBUG_LOGS=ON`, `-DBUILD_TESTS=ON` при необходимости)
 - `cmake --build .\build\ --config=Release -j 14 --target cuda-keyhunt-pvk`
 - If all good you can find the binary in `{project directory}/bin` folder
-- Copy the config.json to bin folder and 
+- Copy the config.json to bin folder
 
 
 ## Convert Hex string Hash160 target file to binary

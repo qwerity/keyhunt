@@ -43,7 +43,7 @@ TEST_CASE("Http client test mark_done")
 
 TEST_CASE("Http client test set_found")
 {
-    const std::string privateKeyHex = "test";
-    uint32_t number{2};
-    REQUIRE(true == clientPtr->setXPartFound(number, privateKeyHex));
+    const uint32_t x = 12345;
+    const uint32_t y = 67890;
+    REQUIRE(true == clientPtr->setXPartFound(x, y));
 }
