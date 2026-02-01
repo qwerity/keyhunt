@@ -381,6 +381,16 @@ __global__ __launch_bounds__(256, 2) void publicKeyAndCheckHash160FusedKernel(co
 
     for (uint32_t batchStart = 0; batchStart < d_pointsPerThread; batchStart += MAX_BATCH_SIZE)
     {
+        // Prefetch next batch's key for this thread to hide global memory latency
+        if (batchStart + MAX_BATCH_SIZE < d_pointsPerThread)
+        {
+            const uint32_t nextDepth = batchStart + MAX_BATCH_SIZE;
+            const uint32_t nextIndex = nextDepth * totalThreads + threadId;
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+            asm volatile("prefetch.global.L2 [%0];" : : "l"(&privateKeys[nextIndex]) : "memory");
+#endif
+        }
+
         const uint32_t batchSize = (MAX_BATCH_SIZE < (d_pointsPerThread - batchStart)) ? MAX_BATCH_SIZE : (d_pointsPerThread - batchStart);
         uint64_t batchQx[MAX_BATCH_SIZE][4];
         uint64_t batchQy[MAX_BATCH_SIZE][4];
