@@ -5,11 +5,22 @@
 
 #include <boost/log/trivial.hpp>
 #include <boost/beast/http.hpp>
+#include <algorithm>
 #include <format>
 #include <chrono>
 #include <thread>
+#include <vector>
 
 namespace http = boost::beast::http;
+
+// Одна карта ~4 ключа/мин → цель ~1 запрос get_number в минуту к backend.
+// Буфер = сколько минут работы держим в очереди, чтобы keyhunt не ждал (1.5 мин = 6 ключей на карту).
+constexpr unsigned int kKeysPerMinutePerGpu = 4;
+constexpr unsigned int kBufferMinutesXKeysPerGpu = 6;  // 1.5 min * 4 keys/min
+constexpr size_t kMarkDoneMinBatchSize = 3; 
+constexpr size_t kMarkDoneBatchSize = 500;
+constexpr uint32_t kGetNumberMaxCount = 1000;
+constexpr unsigned int kFetcherSleepMsWhenFull = 200;  // когда очередь полная — реже проверять
 
 struct XPartManager::Impl
 {
@@ -17,37 +28,27 @@ struct XPartManager::Impl
     bool randomMode;
     std::atomic<bool> stopFlag{false};
 
-    // Queue for pre-fetched X parts
     std::queue<uint32_t> xPartQueue;
     std::mutex queueMutex;
     std::condition_variable queueCondition;
 
-    // Background thread for fetching X parts
     std::thread fetcherThread;
-
-    // Background thread for marking X parts as done
     std::queue<uint32_t> markDoneQueue;
     std::mutex markDoneMutex;
     std::condition_variable markDoneCondition;
     std::thread markDoneThread;
 
-    // Target queue size for pre-fetching (based on GPU count)
+    // Целевой размер очереди: от числа видеокарт, заранее заполняем (~1 запрос get_number в минуту)
     size_t targetQueueSize;
 
     explicit Impl(std::shared_ptr<HttpClient> client, bool random, size_t gpuCount)
         : httpClient(std::move(client))
         , randomMode(random)
-        , targetQueueSize(std::max<size_t>(gpuCount, 1)) // At least 1, ideally equal to GPU count
+        , targetQueueSize(std::max<size_t>(4u, kBufferMinutesXKeysPerGpu * std::max<size_t>(gpuCount, 1)))
     {
-        // Start fetcher thread
-        fetcherThread = std::thread([this]() {
-            fetcherWorker();
-        });
-
-        // Start mark done thread
-        markDoneThread = std::thread([this]() {
-            markDoneWorker();
-        });
+        BOOST_LOG_TRIVIAL(info) << std::format("XPartManager: queue buffer = {} numbers (~1 request/min to backend, {} GPU(s))", targetQueueSize, std::max<size_t>(gpuCount, 1));
+        fetcherThread = std::thread([this]() { fetcherWorker(); });
+        markDoneThread = std::thread([this]() { markDoneWorker(); });
     }
 
     ~Impl()
@@ -81,7 +82,6 @@ struct XPartManager::Impl
     {
         while (!stopFlag)
         {
-            // Keep queue filled
             size_t currentSize = 0;
             {
                 std::lock_guard<std::mutex> lock(queueMutex);
@@ -90,43 +90,57 @@ struct XPartManager::Impl
 
             if (currentSize < targetQueueSize)
             {
-                uint32_t xPart = 0;
-                bool success = false;
+                const size_t needCount = targetQueueSize - currentSize;
+                const uint32_t requestCount = static_cast<uint32_t>(std::min(needCount, static_cast<size_t>(kGetNumberMaxCount)));
 
                 if (randomMode)
                 {
-                    xPart = utils::randomUINT32_t();
-                    success = true;
-                }
-                else
-                {
-                    http::status responseCode = httpClient->getXPartNumber(xPart);
-                    success = (responseCode == http::status::ok);
-                    if (!success)
-                    {
-                        // Log warning but still use random as fallback to keep system running
-                        BOOST_LOG_TRIVIAL(warning) << std::format("getXPartNumber failed (code: {}), falling back to random X part", static_cast<int>(responseCode));
-                        xPart = utils::randomUINT32_t();
-                        success = true;
-                    }
-                }
-
-                if (success)
-                {
                     std::lock_guard<std::mutex> lock(queueMutex);
-                    xPartQueue.push(xPart);
-                    queueCondition.notify_one();
+                    for (uint32_t i = 0; i < requestCount; ++i)
+                    {
+                        xPartQueue.push(utils::randomUINT32_t());
+                    }
+                    queueCondition.notify_all();
                 }
                 else
                 {
-                    // If we can't get X part, wait a bit before retrying
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    std::vector<uint32_t> numbers;
+                    const http::status responseCode = httpClient->getXPartNumbers(numbers, requestCount);
+                    if (responseCode == http::status::ok && !numbers.empty())
+                    {
+                        std::lock_guard<std::mutex> lock(queueMutex);
+                        for (uint32_t n : numbers)
+                        {
+                            xPartQueue.push(n);
+                        }
+                        queueCondition.notify_all();
+                    }
+                    else
+                    {
+                        if (responseCode != http::status::ok)
+                        {
+                            BOOST_LOG_TRIVIAL(warning) << std::format("getXPartNumbers failed (code: {}), falling back to single request", static_cast<int>(responseCode));
+                        }
+                        uint32_t single = 0;
+                        if (httpClient->getXPartNumber(single) == http::status::ok)
+                        {
+                            std::lock_guard<std::mutex> lock(queueMutex);
+                            xPartQueue.push(single);
+                            queueCondition.notify_one();
+                        }
+                        else
+                        {
+                            BOOST_LOG_TRIVIAL(warning) << std::format("getXPartNumber failed, falling back to random X part");
+                            std::lock_guard<std::mutex> lock(queueMutex);
+                            xPartQueue.push(utils::randomUINT32_t());
+                            queueCondition.notify_one();
+                        }
+                    }
                 }
             }
             else
             {
-                // Queue is full, wait a bit
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                std::this_thread::sleep_for(std::chrono::milliseconds(kFetcherSleepMsWhenFull));
             }
         }
     }
@@ -136,53 +150,59 @@ struct XPartManager::Impl
         while (!stopFlag)
         {
             std::unique_lock<std::mutex> lock(markDoneMutex);
+            // Ждём минимум kMarkDoneMinBatchSize штук (или остановки) — mark_done кусками, не по одному
             markDoneCondition.wait(lock, [this]() {
-                return !markDoneQueue.empty() || stopFlag;
+                return markDoneQueue.size() >= kMarkDoneMinBatchSize || stopFlag;
             });
 
-            // Process all remaining items even if stopFlag is set (graceful shutdown)
             while (!markDoneQueue.empty())
             {
-                uint32_t xPart = markDoneQueue.front();
-                markDoneQueue.pop();
+                std::vector<uint32_t> batch;
+                const size_t toTake = std::min(kMarkDoneBatchSize, markDoneQueue.size());
+                // При остановке отправляем что есть; иначе только если набрали хотя бы kMarkDoneMinBatchSize
+                if (toTake >= kMarkDoneMinBatchSize || stopFlag)
+                {
+                    for (size_t i = 0; i < toTake && !markDoneQueue.empty(); ++i)
+                    {
+                        batch.push_back(markDoneQueue.front());
+                        markDoneQueue.pop();
+                    }
+                }
+                if (batch.empty())
+                {
+                    break;
+                }
                 lock.unlock();
 
-                // Make HTTP request with retry mechanism (blocking, but in separate thread)
                 constexpr int maxRetries = 3;
                 bool success = false;
                 for (int attempt = 0; attempt < maxRetries && !stopFlag; ++attempt)
                 {
-                    success = httpClient->markXPartDone(xPart);
+                    success = httpClient->markXPartDone(batch);
                     if (success)
                     {
                         if (attempt > 0)
                         {
-                            BOOST_LOG_TRIVIAL(info) << std::format("markXPartDone for {} succeeded on retry attempt {}", xPart, attempt + 1);
+                            BOOST_LOG_TRIVIAL(info) << std::format("markXPartDone ({} num(s)) succeeded on retry attempt {}", batch.size(), attempt + 1);
                         }
                         break;
                     }
-                    
-                    // Wait before retry (exponential backoff: 1s, 2s, 4s)
                     if (attempt < maxRetries - 1 && !stopFlag)
                     {
                         const int delayMs = (1 << attempt) * 1000;
-                        BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone for {} failed (attempt {}/{}), retrying in {}ms...", 
-                                                                  xPart, attempt + 1, maxRetries, delayMs);
+                        BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone ({} num(s)) failed (attempt {}/{}), retrying in {}ms...",
+                                                                  batch.size(), attempt + 1, maxRetries, delayMs);
                         std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
                     }
                 }
-                
+
                 if (!success && !stopFlag)
                 {
-                    BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone for {} failed after {} retries (non-critical, continuing)", xPart, maxRetries);
+                    BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone ({} num(s)) failed after {} retries (non-critical, continuing)", batch.size(), maxRetries);
                 }
-                else if (success)
+                else if (stopFlag && !batch.empty())
                 {
-                    BOOST_LOG_TRIVIAL(trace) << std::format("markXPartDone for {} completed", xPart);
-                }
-                else if (stopFlag)
-                {
-                    BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone for {} cancelled due to shutdown", xPart);
+                    BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone ({} num(s)) cancelled due to shutdown", batch.size());
                 }
 
                 lock.lock();
