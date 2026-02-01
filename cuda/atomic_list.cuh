@@ -3,6 +3,10 @@
 #include <cstdint>
 #include <cuda_runtime.h>
 
+// Exposed for inline result write (avoids atomicListAdd's 70 regs in hot path)
+extern __constant__ void *d_atomicListBuf[1];
+extern __constant__ uint32_t *d_atomicListSize[1];
+
 __device__ void atomicListAdd(const void *info, uint32_t size);
 
 /**

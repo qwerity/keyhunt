@@ -106,12 +106,19 @@ struct ECC::Impl
                 mBlockSize,
                 dynamicSMemSize));
 
+            cudaFuncAttributes attr{};
+            cudaCheckError(cudaFuncGetAttributes(&attr, publicKeyAndCheckHash160FusedKernel));
+            const int warpsPerBlock = (mBlockSize + 31) / 32;
+            const int activeWarpsPerSM = numBlocksPerSM * warpsPerBlock;
+            const int maxWarpsPerSM = deviceProp.maxThreadsPerMultiProcessor / 32;
+            const int occupancyPct = (maxWarpsPerSM > 0) ? (activeWarpsPerSM * 100 / maxWarpsPerSM) : 0;
+
             const int optimalGridSize = deviceProp.multiProcessorCount * numBlocksPerSM;
             mGridSize = static_cast<uint32_t>(std::max(minGridSizeFused, optimalGridSize));
 
-            fprintf(stdout, "[GPU %d] Device: %s, SMs: %d, Blocks/SM: %d (fused kernel), minGridSize: %d, optimalGridSize: %d, using gridSize: %u, blockSize: %u\n",
+            fprintf(stdout, "[GPU %d] %s, SMs: %d, Blocks/SM: %d, regs/thread: %d, occupancy: %d%% (%d/%d warps/SM), grid: %u, block: %u\n",
                     deviceId, deviceProp.name, deviceProp.multiProcessorCount, numBlocksPerSM,
-                    minGridSizeFused, optimalGridSize, mGridSize, mBlockSize);
+                    attr.numRegs, occupancyPct, activeWarpsPerSM, maxWarpsPerSM, mGridSize, mBlockSize);
         }
 
         mKeysNumberPerIteration = mGridSize * mBlockSize * mPointsPerThread;

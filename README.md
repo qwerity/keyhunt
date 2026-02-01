@@ -113,3 +113,15 @@ apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 - wget https://storage.googleapis.com/bbdatav2/startup.sh && chmod +x ./startup.sh && ./startup.sh
+
+## Как увеличить скорость
+
+1. **Меньше хешей на ключ** — в `config.json` задать `"publicKeyCompressionTypeToCheck": 0` (только compressed) или `1` (только uncompressed), если нужен только один формат адресов. При `2` (BOTH) считаются оба хеша; при 0 или 1 — один, т.е. примерно вдвое меньше работы hash160 на ключ.
+
+2. **Больше работы за запуск** — увеличить `pointsPerThread` (например 512 или 1024). Больше точек на поток → меньше запусков ядра на тот же объём ключей. Замерить на своей карте: иногда 256 уже оптимально, иногда выгоднее 512.
+
+3. **Профилирование** — найти узкое место (EC mul vs hash160 vs память):
+   - Nsight Compute: `ncu --set full -o report ./bin/cuda-keyhunt-pvk` (или привязаться к процессу), смотреть, где время в `publicKeyAndCheckHash160FusedKernel`.
+   - По результату: если доминирует hash — уже полезен пункт 1; если память — смотреть coalescing/prefetch.
+
+4. **Несколько GPU** — запускать один процесс на каждую карту (например через `CUDA_VISIBLE_DEVICES`) или использовать встроенную поддержку нескольких устройств, если она есть в конфиге.

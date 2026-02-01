@@ -296,7 +296,8 @@ __device__ __forceinline__ void ec4limb_to_uint256(const uint64_t limb[4], uint2
     out.v[7] = static_cast<uint32_t>(limb[3] >> 32);
 }
 
-// 4-limb point multiplication: GTable 16 chunks, mixed Jacobian-Affine
+// 4-limb point multiplication: GTable 16 chunks, mixed Jacobian-Affine.
+// Warp divergence: "if (privChunks[chunk] > 0)" — different threads do 1..16 iterations.
 __device__ __forceinline__ void ec4limb_PointMultiJacobianFast(
     uint64_t* qx, uint64_t* qy, uint64_t* qz,
     const uint16_t* privChunks,
@@ -367,9 +368,8 @@ __device__ __noinline__ void fusedHashAndCheck(const uint256_t& publicX, const u
 
 /**
  * Fused kernel (4-limb): public key via 4-limb GTable + hash + check in one pass.
- * No write of public keys to global memory. Uses d_gTableX_4limb_ptr / d_gTableY_4limb_ptr.
- * __launch_bounds__(256, 2): 4 blocks/SM давало reg spilling → скорость падала в 3 раза; 2 blocks/SM без лимита быстрее.
- * MAX_BATCH_SIZE 8 keeps per-thread arrays smaller.
+ * (256,4)+batch4 даёт 66% occupancy, но скорость падает ~3x — больше итераций, меньше эффективность батча.
+ * Оставляем (256,2), batch 8 — быстрее на практике.
  */
 __global__ __launch_bounds__(256, 2) void publicKeyAndCheckHash160FusedKernel(const uint256_t *privateKeys)
 {

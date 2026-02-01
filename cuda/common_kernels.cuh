@@ -63,7 +63,15 @@ __device__ __forceinline__ void setResultFound(const uint32_t idx, const bool co
         r.digest[i] = digest[i];
     }
 
-    atomicListAdd(&r, sizeof(r));
+    // Inline atomic add + copy to avoid atomicListAdd (70 regs) in fused kernel call tree
+    const uint32_t slot = atomicAdd(d_atomicListSize[0], 1);
+    uint8_t* const ptr = static_cast<uint8_t*>(d_atomicListBuf[0]) + slot * sizeof(Hash160SearchResult);
+    constexpr uint32_t n = sizeof(Hash160SearchResult) / sizeof(uint32_t);
+    const uint32_t* rWords = reinterpret_cast<const uint32_t*>(&r);
+    uint32_t* dst = reinterpret_cast<uint32_t*>(ptr);
+#pragma unroll
+    for (uint32_t i = 0; i < n; ++i)
+        dst[i] = rWords[i];
 }
 
 __device__ __forceinline__ void setResultFound(const uint32_t idx, const bool compressed, const uint256_t& privateKey, const uint32_t digest[5])
