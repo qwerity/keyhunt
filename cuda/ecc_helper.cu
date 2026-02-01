@@ -368,14 +368,14 @@ __device__ __noinline__ void fusedHashAndCheck(const uint256_t& publicX, const u
 /**
  * Fused kernel (4-limb): public key via 4-limb GTable + hash + check in one pass.
  * No write of public keys to global memory. Uses d_gTableX_4limb_ptr / d_gTableY_4limb_ptr.
- * __launch_bounds__(256, 2) improves occupancy (more blocks/SM) on GPUs where the kernel is register-heavy.
+ * __launch_bounds__(256, 4) asks compiler to limit registers so up to 4 blocks/SM can run.
+ * MAX_BATCH_SIZE 8 keeps per-thread arrays smaller → fewer registers → higher occupancy than 16.
  */
-__global__ __launch_bounds__(256, 2) void publicKeyAndCheckHash160FusedKernel(const uint256_t *privateKeys)
+__global__ __launch_bounds__(256, 4) void publicKeyAndCheckHash160FusedKernel(const uint256_t *privateKeys)
 {
     const uint32_t totalThreads = gridDim.x * blockDim.x;
     const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
-    // 16 reduces per-thread register/local use so more blocks/SM (e.g. 2 on RTX 50xx); 32 gave Blocks/SM=1.
-    constexpr uint32_t MAX_BATCH_SIZE = 16;
+    constexpr uint32_t MAX_BATCH_SIZE = 8;
     const uint64_t* gTableX = d_gTableX_4limb_ptr;
     const uint64_t* gTableY = d_gTableY_4limb_ptr;
 
