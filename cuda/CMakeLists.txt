@@ -77,7 +77,8 @@ target_include_directories(ecc_cuda PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(ecc_cuda PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/secp256k1_v2)
 
 set_target_properties(ecc_cuda PROPERTIES
-    CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    # Resolve device symbols when linking the final executable (avoids nvlink bug at static-lib device link for sm_120)
+    CUDA_RESOLVE_DEVICE_SYMBOLS OFF
     CUDA_SEPARABLE_COMPILATION ON
 )
 

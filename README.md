@@ -78,7 +78,7 @@ There is needed to install following packages to be able to compile
 
 ## Build Linux / WSL
 - From project root:
-  - `cmake -B build -DCMAKE_CUDA_ARCHITECTURES=all`  (or e.g. `86` for one arch)
+  - `cmake -B build -DCMAKE_CUDA_ARCHITECTURES=all`  (or one arch, e.g. `86`, **`120` для RTX 5090 (sm_120)**)
   - `cmake --build build --config=Release -j $(nproc) --target cuda-keyhunt-pvk`
 - Binary: `bin/cuda-keyhunt-pvk` (or `bin/release/` if configured). Copy `config.json` next to the binary.
 
@@ -120,7 +120,7 @@ apt-get update && apt-get install -y --no-install-recommends \
 
 ### 1. Occupancy (Blocks/SM)
 
-Ядро собрано с `__launch_bounds__(256, 4)` и батчем 8 точек на итерацию цикла — меньше регистров на поток, чтобы на SM помещалось больше блоков (цель 3–4 blocks/SM). Если **Blocks/SM: 1** или **2** — можно ещё поднять occupancy (см. ниже).
+Ядро собрано с `__launch_bounds__(256, 4)` и батчем 8 точек — цель 4 блока на SM (на sm_120 при PPT 32 обычно достигается; на sm_86 device link может падать, тогда собирай только под 120). Если **Blocks/SM: 1** или **2** — можно ещё поднять occupancy (см. ниже).
 
 **Что смотреть:** при старте в логе выводится строка вида:
 ```text
@@ -130,7 +130,7 @@ apt-get update && apt-get install -y --no-install-recommends \
 
 **Как ещё поднять occupancy (config.json):**
 - **`pointsPerThread`: 32** уже хорошо; если хочется выжать ещё — попробовать **16**. Меньше точек на поток → меньше регистров → больше блоков на SM.
-- **`blockSize` и `gridSize`** по умолчанию считаются автоматически по occupancy (если не заданы в config). Опционально можно вручную задать **`blockSize`: 128** — тогда блок занимает меньше регистров на SM и часто помещается больше блоков; gridSize при этом всё равно считается автоматически (SMs × blocks/SM).
+- **`blockSize` и `bloc`** по умолчанию считаются автоматически по occupancy (если не заданы в config). Опционально можно вручную задать **`blockSize`: 128** — тогда блок занимает меньше регистров на SM и часто помещается больше блоков; gridSize при этом всё равно считается автоматически (SMs × blocks/SM).
 - Пересборка под свою карту: `-DCMAKE_CUDA_ARCHITECTURES=90` для RTX 5090, `89` для 5080 (или `all`).
 
 ### 2. Ограничение по памяти (memory-bound)
@@ -140,8 +140,8 @@ apt-get update && apt-get install -y --no-install-recommends \
 ### 3. Сборка под нужную архитектуру
 
 Бинарь, собранный под одну архитектуру (например sm_86), на 50xx может работать медленнее. Собирайте под свою карту:
-- RTX 5090: `-DCMAKE_CUDA_ARCHITECTURES=90`
-- RTX 5080: `-DCMAKE_CUDA_ARCHITECTURES=89`
+- RTX 5090: `-DCMAKE_CUDA_ARCHITECTURES=120` (sm_120)
+- RTX 5080: `-DCMAKE_CUDA_ARCHITECTURES=89` (sm_89)
 - или все: `-DCMAKE_CUDA_ARCHITECTURES=all`
 
 ### 4. Ручной подбор grid/block (опционально)

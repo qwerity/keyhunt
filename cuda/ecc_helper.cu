@@ -368,8 +368,8 @@ __device__ __noinline__ void fusedHashAndCheck(const uint256_t& publicX, const u
 /**
  * Fused kernel (4-limb): public key via 4-limb GTable + hash + check in one pass.
  * No write of public keys to global memory. Uses d_gTableX_4limb_ptr / d_gTableY_4limb_ptr.
- * __launch_bounds__(256, 4) asks compiler to limit registers so up to 4 blocks/SM can run.
- * MAX_BATCH_SIZE 8 keeps per-thread arrays smaller → fewer registers → higher occupancy than 16.
+ * __launch_bounds__(256, 4) — цель 4 блока на SM (при MAX_BATCH_SIZE 8 и PPT 32 обычно достигается на sm_120).
+ * MAX_BATCH_SIZE 8 keeps per-thread arrays smaller → fewer registers.
  */
 __global__ __launch_bounds__(256, 4) void publicKeyAndCheckHash160FusedKernel(const uint256_t *privateKeys)
 {
