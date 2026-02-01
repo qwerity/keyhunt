@@ -50,6 +50,8 @@ set(ECC_SRC
     ecc.cuh
     ecc_helper.cu
     ecc_helper.cuh
+    ec_4limb_math.cuh
+    gpu_hash160.cuh
 
     udevice_vector.cuh
 

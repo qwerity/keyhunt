@@ -22,10 +22,12 @@ public:
     [[nodiscard]] uint32_t getKeysNumberPerIteration() const;
 
     void calculatePublicKeysAndCheckHash160() const;
+    /** Fills d_publicKeysX/Y so that getPublicKeys() returns valid data (e.g. for tests). Not used by key search path. */
+    void fillPublicKeys() const;
     void generatePrivateKeysForXPerIteration(uint32_t privateXPart, uint32_t iteration) const;
 
     void getPrivateKeys(std::vector<uint256_t>& h_privateKeys) const;
-    
+    /** Valid only after fillPublicKeys(). After calculatePublicKeysAndCheckHash160() public keys are not written to global memory. */
     void getPublicKeys(std::vector<uint256_t>& h_publicKeysX, std::vector<uint256_t>& h_publicKeysY) const;
     
     void setPrivateKeys(const std::vector<uint256_t>& h_privateKeys) const;

@@ -26,6 +26,9 @@ extern __constant__ uint256_t secp256k1_N;
 
 extern __device__ const secp256k1_ge_storage* d_gTable_ptr;
 
+extern __constant__ const uint64_t* d_gTableX_4limb_ptr;
+extern __constant__ const uint64_t* d_gTableY_4limb_ptr;
+
 struct ECC::Impl
 {
     cudaStream_t mGeneratorStream{};
@@ -43,6 +46,8 @@ struct ECC::Impl
     thrust::udevice_vector<uint256_t> d_privateKeys;
 
     thrust::udevice_vector<secp256k1_ge_storage> d_gTable;
+    thrust::udevice_vector<uint64_t> d_gTableX_4limb;
+    thrust::udevice_vector<uint64_t> d_gTableY_4limb;
 
     Impl()
     {
@@ -70,17 +75,15 @@ struct ECC::Impl
 
     void computeResolutionForMaxOccupancy(const uint32_t pointsPerThread, const uint32_t gridSize, const uint32_t blockSize = 0)
     {
-        int minGridSize{};
-        int recommendedBlockSize{};
-        cudaCheckError(cudaOccupancyMaxPotentialBlockSize(&minGridSize, &recommendedBlockSize, publicKeyGenerationKernel));
-
         setPointsPerThread(pointsPerThread);
 
-        // Set block size first (needed for occupancy calculation)
-        const uint32_t actualBlockSize = (blockSize != 0) ? blockSize : static_cast<uint32_t>(recommendedBlockSize);
-        
-        // Calculate optimal grid size based on number of SMs for maximum GPU utilization
-        // minGridSize is the minimum needed, but for high-end GPUs (like RTX 5090) we need more
+        // Use the kernel we actually run (fused) for occupancy — it uses more registers than publicKeyGenerationKernel
+        int minGridSizeFused{};
+        int recommendedBlockSizeFused{};
+        cudaCheckError(cudaOccupancyMaxPotentialBlockSize(&minGridSizeFused, &recommendedBlockSizeFused, publicKeyAndCheckHash160FusedKernel));
+
+        const uint32_t actualBlockSize = (blockSize != 0) ? blockSize : static_cast<uint32_t>(recommendedBlockSizeFused);
+
         if (gridSize != 0)
         {
             mGridSize = gridSize;
@@ -89,32 +92,26 @@ struct ECC::Impl
         else
         {
             mBlockSize = actualBlockSize;
-            
-            // Get device properties to calculate optimal grid size
+
             cudaDeviceProp deviceProp{};
             int deviceId{};
             cudaCheckError(cudaGetDevice(&deviceId));
             cudaCheckError(cudaGetDeviceProperties(&deviceProp, deviceId));
-            
-            // Calculate number of blocks per SM for maximum occupancy
+
             int numBlocksPerSM{};
-            int dynamicSMemSize = 0; // No dynamic shared memory used
+            const int dynamicSMemSize = 0;
             cudaCheckError(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-                &numBlocksPerSM, 
-                publicKeyGenerationKernel, 
-                mBlockSize, 
+                &numBlocksPerSM,
+                publicKeyAndCheckHash160FusedKernel,
+                mBlockSize,
                 dynamicSMemSize));
-            
-            // Optimal grid size = number of SMs × blocks per SM
-            // This ensures all SMs are fully utilized
+
             const int optimalGridSize = deviceProp.multiProcessorCount * numBlocksPerSM;
-            
-            // Use the larger of minGridSize and optimalGridSize to ensure we utilize all SMs
-            mGridSize = static_cast<uint32_t>(std::max(minGridSize, optimalGridSize));
-            
-            fprintf(stdout, "[GPU %d] Device: %s, SMs: %d, Blocks/SM: %d, minGridSize: %d, optimalGridSize: %d, using gridSize: %u, blockSize: %u\n",
-                    deviceId, deviceProp.name, deviceProp.multiProcessorCount, numBlocksPerSM, 
-                    minGridSize, optimalGridSize, mGridSize, mBlockSize);
+            mGridSize = static_cast<uint32_t>(std::max(minGridSizeFused, optimalGridSize));
+
+            fprintf(stdout, "[GPU %d] Device: %s, SMs: %d, Blocks/SM: %d (fused kernel), minGridSize: %d, optimalGridSize: %d, using gridSize: %u, blockSize: %u\n",
+                    deviceId, deviceProp.name, deviceProp.multiProcessorCount, numBlocksPerSM,
+                    minGridSizeFused, optimalGridSize, mGridSize, mBlockSize);
         }
 
         mKeysNumberPerIteration = mGridSize * mBlockSize * mPointsPerThread;
@@ -218,6 +215,33 @@ struct ECC::Impl
         convertUint256ToFeStorage(src.y, dst.y);
     }
 
+    // Convert one GTable point (secp256k1_ge_storage) to 4-limb format: 4 uint64_t for X, 4 for Y (fe_storage n[0]..n[7] = LSW..MSW)
+    static void convertGeStorageTo4limb(const secp256k1_ge_storage& st, uint64_t xOut[4], uint64_t yOut[4])
+    {
+        for (int j = 0; j < 4; j++) {
+            xOut[j] = static_cast<uint64_t>(st.x.n[2 * j]) | (static_cast<uint64_t>(st.x.n[2 * j + 1]) << 32);
+            yOut[j] = static_cast<uint64_t>(st.y.n[2 * j]) | (static_cast<uint64_t>(st.y.n[2 * j + 1]) << 32);
+        }
+    }
+
+    void uploadGTable4limb(const std::vector<secp256k1_ge_storage>& h_gTable)
+    {
+        const uint32_t tableSize = static_cast<uint32_t>(h_gTable.size());
+        const size_t limbsPerPoint = 4;
+        std::vector<uint64_t> h_x(tableSize * limbsPerPoint);
+        std::vector<uint64_t> h_y(tableSize * limbsPerPoint);
+        for (uint32_t i = 0; i < tableSize; i++) {
+            uint64_t x4[4], y4[4];
+            convertGeStorageTo4limb(h_gTable[i], x4, y4);
+            for (int j = 0; j < 4; j++) {
+                h_x[i * 4 + j] = x4[j];
+                h_y[i * 4 + j] = y4[j];
+            }
+        }
+        thrust::copy(h_x.begin(), h_x.end(), d_gTableX_4limb.begin());
+        thrust::copy(h_y.begin(), h_y.end(), d_gTableY_4limb.begin());
+    }
+
     bool loadGTableFromFile(const std::string& filename)
     {
         constexpr uint32_t tableSize = ECMULT_GEN_PREC_N * ECMULT_GEN_PREC_G;
@@ -255,7 +279,7 @@ struct ECC::Impl
         
         // Copy to device memory
         thrust::copy(h_gTable.begin(), h_gTable.end(), d_gTable.begin());
-        
+        uploadGTable4limb(h_gTable);
         fprintf(stdout, "Successfully loaded gTable from file: %s (%zu bytes)\n", filename.c_str(), fileSize);
         return true;
     }
@@ -296,14 +320,17 @@ struct ECC::Impl
         }
         
         thrust::copy(h_gTable.begin(), h_gTable.end(), d_gTable.begin());
+        uploadGTable4limb(h_gTable);
         fprintf(stdout, "gTable generation completed!\n");
     }
 
     void allocateGTableDeviceMemory()
     {
         constexpr uint32_t tableSize = ECMULT_GEN_PREC_N * ECMULT_GEN_PREC_G;
+        constexpr uint32_t limbsPerPoint = 4;
         d_gTable.resize(tableSize);
-        
+        d_gTableX_4limb.resize(tableSize * limbsPerPoint);
+        d_gTableY_4limb.resize(tableSize * limbsPerPoint);
         // Try to load from file first
         const std::string defaultFilename = "gtables.bin";
         if (!loadGTableFromFile(defaultFilename))
@@ -315,6 +342,10 @@ struct ECC::Impl
 
     void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t gridSize, const uint32_t blockSize)
     {
+        // From examples: L1 cache helps random GTable access; larger stack for deep kernel frames
+        cudaCheckError(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
+        cudaCheckError(cudaDeviceSetLimit(cudaLimitStackSize, 32768));
+
         computeResolutionForMaxOccupancy(pointsPerThread, gridSize, blockSize);
 
         cudaCheckError(cudaMemcpyToSymbol(d_publicKeyCompressionTypeToCheck, &publicKeyCompressionTypeToCheck, sizeof(uint32_t)));
@@ -333,40 +364,43 @@ struct ECC::Impl
 
     void calculatePublicKeysAndCheckHash160()
     {
-        // Initialize public keys asynchronously
-        constexpr uint256_t infinite{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
-        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), infinite);
-        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), infinite);
-
-        // Copy gTable pointer to constant memory
+        // Copy gTable pointer for fillPublicKeys (secp256k1 path)
         const secp256k1_ge_storage* d_gTableRawPtr = thrust::raw_pointer_cast(d_gTable.data());
         cudaCheckError(cudaMemcpyToSymbol(d_gTable_ptr, &d_gTableRawPtr, sizeof(secp256k1_ge_storage*)));
-        
-        // Launch kernels asynchronously - no synchronization between kernels
+        // 4-limb GTable pointers for fused kernel
+        const uint64_t* d_gTableXRaw = thrust::raw_pointer_cast(d_gTableX_4limb.data());
+        const uint64_t* d_gTableYRaw = thrust::raw_pointer_cast(d_gTableY_4limb.data());
+        cudaCheckError(cudaMemcpyToSymbol(d_gTableX_4limb_ptr, &d_gTableXRaw, sizeof(uint64_t*)));
+        cudaCheckError(cudaMemcpyToSymbol(d_gTableY_4limb_ptr, &d_gTableYRaw, sizeof(uint64_t*)));
+
+        // Fused kernel (4-limb): public key + hash + check in one pass
         constexpr uint32_t mSharedMemSize{0};
         const uint256_t *privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys.data());
-        
-        publicKeyGenerationKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
-        cudaError_t err1 = cudaGetLastError();
-        if (err1 != cudaSuccess)
+        publicKeyAndCheckHash160FusedKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess)
         {
-            fprintf(stderr, "publicKeyGenerationKernel: CUDA error: %s\n", cudaGetErrorString(err1));
+            fprintf(stderr, "publicKeyAndCheckHash160FusedKernel: CUDA error: %s\n", cudaGetErrorString(err));
         }
-        
-        checkHashKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
-        cudaError_t err2 = cudaGetLastError();
-        if (err2 != cudaSuccess)
-        {
-            fprintf(stderr, "checkHashKernel: CUDA error: %s\n", cudaGetErrorString(err2));
-        }
-        
-        // Synchronize only once at the end
         cudaError_t syncErr = cudaStreamSynchronize(mGeneratorStream);
         if (syncErr != cudaSuccess)
         {
             fprintf(stderr, "calculatePublicKeysAndCheckHash160: CUDA sync error: %s\n", cudaGetErrorString(syncErr));
             cudaCheckError(syncErr);
         }
+    }
+
+    void fillPublicKeys()
+    {
+        constexpr uint256_t infinite{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), infinite);
+        thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), infinite);
+        const secp256k1_ge_storage* d_gTableRawPtr = thrust::raw_pointer_cast(d_gTable.data());
+        cudaCheckError(cudaMemcpyToSymbol(d_gTable_ptr, &d_gTableRawPtr, sizeof(secp256k1_ge_storage*)));
+        constexpr uint32_t mSharedMemSize{0};
+        const uint256_t *privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys.data());
+        publicKeyGenerationKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+        cudaCheckError(cudaStreamSynchronize(mGeneratorStream));
     }
 };
 
@@ -389,6 +423,11 @@ uint32_t ECC::getKeysNumberPerIteration() const
 void ECC::calculatePublicKeysAndCheckHash160() const
 {
     mImpl->calculatePublicKeysAndCheckHash160();
+}
+
+void ECC::fillPublicKeys() const
+{
+    mImpl->fillPublicKeys();
 }
 
 void ECC::generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration) const

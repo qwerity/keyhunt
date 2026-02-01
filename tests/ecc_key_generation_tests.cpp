@@ -124,8 +124,8 @@ TEST_CASE("check CUDA public key generation")
     
     REQUIRE(h_privateKeys.size() > 0);
     
-    // Генерируем публичные ключи через CUDA
-    cuEcc->calculatePublicKeysAndCheckHash160();
+    // Заполняем публичные ключи (для теста; поиск использует fused kernel без записи в global)
+    cuEcc->fillPublicKeys();
     
     // Получаем публичные ключи из CUDA
     std::vector<uint256_t> h_publicKeysX, h_publicKeysY;
