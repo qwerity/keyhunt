@@ -140,11 +140,11 @@ else
     exit 1
 fi
 
-if [ -f "${WORK_DIR}/${GTABLES_FILE}" ]; then
-    SIZE=$(du -h "${WORK_DIR}/${GTABLES_FILE}" | cut -f1)
-    log_info "✓ ${GTABLES_FILE}: ${SIZE}"
+if [ -f "${WORK_DIR}/gtables.bin" ]; then
+    SIZE=$(du -h "${WORK_DIR}/gtables.bin" | cut -f1)
+    log_info "✓ gtables.bin: ${SIZE}"
 else
-    log_error "✗ ${GTABLES_FILE} не найден"
+    log_error "✗ gtables.bin не найден"
     exit 1
 fi
 
