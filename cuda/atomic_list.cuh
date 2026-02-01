@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <cuda_runtime.h>
 
-/** Callable from kernels with max 64 regs (e.g. __launch_bounds__(256, 4)); implementation uses maxrregcount(64). */
 __device__ void atomicListAdd(const void *info, uint32_t size);
 
 /**
