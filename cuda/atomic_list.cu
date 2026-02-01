@@ -9,12 +9,14 @@ __constant__ void *d_atomicListBuf[1];
 __constant__ uint32_t *d_atomicListSize[1];
 
 
-/** maxrregcount(64) so this can be called from kernels with __launch_bounds__(256, 4) (64 regs). */
+/** Minimal copy to stay under 64 regs when called from __launch_bounds__(256, 4) kernels. No cuda_memcpy. */
 __device__ __attribute__((maxrregcount(64))) void atomicListAdd(const void *info, const uint32_t size)
 {
     const uint32_t count = atomicAdd(d_atomicListSize[0], 1);
     uint8_t *ptr = static_cast<uint8_t *>(d_atomicListBuf[0]) + count * size;
-    cuda_memcpy(ptr, static_cast<const uint8_t*>(info), size);
+    const uint8_t *src = static_cast<const uint8_t *>(info);
+    for (uint32_t i = 0; i < size; ++i)
+        ptr[i] = src[i];
 }
 
 static void setListPtr(void *ptr, uint32_t *numResults)
