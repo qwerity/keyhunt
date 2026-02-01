@@ -82,7 +82,7 @@ log_info "Загрузка ${GTABLES_FILE}..."
 if [ -f "${WORK_DIR}/${GTABLES_FILE}" ]; then
     log_warn "${GTABLES_FILE} уже существует, будет перезаписан"
 fi
-if wget -q --show-progress "${BASE_URL}/${GTABLES_FILE}" -O "${WORK_DIR}/${GTABLES_FILE}"; then
+if wget -q --show-progress "${BASE_URL}/${GTABLES_FILE}" -O "${WORK_DIR}/gtables.bin"; then
     log_info "✓ ${GTABLES_FILE} загружен успешно"
 else
     log_error "✗ Ошибка при загрузке ${GTABLES_FILE}"

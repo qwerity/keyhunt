@@ -69,8 +69,17 @@ namespace cu
             case 7:
                 cores = 64;
             break;
+            case 8:  // Ada Lovelace (RTX 40xx)
+                cores = 128;
+            break;
+            case 9:  // Hopper
+                cores = 128;
+            break;
+            case 10: // Blackwell (RTX 50xx)
+                cores = 128;
+            break;
             default:
-                cores = 8;
+                cores = 128; // Newer archs: assume 128 per SM
             break;
         }
         devInfo.cores = cores;
