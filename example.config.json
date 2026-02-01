@@ -2,9 +2,7 @@
   "hash160_targets": [
     "./r_only_table.txt.bin"
   ],
-
   "statusCallbackPeriodMs": 5000,
-
   "pointsPerThread": 64,
   "keysNumberToGenerate": 0,
   "forcePrivateXPart": false,
