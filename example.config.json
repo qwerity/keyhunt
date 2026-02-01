@@ -8,11 +8,9 @@
   "forcePrivateXPart": false,
   "privateXPart": 2   ,
   "publicKeyCompressionTypeToCheck": 2,
-
   "server" : {
     "url": "72.56.102.163",
     "port": 3602,
-    "authorisationHeader": "worker_bit",
-    "machineId": "machine-001"
+    "authorisationHeader": "worker_bit"
   }
 }
