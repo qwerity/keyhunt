@@ -9,7 +9,8 @@ __constant__ void *d_atomicListBuf[1];
 __constant__ uint32_t *d_atomicListSize[1];
 
 
-__device__ void atomicListAdd(const void *info, const uint32_t size)
+/** maxrregcount(64) so this can be called from kernels with __launch_bounds__(256, 4) (64 regs). */
+__device__ __attribute__((maxrregcount(64))) void atomicListAdd(const void *info, const uint32_t size)
 {
     const uint32_t count = atomicAdd(d_atomicListSize[0], 1);
     uint8_t *ptr = static_cast<uint8_t *>(d_atomicListBuf[0]) + count * size;
