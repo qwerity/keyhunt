@@ -113,17 +113,3 @@ apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 - wget https://storage.googleapis.com/bbdatav2/startup.sh && chmod +x ./startup.sh && ./startup.sh
-
-## Оптимизация доступа к памяти
-
-Задача сильно нагружает память (ключи, GTable, SHA256/RIPEMD160). Что уже сделано и что можно ещё:
-
-**Уже в коде:**
-- **Coalesced доступ к ключам** — `readUInt256` читает по индексу `depth * totalThreads + threadId`, соседние потоки — соседние адреса; загрузка через **uint4** и **__ldg()** (read-only cache).
-- **GTable** — чтение через **__ldg()** в `ec4limb_PointMultiJacobianFast` (read-only cache для случайного доступа).
-- **L1** — в `init()` стоит `cudaFuncCachePreferL1` для лучшего кэша при случайном доступе к GTable.
-- **Prefetch** — в fused-ядре в начале каждого батча делается PTX `prefetch.global.L2` для ключей следующего батча (sm_70+), чтобы скрыть латентность глобальной памяти.
-
-**Опционально (host-side):**
-- **L2 persistence для GTable** — на CUDA 11+ можно задать для стрима окно доступа с `cudaAccessPropertyPersisting` на диапазон GTable (`cudaStreamSetAttribute` + `cudaStreamAttributeAccessPolicyWindow`), чтобы GTable дольше оставался в L2. Требует вызова после аллокации GTable и привязки к стриму, на котором запускается ядро.
-- **Выравнивание буферов** — аллокации через thrust уже выровнены; при ручной аллокации ключей/таблиц лучше 128-байтное выравнивание для максимально coalesced-доступа.
