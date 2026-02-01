@@ -32,7 +32,9 @@ struct ResultsProcessor::Impl
     {
         thread = std::thread([this]()
         {
+#ifdef KEYHUNT_DEBUG_LOGS
             BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor Thread running: " << std::this_thread::get_id();
+#endif
 
             while (!stopFlag)
             {
@@ -57,7 +59,9 @@ struct ResultsProcessor::Impl
                                                            result.cudaDeviceId, result.privateXPart, result.privateYPart, (result.compressed ? "compressed" : "uncompressed"),
                                                            privateStr, hash160Str);
 
+#ifdef KEYHUNT_DEBUG_LOGS
                 BOOST_LOG_TRIVIAL(fatal) << std::format("[{}] Found match for private key: {}", result.cudaDeviceId, result.privateXPart);
+#endif
 
                 bool online{false};
 
@@ -91,7 +95,9 @@ struct ResultsProcessor::Impl
     {
         thread = std::thread([this]
         {
+#ifdef KEYHUNT_DEBUG_LOGS
             BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor Thread running: " << std::this_thread::get_id();
+#endif
 
             while (!stopFlag)
             {
@@ -113,7 +119,9 @@ struct ResultsProcessor::Impl
 
                 const std::string resultsStr = std::format("[{}][({:<12}, {})| {:<12}], hash160: {}", result.cudaDeviceId, result.derivedPath, masterKeyStr, compressedStr, hash160Str);
 
+#ifdef KEYHUNT_DEBUG_LOGS
                 BOOST_LOG_TRIVIAL(fatal) << std::format("[{}] Found match for path: {}", result.cudaDeviceId, result.derivedPath);
+#endif
 
                 if (!utils::writeEncResultsToFile(aesEnc, "mnemonics_results.enc", resultsStr))
                 {
@@ -128,7 +136,9 @@ struct ResultsProcessor::Impl
     void stop()
     {
         utils::Timer t;
+#ifdef KEYHUNT_DEBUG_LOGS
         BOOST_LOG_TRIVIAL(trace) << "ResultsProcessor stopping";
+#endif
 
         stopFlag = true;
         if (thread.joinable())
@@ -136,7 +146,9 @@ struct ResultsProcessor::Impl
             thread.join();
         }
 
+#ifdef KEYHUNT_DEBUG_LOGS
         BOOST_LOG_TRIVIAL(trace) << std::format("ResultsProcessor stopped: {} ms", t.elapsedMs());
+#endif
     }
 };
 

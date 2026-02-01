@@ -255,7 +255,9 @@ struct KeyHunter::Impl
                     const std::string postString = std::format("markXPartDone for privateXPart: {}", privateXPart);
                     utils::backupToTGAsync(postString);
                     (void) gContext->httpClient->markXPartDone(privateXPart);
+#ifdef KEYHUNT_DEBUG_LOGS
                     BOOST_LOG_TRIVIAL(fatal) << postString;
+#endif
                 }
             }
         }

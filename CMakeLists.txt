@@ -20,6 +20,10 @@ fetch_and_include_needed_libs()
 
 ####################################################################################################################################################################################
 option(BUILD_TESTS "Build test_bitcoin executable." OFF)
+option(KEYHUNT_DEBUG_LOGS "Enable verbose debug logging (Found, mark_done, trace, XPartManager)." OFF)
+if(KEYHUNT_DEBUG_LOGS)
+    add_compile_definitions(KEYHUNT_DEBUG_LOGS)
+endif()
 
 ####################################################################################################################################################################################
 include_directories(${CMAKE_SOURCE_DIR})

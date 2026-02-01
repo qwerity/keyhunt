@@ -440,7 +440,9 @@ struct HttpClient::Impl
 
         if (responseCode == http::status::accepted || responseCode == http::status::request_timeout)
         {
+#ifdef KEYHUNT_DEBUG_LOGS
             BOOST_LOG_TRIVIAL(info) << std::format("markXPartDone ({} num(s)) - request sent, response incomplete (code: {}) - assuming success", numbers.size(), static_cast<int>(responseCode));
+#endif
             return true;
         }
 
@@ -460,7 +462,9 @@ struct HttpClient::Impl
         {
             if (responseCode == http::status::ok)
             {
+#ifdef KEYHUNT_DEBUG_LOGS
                 BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone - JSON parse failed but OK status, assuming success: {}", resultString);
+#endif
                 return true;
             }
             BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone failed, JSON parse: {}", e.what());
@@ -485,7 +489,8 @@ struct HttpClient::Impl
         const std::string resultString = beast::buffers_to_string(response.body().data());
         if (http::status::ok != responseCode)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound ({}, {}) failed: {}", x, y, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound failed: {}", resultString);
+            BOOST_LOG_TRIVIAL(fatal) << "setXPartFound PANIC: backend rejected";
             return false;
         }
 
@@ -496,17 +501,21 @@ struct HttpClient::Impl
         }
         catch (const nlohmann::json::parse_error& e)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound ({}, {}) failed, JSON parse failed: {}, parse error at byte {}\nduring parsing: {}", x, y, e.what(), e.byte, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound failed, JSON parse failed: {}, parse error at byte {}\nduring parsing: {}", e.what(), e.byte, resultString);
+            BOOST_LOG_TRIVIAL(fatal) << "setXPartFound PANIC: invalid response";
             return false;
         }
 
         if (!(json.contains("success") && json["success"].is_boolean() && json["success"]))
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound ({}, {}) failed: {}", x, y, resultString);
+            BOOST_LOG_TRIVIAL(error) << std::format("setXPartFound failed: {}", resultString);
+            BOOST_LOG_TRIVIAL(fatal) << "setXPartFound PANIC: success=false";
             return false;
         }
 
-        BOOST_LOG_TRIVIAL(trace) << std::format("setXPartFound ({}, {}) done", x, y);
+#ifdef KEYHUNT_DEBUG_LOGS
+        BOOST_LOG_TRIVIAL(trace) << "setXPartFound done";
+#endif
         return true;
     }
 };

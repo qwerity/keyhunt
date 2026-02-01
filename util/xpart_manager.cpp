@@ -180,21 +180,26 @@ struct XPartManager::Impl
                     success = httpClient->markXPartDone(batch);
                     if (success)
                     {
+#ifdef KEYHUNT_DEBUG_LOGS
                         if (attempt > 0)
                         {
                             BOOST_LOG_TRIVIAL(info) << std::format("markXPartDone ({} num(s)) succeeded on retry attempt {}", batch.size(), attempt + 1);
                         }
+#endif
                         break;
                     }
                     if (attempt < maxRetries - 1 && !stopFlag)
                     {
                         const int delayMs = (1 << attempt) * 1000;
+#ifdef KEYHUNT_DEBUG_LOGS
                         BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone ({} num(s)) failed (attempt {}/{}), retrying in {}ms...",
                                                                   batch.size(), attempt + 1, maxRetries, delayMs);
+#endif
                         std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
                     }
                 }
 
+#ifdef KEYHUNT_DEBUG_LOGS
                 if (!success && !stopFlag)
                 {
                     BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone ({} num(s)) failed after {} retries (non-critical, continuing)", batch.size(), maxRetries);
@@ -203,6 +208,7 @@ struct XPartManager::Impl
                 {
                     BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone ({} num(s)) cancelled due to shutdown", batch.size());
                 }
+#endif
 
                 lock.lock();
             }
@@ -221,15 +227,12 @@ struct XPartManager::Impl
         if (stopFlag && xPartQueue.empty())
         {
             lock.unlock();
-            // If stopped and queue is empty, fallback to random
-            // This should only happen during shutdown
             BOOST_LOG_TRIVIAL(warning) << "XPartManager stopped, falling back to random X part";
             return utils::randomUINT32_t();
         }
 
         if (xPartQueue.empty())
         {
-            // This shouldn't happen, but handle gracefully
             lock.unlock();
             BOOST_LOG_TRIVIAL(warning) << "XPartManager queue unexpectedly empty, falling back to random";
             return utils::randomUINT32_t();
