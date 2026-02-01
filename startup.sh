@@ -82,7 +82,7 @@ log_info "Загрузка ${GTABLES_FILE}..."
 if [ -f "${WORK_DIR}/${GTABLES_FILE}" ]; then
     log_warn "${GTABLES_FILE} уже существует, будет перезаписан"
 fi
-if wget -q --show-progress "${BASE_URL}/${GTABLES_FILE}" -O "${WORK_DIR}/gtables.bin"; then
+if wget -q --show-progress "${BASE_URL}/${GTABLES_FILE}" -O "${WORK_DIR}/${GTABLES_FILE}"; then
     log_info "✓ ${GTABLES_FILE} загружен успешно"
 else
     log_error "✗ Ошибка при загрузке ${GTABLES_FILE}"
@@ -140,11 +140,11 @@ else
     exit 1
 fi
 
-if [ -f "${WORK_DIR}/gtables.bin" ]; then
-    SIZE=$(du -h "${WORK_DIR}/gtables.bin" | cut -f1)
-    log_info "✓ gtables.bin: ${SIZE}"
+if [ -f "${WORK_DIR}/${GTABLES_FILE}" ]; then
+    SIZE=$(du -h "${WORK_DIR}/${GTABLES_FILE}" | cut -f1)
+    log_info "✓ ${GTABLES_FILE}: ${SIZE}"
 else
-    log_error "✗ gtables.bin не найден"
+    log_error "✗ ${GTABLES_FILE} не найден"
     exit 1
 fi
 
