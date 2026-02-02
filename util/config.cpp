@@ -289,9 +289,7 @@ struct Config::Impl
         {
             pointsPerThread = configJson["pointsPerThread"].get<uint32_t>();
             if (pointsPerThread == 0)
-            {
-                BOOST_LOG_TRIVIAL(info) << "pointsPerThread: 0 (auto-tune at startup per GPU)";
-            }
+                pointsPerThread = 128;
         }
         else
         {
