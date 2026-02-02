@@ -1,29 +1,5 @@
 # cuda-keyhunt-pvk
 
-## Config (config.json)
-- **pointsPerThread**: Keys per thread per kernel launch. Set to **0** to enable **auto-tune**: at startup each GPU benchmarks candidates 8, 16, 32, 64, 128, 256, 512, 1024 with random keys (min 1 min per candidate for warm-up) and uses the value that gives the highest MKey/s. Use 0 on unknown GPUs or when 8 gives better speed than 16+.
-- **gridSize**, **blockSize**: Optional. If 0 (default), grid/block are chosen by CUDA occupancy for the fused kernel. On some GPUs (e.g. RTX 5090) you can try explicit values to improve throughput (see below).
-
-## RTX 5090 vs RTX 4090: почему 5090 даёт меньше Mkeys/s
-
-На **RTX 5090** (Blackwell, compute capability **12.0** / sm_120) ограничения SM другие, чем на RTX 4090 (Ada, sm_89):
-
-| Параметр | RTX 4090 (Ada sm_89) | RTX 5090 (Blackwell sm_120) |
-|----------|----------------------|-----------------------------|
-| Макс. warps на SM | 64 | **48** |
-| Shared memory на SM | 228 KB (типично) | **128 KB** |
-
-У fused-ядра используется **256 потоков на блок** (8 warps). Поэтому:
-- на 4090: до **8 блоков/SM** (64/8);
-- на 5090: до **6 блоков/SM** (48/8).
-
-То есть на 5090 теоретически **меньше параллелизма на один SM** (примерно на 25%), что при occupancy-bound нагрузке даёт стабильно меньший Mkeys/s, даже при переборе pointsPerThread.
-
-**Что можно сделать:**
-1. **Явно задать gridSize/blockSize** в `config.json` — на 5090 иногда выгоднее другой размер блока. Запусти с `pointsPerThread: 0`, посмотри в лог строку вида `[GPU 0] ... grid: X, block: Y` и попробуй в конфиге `"blockSize": 128` или `256`, `"gridSize": 0` (grid тогда посчитается по occupancy).
-2. **Драйвер и CUDA** — для sm_120 кодогенерация и драйвер ещё догоняют; обновление до последних версий может поднять скорость.
-3. **Ожидать** — со временем тулкит/драйверы для Blackwell обычно улучшаются.
-
 ## CMake options
 | Option | Default | Description |
 |--------|---------|--------------|

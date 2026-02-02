@@ -18,9 +18,12 @@ static std::string formatMKeys(double mkeys)
 
 void statusCallback(const StatusInfo& info)
 {
-    const double avgMKeys = (info.totalTime > 0)
-        ? (static_cast<double>(info.total) / (static_cast<double>(info.totalTime) / 1000.0) / 1e6
-        : info.dataPerSecond;
+    double avgMKeys = info.dataPerSecond;
+    if (info.totalTime > 0)
+    {
+        const double totalSec = static_cast<double>(info.totalTime) / 1000.0;
+        avgMKeys = (static_cast<double>(info.total) / totalSec) / 1e6;
+    }
 
     const std::string curStr = formatMKeys(info.dataPerSecond);
     const std::string minStr = formatMKeys(info.minDataPerSecond);
