@@ -1,5 +1,8 @@
 # cuda-keyhunt-pvk
 
+## Config (config.json)
+- **pointsPerThread**: Keys per thread per kernel launch. Set to **0** to enable **auto-tune**: at startup each GPU benchmarks candidates (8, 16, 32, 64, 128) with random keys and uses the value that gives the highest MKey/s. Use 0 on unknown GPUs or when 8 gives better speed than 16+.
+
 ## CMake options
 | Option | Default | Description |
 |--------|---------|--------------|

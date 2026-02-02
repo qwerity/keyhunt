@@ -1,5 +1,6 @@
 #include "key_hunter.h"
 
+#include <array>
 #include <thread>
 #include <format>
 
@@ -200,11 +201,59 @@ struct KeyHunter::Impl
         return privateXPart;
     }
 
+    /** Auto-tune pointsPerThread: benchmark candidates with random keys, return best for this GPU. */
+    uint32_t tunePointsPerThread()
+    {
+        constexpr std::array<uint32_t, 5> kCandidates = {8, 16, 32, 64, 128};
+        constexpr uint32_t kBenchIterations = 10;
+
+        uint32_t bestPpt = kCandidates[0];
+        double bestRateMKeys = 0.0;
+
+        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] Auto-tuning pointsPerThread (candidates: 8, 16, 32, 64, 128, {} iterations each)", cudaInfo.id, kBenchIterations);
+
+        for (const uint32_t ppt : kCandidates)
+        {
+            cuECC->init(ppt, gContext->config.publicKeyCompressionTypeToCheck(), gContext->config.gridSize(), gContext->config.blockSize());
+            const uint32_t keysPerIteration = cuECC->getKeysNumberPerIteration();
+
+            utils::Timer timer;
+            timer.start();
+            for (uint32_t i = 0; i < kBenchIterations && !stopFlag; ++i)
+            {
+                const uint32_t randomX = utils::randomUINT32_t();
+                cuECC->generatePrivateKeysForXPerIteration(randomX, i);
+                cuECC->calculatePublicKeysAndCheckHash160();
+            }
+            const uint64_t elapsedMs = timer.elapsedMs();
+            const double elapsedSec = (elapsedMs > 0) ? (static_cast<double>(elapsedMs) / 1000.0) : 1e-6;
+            const uint64_t totalKeys = static_cast<uint64_t>(keysPerIteration) * kBenchIterations;
+            const double rateMKeys = static_cast<double>(totalKeys) / 1e6 / elapsedSec;
+
+            BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] pointsPerThread {:3} -> {:.3f} MKey/s ({} keys in {} ms)", cudaInfo.id, ppt, rateMKeys, totalKeys, elapsedMs);
+
+            if (rateMKeys > bestRateMKeys)
+            {
+                bestRateMKeys = rateMKeys;
+                bestPpt = ppt;
+            }
+        }
+
+        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] Auto-selected pointsPerThread: {} ({:.3f} MKey/s)", cudaInfo.id, bestPpt, bestRateMKeys);
+        return bestPpt;
+    }
+
     void startSearchPublicHash()
     {
         hash160Lookup.setTargets(gContext->hash160Targets);
         resultAtomicList.init(sizeof(Hash160SearchResult), 256);
-        cuECC->init(gContext->config.pointsPerThread(), gContext->config.publicKeyCompressionTypeToCheck(), gContext->config.gridSize(), gContext->config.blockSize());
+
+        uint32_t pointsPerThread = gContext->config.pointsPerThread();
+        if (pointsPerThread == 0)
+        {
+            pointsPerThread = tunePointsPerThread();
+        }
+        cuECC->init(pointsPerThread, gContext->config.publicKeyCompressionTypeToCheck(), gContext->config.gridSize(), gContext->config.blockSize());
 
         const HunterConfig& hunter = gContext->config.hunter();
 

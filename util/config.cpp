@@ -288,6 +288,10 @@ struct Config::Impl
         if (configJson.contains("pointsPerThread") && configJson["pointsPerThread"].is_number_unsigned())
         {
             pointsPerThread = configJson["pointsPerThread"].get<uint32_t>();
+            if (pointsPerThread == 0)
+            {
+                BOOST_LOG_TRIVIAL(info) << "pointsPerThread: 0 (auto-tune at startup per GPU)";
+            }
         }
         else
         {
