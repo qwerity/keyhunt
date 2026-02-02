@@ -12,7 +12,8 @@ struct StatusInfo
     double dataPerSecond{};   // current MKey/s (last period)
     double minDataPerSecond{}; // min MKey/s seen (per GPU)
     double seconds{};
-    uint64_t total{};
+    uint64_t total{};              // keys in current X part (for iteration display)
+    uint64_t totalKeysSinceStart{}; // cumulative keys since GPU start (for avg)
     uint64_t totalTime{};
 
     int device{};

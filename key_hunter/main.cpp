@@ -19,10 +19,10 @@ static std::string formatMKeys(double mkeys)
 void statusCallback(const StatusInfo& info)
 {
     double avgMKeys = info.dataPerSecond;
-    if (info.totalTime > 0)
+    if (info.totalTime > 0 && info.totalKeysSinceStart > 0)
     {
         const double totalSec = static_cast<double>(info.totalTime) / 1000.0;
-        avgMKeys = (static_cast<double>(info.total) / totalSec) / 1e6;
+        avgMKeys = (static_cast<double>(info.totalKeysSinceStart) / totalSec) / 1e6;
     }
 
     const std::string curStr = formatMKeys(info.dataPerSecond);
@@ -30,7 +30,7 @@ void statusCallback(const StatusInfo& info)
     const std::string avgStr = formatMKeys(avgMKeys);
     const std::string speedStr = std::format("cur {} min {} avg {} MKey/s", curStr, minStr, avgStr);
 
-    const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L} total)", info.total);
+    const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L} total)", info.totalKeysSinceStart);
     const std::string timeStr = std::format("[{:.3f}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
     const uint64_t usedDeviceMemoryMb = (info.totalDeviceMemory - info.freeDeviceMemory) / MB;
     const uint64_t totalDeviceMemoryMb = info.totalDeviceMemory / MB;

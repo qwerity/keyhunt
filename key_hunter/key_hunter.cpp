@@ -32,7 +32,8 @@ struct KeyHunter::Impl
     mutable uint64_t periodElapsedTimeMS{0};
     mutable uint64_t periodKeysNumber{0};
     mutable uint64_t totalTimeMS{0};
-    mutable double minMKeysPerSec{0.0}; // 0 = not set yet
+    mutable uint64_t totalKeysProcessed{0}; // cumulative across all X parts (for avg)
+    mutable double minMKeysPerSec{0.0};     // 0 = not set yet
 
     // Implementation
     explicit Impl(const std::shared_ptr<GlobalContext>& context, cu::CudaDeviceInfo&& cudaInfo)
@@ -54,6 +55,7 @@ struct KeyHunter::Impl
 
     void signalStatusInfo(const uint64_t keysNumberPerIteration, const uint32_t iteration, const uint32_t totalIterations, const uint64_t elapsedTimeMs) const
     {
+        totalKeysProcessed += keysNumberPerIteration;
         totalTimeMS += elapsedTimeMs;
         periodElapsedTimeMS += elapsedTimeMs;
         periodKeysNumber += keysNumberPerIteration;
@@ -71,6 +73,7 @@ struct KeyHunter::Impl
             info.minDataPerSecond = minMKeysPerSec;
             info.seconds = periodElapsedTimeS;
             info.total = keysNumberPerIteration * iteration;
+            info.totalKeysSinceStart = totalKeysProcessed;
             info.totalTime = totalTimeMS;
             info.device = cudaInfo.id;
             info.deviceName = cudaInfo.name;
