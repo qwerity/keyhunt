@@ -28,6 +28,12 @@ struct KeyHunter::Impl
     Hash160Lookup hash160Lookup;
     CudaAtomicList resultAtomicList;
 
+    // Per-GPU speed stats (mutable for use in const signalStatusInfo)
+    mutable uint64_t periodElapsedTimeMS{0};
+    mutable uint64_t periodKeysNumber{0};
+    mutable uint64_t totalTimeMS{0};
+    mutable double minMKeysPerSec{0.0}; // 0 = not set yet
+
     // Implementation
     explicit Impl(const std::shared_ptr<GlobalContext>& context, cu::CudaDeviceInfo&& cudaInfo)
         : gContext(context)
@@ -48,23 +54,24 @@ struct KeyHunter::Impl
 
     void signalStatusInfo(const uint64_t keysNumberPerIteration, const uint32_t iteration, const uint32_t totalIterations, const uint64_t elapsedTimeMs) const
     {
-        static uint64_t periodElapsedTimeMS{0};
-        static uint64_t periodKeysNumber{0};
-        static uint64_t totalTime{0};
-
-        totalTime += elapsedTimeMs;
+        totalTimeMS += elapsedTimeMs;
         periodElapsedTimeMS += elapsedTimeMs;
         periodKeysNumber += keysNumberPerIteration;
 
         if (periodElapsedTimeMS >= gContext->config.statusCallbackPeriodMs())
         {
             const double periodElapsedTimeS = static_cast<double>(periodElapsedTimeMS) / 1000.0;
+            const double currentMKeys = (static_cast<double>(periodKeysNumber) / periodElapsedTimeS) / 1e6;
+
+            if (minMKeysPerSec == 0.0 || currentMKeys < minMKeysPerSec)
+                minMKeysPerSec = currentMKeys;
 
             StatusInfo info;
-            info.dataPerSecond = (static_cast<double>(periodKeysNumber) / periodElapsedTimeS) / 1e6; // Mpoints per second
+            info.dataPerSecond = currentMKeys;
+            info.minDataPerSecond = minMKeysPerSec;
             info.seconds = periodElapsedTimeS;
             info.total = keysNumberPerIteration * iteration;
-            info.totalTime = totalTime;
+            info.totalTime = totalTimeMS;
             info.device = cudaInfo.id;
             info.deviceName = cudaInfo.name;
             info.iteration = iteration;

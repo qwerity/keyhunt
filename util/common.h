@@ -9,7 +9,8 @@ constexpr uint32_t MB{1024u * 1024u};
 /*################################################################################################################################################################################*/
 struct StatusInfo
 {
-    double dataPerSecond{};
+    double dataPerSecond{};   // current MKey/s (last period)
+    double minDataPerSecond{}; // min MKey/s seen (per GPU)
     double seconds{};
     uint64_t total{};
     uint64_t totalTime{};

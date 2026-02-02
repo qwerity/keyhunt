@@ -11,9 +11,21 @@
 
 #include <boost/log/trivial.hpp>
 
+static std::string formatMKeys(double mkeys)
+{
+    return (mkeys < 0.01) ? "< 0.01" : std::format("{:.2f}", mkeys);
+}
+
 void statusCallback(const StatusInfo& info)
 {
-    const std::string speedStr = (info.dataPerSecond < 0.01) ? "< 0.01 MKey/s" : std::format("{:.3f} MKey/s", info.dataPerSecond);
+    const double avgMKeys = (info.totalTime > 0)
+        ? (static_cast<double>(info.total) / (static_cast<double>(info.totalTime) / 1000.0) / 1e6
+        : info.dataPerSecond;
+
+    const std::string curStr = formatMKeys(info.dataPerSecond);
+    const std::string minStr = formatMKeys(info.minDataPerSecond);
+    const std::string avgStr = formatMKeys(avgMKeys);
+    const std::string speedStr = std::format("cur {} min {} avg {} MKey/s", curStr, minStr, avgStr);
 
     const std::string totalStr = std::format(std::locale("en_US.UTF-8"), "({:L} total)", info.total);
     const std::string timeStr = std::format("[{:.3f}s | {}]", info.seconds, utils::formatSeconds(static_cast<uint32_t>(info.totalTime / 1000)));
