@@ -201,16 +201,16 @@ struct KeyHunter::Impl
         return privateXPart;
     }
 
-    /** Auto-tune pointsPerThread: benchmark candidates with random keys, return best for this GPU. */
+    /** Auto-tune pointsPerThread: benchmark candidates (8..1024) with random keys, min time per candidate for GPU warm-up. */
     uint32_t tunePointsPerThread()
     {
-        constexpr std::array<uint32_t, 5> kCandidates = {8, 16, 32, 64, 128};
-        constexpr uint32_t kBenchIterations = 10;
+        constexpr std::array<uint32_t, 8> kCandidates = {8, 16, 32, 64, 128, 256, 512, 1024};
+        constexpr uint64_t kMinBenchMs = 60000; // min 1 min per candidate to account for GPU warm-up
 
         uint32_t bestPpt = kCandidates[0];
         double bestRateMKeys = 0.0;
 
-        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] Auto-tuning pointsPerThread (candidates: 8, 16, 32, 64, 128, {} iterations each)", cudaInfo.id, kBenchIterations);
+        BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] Auto-tuning pointsPerThread (candidates: 8..1024, min {} s per candidate for warm-up)", cudaInfo.id, kMinBenchMs / 1000);
 
         for (const uint32_t ppt : kCandidates)
         {
@@ -219,18 +219,21 @@ struct KeyHunter::Impl
 
             utils::Timer timer;
             timer.start();
-            for (uint32_t i = 0; i < kBenchIterations && !stopFlag; ++i)
+            uint32_t iterations = 0;
+            uint64_t totalKeys = 0;
+            while (timer.elapsedMs() < kMinBenchMs && !stopFlag)
             {
                 const uint32_t randomX = utils::randomUINT32_t();
-                cuECC->generatePrivateKeysForXPerIteration(randomX, i);
+                cuECC->generatePrivateKeysForXPerIteration(randomX, iterations);
                 cuECC->calculatePublicKeysAndCheckHash160();
+                totalKeys += keysPerIteration;
+                ++iterations;
             }
             const uint64_t elapsedMs = timer.elapsedMs();
             const double elapsedSec = (elapsedMs > 0) ? (static_cast<double>(elapsedMs) / 1000.0) : 1e-6;
-            const uint64_t totalKeys = static_cast<uint64_t>(keysPerIteration) * kBenchIterations;
             const double rateMKeys = static_cast<double>(totalKeys) / 1e6 / elapsedSec;
 
-            BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] pointsPerThread {:3} -> {:.3f} MKey/s ({} keys in {} ms)", cudaInfo.id, ppt, rateMKeys, totalKeys, elapsedMs);
+            BOOST_LOG_TRIVIAL(fatal) << std::format(std::locale("en_US.UTF-8"), "[{}] pointsPerThread {:4} -> {:.3f} MKey/s ({:L} keys in {} ms)", cudaInfo.id, ppt, rateMKeys, totalKeys, elapsedMs);
 
             if (rateMKeys > bestRateMKeys)
             {
