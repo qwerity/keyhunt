@@ -124,7 +124,8 @@ __device__ __forceinline__ void gpuHash160_SHA256Transform(uint32_t output[8], u
     output[7] += h;
 }
 
-#define gpuHash160_bswap32(v) __byte_perm(v, 0, 0x0123)
+// Byte-swap 32-bit word (big-endian <-> little-endian). 0x3210 = bytes 3,2,1,0 -> reverse order.
+#define gpuHash160_bswap32(v) __byte_perm(v, 0, 0x3210)
 
 // ---------------------------------------------------------------------------------
 // RIPEMD160 (from GPUHash.h)
@@ -370,6 +371,9 @@ __device__ __forceinline__ void gpuHash160Comp(const uint32_t* x32, uint8_t isOd
     *(uint64_t*)(s + 14) = static_cast<uint32_t>(gpuHash160_ripemd160_sizedesc_32);
     gpuHash160_RIPEMD160Initialize(hash);
     gpuHash160_RIPEMD160Transform(hash, s);
+    #pragma unroll
+    for (int i = 0; i < 5; i++)
+        hash[i] = gpuHash160_bswap32(hash[i]);
 }
 
 __device__ __forceinline__ void gpuHash160Uncomp(const uint32_t* x32, const uint32_t* y32, uint32_t hash[5])
@@ -420,4 +424,7 @@ __device__ __forceinline__ void gpuHash160Uncomp(const uint32_t* x32, const uint
     *(uint64_t*)(s + 14) = static_cast<uint32_t>(gpuHash160_ripemd160_sizedesc_32);
     gpuHash160_RIPEMD160Initialize(hash);
     gpuHash160_RIPEMD160Transform(hash, s);
+    #pragma unroll
+    for (int i = 0; i < 5; i++)
+        hash[i] = gpuHash160_bswap32(hash[i]);
 }
