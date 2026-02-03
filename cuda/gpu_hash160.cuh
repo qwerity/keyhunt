@@ -338,32 +338,32 @@ __device__ void gpuHash160_RIPEMD160Transform(uint32_t s[5], uint32_t* w)
 
 // ---------------------------------------------------------------------------------
 // Hash160 from public key (compressed: 0x02|0x03 || x; uncompressed: 0x04 || x || y)
-// x32[0]=LSW .. x32[7]=MSW (same as uint256_t.v)
+// x32[0]=LSW .. x32[7]=MSW (same as uint256_t.v). Байты внутри слова: native (LE), (x32[7]>>24)=MSB.
 //
-// Порядок байт должен совпадать с CPU (util/hash.cpp, util/ripemd160.cpp):
-// - После SHA256 результат переводится в little-endian слова (gpuHash160_bswap32 = 0x3210).
-// - После RIPEMD160 финальный digest тоже bswap по каждому слову (как utils::endian на CPU).
+// Порядок байт как в CPU (util/hash.cpp) и sha256.cuh: явные сдвиги, без __byte_perm.
+// После SHA256 — bswap в LE-слова для RIPEMD-160. После RIPEMD-160 — bswap digest (как utils::endian на CPU).
 // ---------------------------------------------------------------------------------
 __device__ __forceinline__ void gpuHash160Comp(const uint32_t* x32, uint8_t isOdd, uint32_t hash[5])
 {
     uint32_t publicKeyBytes[16];
     uint32_t s[16];
-    publicKeyBytes[0] = __byte_perm(x32[7], 0x2 + isOdd, 0x4321);
-    publicKeyBytes[1] = __byte_perm(x32[7], x32[6], 0x0765);
-    publicKeyBytes[2] = __byte_perm(x32[6], x32[5], 0x0765);
-    publicKeyBytes[3] = __byte_perm(x32[5], x32[4], 0x0765);
-    publicKeyBytes[4] = __byte_perm(x32[4], x32[3], 0x0765);
-    publicKeyBytes[5] = __byte_perm(x32[3], x32[2], 0x0765);
-    publicKeyBytes[6] = __byte_perm(x32[2], x32[1], 0x0765);
-    publicKeyBytes[7] = __byte_perm(x32[1], x32[0], 0x0765);
-    publicKeyBytes[8] = __byte_perm(x32[0], 0x80, 0x0456);
+    // 0x02|0x03 || x (33 bytes), тот же порядок что sha256PublicKeyCompressed / CPU msg
+    publicKeyBytes[0] = (static_cast<uint32_t>(0x02 + isOdd) << 24) | (x32[7] >> 8);
+    publicKeyBytes[1] = (x32[6] >> 8) | (x32[7] << 24);
+    publicKeyBytes[2] = (x32[5] >> 8) | (x32[6] << 24);
+    publicKeyBytes[3] = (x32[4] >> 8) | (x32[5] << 24);
+    publicKeyBytes[4] = (x32[3] >> 8) | (x32[4] << 24);
+    publicKeyBytes[5] = (x32[2] >> 8) | (x32[3] << 24);
+    publicKeyBytes[6] = (x32[1] >> 8) | (x32[2] << 24);
+    publicKeyBytes[7] = (x32[0] >> 8) | (x32[1] << 24);
+    publicKeyBytes[8] = (x32[0] << 24) | 0x00800000;
     publicKeyBytes[9] = 0;
     publicKeyBytes[10] = 0;
     publicKeyBytes[11] = 0;
     publicKeyBytes[12] = 0;
     publicKeyBytes[13] = 0;
     publicKeyBytes[14] = 0;
-    publicKeyBytes[15] = 0x108;
+    publicKeyBytes[15] = 33 * 8;
     gpuHash160_SHA256Initialize(s);
     gpuHash160_SHA256Transform(s, publicKeyBytes);
     #pragma unroll 8
@@ -384,23 +384,24 @@ __device__ __forceinline__ void gpuHash160Uncomp(const uint32_t* x32, const uint
 {
     uint32_t publicKeyBytes[32];
     uint32_t s[16];
-    publicKeyBytes[0] = __byte_perm(x32[7], 0x04, 0x4321);
-    publicKeyBytes[1] = __byte_perm(x32[7], x32[6], 0x0765);
-    publicKeyBytes[2] = __byte_perm(x32[6], x32[5], 0x0765);
-    publicKeyBytes[3] = __byte_perm(x32[5], x32[4], 0x0765);
-    publicKeyBytes[4] = __byte_perm(x32[4], x32[3], 0x0765);
-    publicKeyBytes[5] = __byte_perm(x32[3], x32[2], 0x0765);
-    publicKeyBytes[6] = __byte_perm(x32[2], x32[1], 0x0765);
-    publicKeyBytes[7] = __byte_perm(x32[1], x32[0], 0x0765);
-    publicKeyBytes[8] = __byte_perm(x32[0], y32[7], 0x0765);
-    publicKeyBytes[9] = __byte_perm(y32[7], y32[6], 0x0765);
-    publicKeyBytes[10] = __byte_perm(y32[6], y32[5], 0x0765);
-    publicKeyBytes[11] = __byte_perm(y32[5], y32[4], 0x0765);
-    publicKeyBytes[12] = __byte_perm(y32[4], y32[3], 0x0765);
-    publicKeyBytes[13] = __byte_perm(y32[3], y32[2], 0x0765);
-    publicKeyBytes[14] = __byte_perm(y32[2], y32[1], 0x0765);
-    publicKeyBytes[15] = __byte_perm(y32[1], y32[0], 0x0765);
-    publicKeyBytes[16] = __byte_perm(y32[0], 0x80, 0x0456);
+    // 0x04 || x || y (65 bytes), тот же порядок что sha256PublicKey / CPU msg
+    publicKeyBytes[0] = (x32[7] >> 8) | 0x04000000;
+    publicKeyBytes[1] = (x32[6] >> 8) | (x32[7] << 24);
+    publicKeyBytes[2] = (x32[5] >> 8) | (x32[6] << 24);
+    publicKeyBytes[3] = (x32[4] >> 8) | (x32[5] << 24);
+    publicKeyBytes[4] = (x32[3] >> 8) | (x32[4] << 24);
+    publicKeyBytes[5] = (x32[2] >> 8) | (x32[3] << 24);
+    publicKeyBytes[6] = (x32[1] >> 8) | (x32[2] << 24);
+    publicKeyBytes[7] = (x32[0] >> 8) | (x32[1] << 24);
+    publicKeyBytes[8] = (y32[7] >> 8) | (x32[0] << 24);
+    publicKeyBytes[9] = (y32[6] >> 8) | (y32[7] << 24);
+    publicKeyBytes[10] = (y32[5] >> 8) | (y32[6] << 24);
+    publicKeyBytes[11] = (y32[4] >> 8) | (y32[5] << 24);
+    publicKeyBytes[12] = (y32[3] >> 8) | (y32[4] << 24);
+    publicKeyBytes[13] = (y32[2] >> 8) | (y32[3] << 24);
+    publicKeyBytes[14] = (y32[1] >> 8) | (y32[2] << 24);
+    publicKeyBytes[15] = (y32[0] >> 8) | (y32[1] << 24);
+    publicKeyBytes[16] = (y32[0] << 24) | 0x00800000;
     publicKeyBytes[17] = 0;
     publicKeyBytes[18] = 0;
     publicKeyBytes[19] = 0;
@@ -415,7 +416,7 @@ __device__ __forceinline__ void gpuHash160Uncomp(const uint32_t* x32, const uint
     publicKeyBytes[28] = 0;
     publicKeyBytes[29] = 0;
     publicKeyBytes[30] = 0;
-    publicKeyBytes[31] = 0x208;
+    publicKeyBytes[31] = 65 * 8;
     gpuHash160_SHA256Initialize(s);
     gpuHash160_SHA256Transform(s, publicKeyBytes);
     gpuHash160_SHA256Transform(s, publicKeyBytes + 16);

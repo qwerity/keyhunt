@@ -1,16 +1,15 @@
 /**
  * Тест gpuHash160Comp / gpuHash160Uncomp: проверяет, что GPU hash160 совпадает с CPU.
- * Раньше баг: порядок байт — gpuHash160_bswap32 был 0x0123 (identity), а нужен 0x3210 (swap);
- *             финальный digest не переводился в формат CPU (без bswap по словам).
+ * Используем ту же точку, что и в приложении — из ECC (v[0]=LSW .. v[7]=MSW).
  */
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch_all.hpp>
 
 #include "cuda/gpu_hash160.cuh"
-#include "cuda/defines.h"
+#include "cuda/defines.cuh"
+#include "cuda/ecc.cuh"
 #include "util/address_util.h"
 #include "util/utils.h"
-#include "util/secp256k1.h"
 
 #include <vector>
 #include <iostream>
@@ -28,21 +27,27 @@ __global__ void runGpuHash160Kernel(
 
 TEST_CASE("gpuHash160Comp and gpuHash160Uncomp match CPU Hash160")
 {
-    // Точка из приватного ключа 1 (известный вектор)
-    secp256k1::uint256 privateKey("0100000000000000000000000000000000000000000000000000000000000000");
-    const auto pub = secp256k1::multiplyPoint(privateKey, secp256k1::G());
+    std::unique_ptr<ECC> cuEcc(std::make_unique<ECC>());
+    cuEcc->init(1, PointCompressionType::BOTH, 0, 256);
+    cuEcc->generatePrivateKeysForXPerIteration(1, 0);
+    cuEcc->fillPublicKeys();
 
+    std::vector<uint256_t> h_publicKeysX, h_publicKeysY;
+    cuEcc->getPublicKeys(h_publicKeysX, h_publicKeysY);
+    REQUIRE(h_publicKeysX.size() >= 1);
+    REQUIRE(h_publicKeysY.size() >= 1);
+
+    // Формат для CPU Hash: words[0]=MSW .. words[7]=LSW, каждый word в big-endian (через endian)
     uint32_t cpuXWords[8]{};
     uint32_t cpuYWords[8]{};
-    pub.x.exportWords(cpuXWords, 8, secp256k1::uint256::BigEndian);
-    pub.y.exportWords(cpuYWords, 8, secp256k1::uint256::BigEndian);
-
-    // GPU формат: v[0]=LSW .. v[7]=MSW (как uint256_t.v)
-    uint32_t gpuX[8], gpuY[8];
     for (int j = 0; j < 8; ++j) {
-        gpuX[j] = cpuXWords[7 - j];
-        gpuY[j] = cpuYWords[7 - j];
+        cpuXWords[j] = utils::endian(h_publicKeysX[0].v[7 - j]);
+        cpuYWords[j] = utils::endian(h_publicKeysY[0].v[7 - j]);
     }
+
+    // На GPU передаём v[] как есть (x32[0]=LSW .. x32[7]=MSW)
+    const uint32_t* gpuX = h_publicKeysX[0].v;
+    const uint32_t* gpuY = h_publicKeysY[0].v;
 
     uint32_t* d_x = nullptr;
     uint32_t* d_y = nullptr;
