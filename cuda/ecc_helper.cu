@@ -1,7 +1,6 @@
 #include "ecc_helper.cuh"
 #include "common_kernels.cuh"
 #include "ec_4limb_math.cuh"
-#include "gpu_hash160.cuh"
 
 #include "secp256k1_v2/bip32.cuh"
 #include "secp256k1_v2/secp256k1.cuh"
@@ -352,7 +351,7 @@ __device__ __noinline__ void fusedHashAndCheck(const uint256_t& publicX, const u
     if (needCompressed)
     {
         hash160 hash160;
-        gpuHash160Comp(publicX.v, static_cast<uint8_t>(publicY.v[0] & 1), hash160.h);
+        hashPublicKeyCompressed(publicX, publicY.v[0] & 1, hash160.h);
         if (checkHash(hash160))
             setResultFound(index, true, privateKey, hash160.h);
     }
@@ -360,7 +359,7 @@ __device__ __noinline__ void fusedHashAndCheck(const uint256_t& publicX, const u
     if (needUncompressed)
     {
         hash160 hash160;
-        gpuHash160Uncomp(publicX.v, publicY.v, hash160.h);
+        hashPublicKey(publicX, publicY, hash160.h);
         if (checkHash(hash160))
             setResultFound(index, false, privateKey, hash160.h);
     }
