@@ -83,3 +83,13 @@ target_link_libraries(hash160_file_test PRIVATE Boost::log Boost::log_setup Boos
 add_test(NAME hash160_file_test COMMAND hash160_file_test)
 
 ####################################################################################################################################################################################
+# Прямая проверка gpuHash160Comp / gpuHash160Uncomp (порядок байт)
+add_executable(gpu_hash160_test gpu_hash160_test.cu)
+target_link_libraries(gpu_hash160_test PRIVATE util)
+set_target_properties(gpu_hash160_test PROPERTIES
+    CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    CUDA_SEPARABLE_COMPILATION ON
+)
+add_test(NAME gpu_hash160_test COMMAND gpu_hash160_test)
+
+####################################################################################################################################################################################

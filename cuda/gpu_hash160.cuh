@@ -339,6 +339,10 @@ __device__ void gpuHash160_RIPEMD160Transform(uint32_t s[5], uint32_t* w)
 // ---------------------------------------------------------------------------------
 // Hash160 from public key (compressed: 0x02|0x03 || x; uncompressed: 0x04 || x || y)
 // x32[0]=LSW .. x32[7]=MSW (same as uint256_t.v)
+//
+// Порядок байт должен совпадать с CPU (util/hash.cpp, util/ripemd160.cpp):
+// - После SHA256 результат переводится в little-endian слова (gpuHash160_bswap32 = 0x3210).
+// - После RIPEMD160 финальный digest тоже bswap по каждому слову (как utils::endian на CPU).
 // ---------------------------------------------------------------------------------
 __device__ __forceinline__ void gpuHash160Comp(const uint32_t* x32, uint8_t isOdd, uint32_t hash[5])
 {
