@@ -1,6 +1,7 @@
 #include "util/utils.h"
 #include "util/secp256k1.h"
-#include "util/hash.h"
+#include "util/crypto_util.h"
+#include "util/address_util.h"
 #include "cuda/defines.h"
 
 #include <iostream>
