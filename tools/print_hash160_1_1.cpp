@@ -2,7 +2,6 @@
 #include "util/secp256k1.h"
 #include "util/crypto_util.h"
 #include "util/address_util.h"
-#include "cuda/defines.h"
 
 #include <iostream>
 #include <format>
@@ -73,13 +72,9 @@ int main()
     }
     std::cout << std::endl;
     
-    // Создаем структуры hash160 для проверки
-    hash160 hash160UncompressedStruct(hash160UncompressedLE);
-    hash160 hash160CompressedStruct(hash160CompressedLE);
-    
     std::cout << "\n--- Hash160 struct format (as stored in memory/file) ---" << std::endl;
-    std::cout << "Uncompressed struct: " << utils::toHex(hash160UncompressedStruct.h, 5) << std::endl;
-    std::cout << "Compressed struct:   " << utils::toHex(hash160CompressedStruct.h, 5) << std::endl;
+    std::cout << "Uncompressed struct: " << utils::toHex(hash160UncompressedLE, 5) << std::endl;
+    std::cout << "Compressed struct:   " << utils::toHex(hash160CompressedLE, 5) << std::endl;
     
     return 0;
 }
