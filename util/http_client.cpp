@@ -122,10 +122,12 @@ struct HttpClient::Impl
             ioc.run_one();
         timer.cancel();
 
-        if (timedOut)
+        const bool canceledOrTimeout = timedOut || connectEc == net::error::operation_aborted ||
+            connectEc.value() == static_cast<int>(boost::system::errc::operation_canceled);
+        if (canceledOrTimeout)
         {
-            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout (" << kConnectTimeoutSec << "s) to " << config.host << ":" << config.port;
-            throw beast::system_error{beast::error::timeout};
+            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout or canceled (" << kConnectTimeoutSec << "s) to " << config.host << ":" << config.port;
+            throw beast::system_error{beast::error_code{beast::error::timeout}};
         }
         if (connectEc)
         {
@@ -154,10 +156,12 @@ struct HttpClient::Impl
             ioc.run_one();
         timer.cancel();
 
-        if (timedOut)
+        const bool canceledOrTimeout = timedOut || connectEc == net::error::operation_aborted ||
+            connectEc.value() == static_cast<int>(boost::system::errc::operation_canceled);
+        if (canceledOrTimeout)
         {
-            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout (" << kConnectTimeoutSec << "s) to " << config.host << ":" << config.port;
-            throw beast::system_error{beast::error::timeout};
+            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout or canceled (" << kConnectTimeoutSec << "s) to " << config.host << ":" << config.port;
+            throw beast::system_error{beast::error_code{beast::error::timeout}};
         }
         if (connectEc)
         {
@@ -536,7 +540,8 @@ struct HttpClient::Impl
         const std::string resultString = beast::buffers_to_string(response.body().data());
         if (http::status::ok != responseCode)
         {
-            BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone failed: {} (response: {})", static_cast<int>(responseCode), resultString);
+            const std::string responsePreview = resultString.empty() ? "(no response body – connection error or timeout?)" : resultString;
+            BOOST_LOG_TRIVIAL(error) << std::format("markXPartDone failed: {} (response: {})", static_cast<int>(responseCode), responsePreview);
             return false;
         }
 
