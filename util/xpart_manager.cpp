@@ -217,7 +217,7 @@ struct XPartManager::Impl
 
     // Max wait for next X part (avoids infinite hang if server/HTTP is stuck and log just stops)
     static constexpr unsigned int kGetNextXPartTimeoutSec = 90;
-ек    static constexpr unsigned int kWaitChunkSec = 30;  // log every Ns so user sees process is alive
+    static constexpr unsigned int kWaitChunkSec = 30;  // log every Ns so user sees process is alive
 
     uint32_t getNextXPart()
     {
