@@ -6,8 +6,9 @@
 #include <boost/log/trivial.hpp>
 #include <boost/beast/http.hpp>
 #include <algorithm>
-#include <format>
 #include <chrono>
+#include <cstdlib>
+#include <format>
 #include <thread>
 #include <vector>
 
@@ -105,37 +106,49 @@ struct XPartManager::Impl
                 }
                 else
                 {
-                    std::vector<uint32_t> numbers;
-                    const http::status responseCode = httpClient->getXPartNumbers(numbers, requestCount);
-                    if (responseCode == http::status::ok && !numbers.empty())
+                    try
                     {
-                        std::lock_guard<std::mutex> lock(queueMutex);
-                        for (uint32_t n : numbers)
-                        {
-                            xPartQueue.push(n);
-                        }
-                        queueCondition.notify_all();
-                    }
-                    else
-                    {
-                        if (responseCode != http::status::ok)
-                        {
-                            BOOST_LOG_TRIVIAL(warning) << std::format("getXPartNumbers failed (code: {}), falling back to single request", static_cast<int>(responseCode));
-                        }
-                        uint32_t single = 0;
-                        if (httpClient->getXPartNumber(single) == http::status::ok)
+                        std::vector<uint32_t> numbers;
+                        const http::status responseCode = httpClient->getXPartNumbers(numbers, requestCount);
+                        if (responseCode == http::status::ok && !numbers.empty())
                         {
                             std::lock_guard<std::mutex> lock(queueMutex);
-                            xPartQueue.push(single);
-                            queueCondition.notify_one();
+                            for (uint32_t n : numbers)
+                            {
+                                xPartQueue.push(n);
+                            }
+                            queueCondition.notify_all();
                         }
                         else
                         {
-                            BOOST_LOG_TRIVIAL(warning) << std::format("getXPartNumber failed, falling back to random X part");
-                            std::lock_guard<std::mutex> lock(queueMutex);
-                            xPartQueue.push(utils::randomUINT32_t());
-                            queueCondition.notify_one();
+                            if (responseCode != http::status::ok)
+                            {
+                                BOOST_LOG_TRIVIAL(warning) << std::format("XPartManager fetcher: getXPartNumbers failed (code: {}), falling back to single request", static_cast<int>(responseCode));
+                            }
+                            uint32_t single = 0;
+                            if (httpClient->getXPartNumber(single) == http::status::ok)
+                            {
+                                std::lock_guard<std::mutex> lock(queueMutex);
+                                xPartQueue.push(single);
+                                queueCondition.notify_one();
+                            }
+                            else
+                            {
+                                BOOST_LOG_TRIVIAL(warning) << "XPartManager fetcher: getXPartNumber failed, pushing random X part(s)";
+                                std::lock_guard<std::mutex> lock(queueMutex);
+                                for (uint32_t i = 0; i < requestCount; ++i)
+                                    xPartQueue.push(utils::randomUINT32_t());
+                                queueCondition.notify_all();
+                            }
                         }
+                    }
+                    catch (const std::exception& e)
+                    {
+                        BOOST_LOG_TRIVIAL(warning) << std::format("XPartManager fetcher: get_number request failed ({}), pushing random X part(s)", e.what());
+                        std::lock_guard<std::mutex> lock(queueMutex);
+                        for (uint32_t i = 0; i < requestCount; ++i)
+                            xPartQueue.push(utils::randomUINT32_t());
+                        queueCondition.notify_all();
                     }
                 }
             }
@@ -173,42 +186,50 @@ struct XPartManager::Impl
                 }
                 lock.unlock();
 
+                // Critical: if markDone is not delivered, process exits (no silent loss of progress).
                 constexpr int maxRetries = 2;
                 bool success = false;
                 for (int attempt = 0; attempt < maxRetries && !stopFlag; ++attempt)
                 {
-                    success = httpClient->markXPartDone(batch);
-                    if (success)
+                    try
                     {
-#ifdef KEYHUNT_DEBUG_LOGS
-                        if (attempt > 0)
+                        success = httpClient->markXPartDone(batch);
+                        if (success)
                         {
-                            BOOST_LOG_TRIVIAL(info) << std::format("markXPartDone ({} num(s)) succeeded on retry attempt {}", batch.size(), attempt + 1);
-                        }
+#ifdef KEYHUNT_DEBUG_LOGS
+                            if (attempt > 0)
+                            {
+                                BOOST_LOG_TRIVIAL(info) << std::format("markXPartDone ({} num(s)) succeeded on retry attempt {}", batch.size(), attempt + 1);
+                            }
 #endif
-                        break;
+                            break;
+                        }
+                    }
+                    catch (const std::exception& e)
+                    {
+                        // Exit immediately: connection/timeout exception = delivery not sent
+                        BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: markDone delivery failed ({}). Exiting.", e.what());
+                        std::exit(1);
                     }
                     if (attempt < maxRetries - 1 && !stopFlag)
                     {
                         const int delayMs = (1 << attempt) * 1000;
-#ifdef KEYHUNT_DEBUG_LOGS
                         BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone ({} num(s)) failed (attempt {}/{}), retrying in {}ms...",
                                                                   batch.size(), attempt + 1, maxRetries, delayMs);
-#endif
                         std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
                     }
                 }
 
-#ifdef KEYHUNT_DEBUG_LOGS
+                // Exit if after all retries server still did not accept (and we are not shutting down)
                 if (!success && !stopFlag)
                 {
-                    BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone ({} num(s)) failed after {} retries (non-critical, continuing)", batch.size(), maxRetries);
+                    BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: markDone delivery failed for {} num(s) after {} retries. Exiting.", batch.size(), maxRetries);
+                    std::exit(1);
                 }
-                else if (stopFlag && !batch.empty())
+                if (stopFlag && !batch.empty())
                 {
                     BOOST_LOG_TRIVIAL(warning) << std::format("markXPartDone ({} num(s)) cancelled due to shutdown", batch.size());
                 }
-#endif
 
                 lock.lock();
             }
@@ -242,7 +263,7 @@ struct XPartManager::Impl
         const bool timedOut = (waitedSec >= kGetNextXPartTimeoutSec && xPartQueue.empty());
         if (timedOut)
         {
-            BOOST_LOG_TRIVIAL(warning) << std::format("XPartManager: no X part within {}s (server slow or unreachable?), using random X part", kGetNextXPartTimeoutSec);
+            BOOST_LOG_TRIVIAL(warning) << std::format("XPartManager: no X part within {}s (queue empty – check XPartManager fetcher / Http client logs above for connect or timeout errors), using random X part", kGetNextXPartTimeoutSec);
             return utils::randomUINT32_t();
         }
 

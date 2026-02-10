@@ -2,8 +2,9 @@
 #include "crypto_util.h"
 #include "utils.h"
 
-#include <thread>
+#include <cstdlib>
 #include <format>
+#include <thread>
 
 #include <boost/log/trivial.hpp>
 
@@ -67,12 +68,25 @@ struct ResultsProcessor::Impl
 
                 // if it is not test: set_found for privateXPart
                 // Don't call setXPartFound if using forcePrivateXPart or specificXValues - these are local values, not from server
-                const bool shouldUseServer = !gContext->config.devMode() && 
-                                              !gContext->config.hunter().forcePrivateXPart && 
+                const bool shouldUseServer = !gContext->config.devMode() &&
+                                              !gContext->config.hunter().forcePrivateXPart &&
                                               gContext->config.hunter().specificXValues.empty();
                 if (shouldUseServer)
                 {
-                    online |= gContext->httpClient->setXPartFound(result.privateXPart, result.privateYPart);
+                    try
+                    {
+                        if (!gContext->httpClient->setXPartFound(result.privateXPart, result.privateYPart))
+                        {
+                            BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: setFound delivery failed for ({}, {}). Exiting.", result.privateXPart, result.privateYPart);
+                            std::exit(1);
+                        }
+                        online = true;
+                    }
+                    catch (const std::exception& e)
+                    {
+                        BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: setFound delivery failed ({}). Exiting.", e.what());
+                        std::exit(1);
+                    }
                     utils::backupToTGAsync(resultsStr);
                 }
                 else

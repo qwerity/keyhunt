@@ -256,24 +256,20 @@ struct HttpClient::Impl
         catch (const beast::system_error& e)
         {
             // More detailed error logging
-            BOOST_LOG_TRIVIAL(error) << "Http client GET system error: " << e.what() 
+            BOOST_LOG_TRIVIAL(error) << "Http client GET system error: " << e.what()
                                      << " (code: " << e.code() << ", category: " << e.code().category().name() << ")";
-            
-            // Check if it's an SSL/stream error
-            std::string errorMsg = e.what() ? std::string(e.what()) : "";
             if (e.code().category() == boost::asio::error::get_ssl_category() ||
                 e.code() == boost::asio::ssl::error::stream_truncated ||
-                errorMsg.find("stream truncated") != std::string::npos)
+                (e.what() && std::string(e.what()).find("stream truncated") != std::string::npos))
             {
-                BOOST_LOG_TRIVIAL(error) << "SSL/Stream truncated error detected. This may indicate:";
-                BOOST_LOG_TRIVIAL(error) << "  - Server closed connection prematurely";
-                BOOST_LOG_TRIVIAL(error) << "  - Network timeout or connection reset";
-                BOOST_LOG_TRIVIAL(error) << "  - Incomplete response received";
+                BOOST_LOG_TRIVIAL(error) << "SSL/Stream truncated – server closed or network timeout";
             }
+            throw;  // rethrow so caller (e.g. XPartManager fetcher) can log and handle
         }
         catch (const std::exception& e)
         {
             BOOST_LOG_TRIVIAL(error) << "Http client GET failed: " << e.what();
+            throw;
         }
 
         return responseCode;
@@ -373,25 +369,20 @@ struct HttpClient::Impl
         }
         catch (const beast::system_error& e)
         {
-            // More detailed error logging
-            BOOST_LOG_TRIVIAL(error) << "Http client POST system error: " << e.what() 
+            BOOST_LOG_TRIVIAL(error) << "Http client POST system error: " << e.what()
                                      << " (code: " << e.code() << ", category: " << e.code().category().name() << ")";
-            
-            // Check if it's an SSL/stream error
-            std::string errorMsg = e.what() ? std::string(e.what()) : "";
             if (e.code().category() == boost::asio::error::get_ssl_category() ||
                 e.code() == boost::asio::ssl::error::stream_truncated ||
-                errorMsg.find("stream truncated") != std::string::npos)
+                (e.what() && std::string(e.what()).find("stream truncated") != std::string::npos))
             {
-                BOOST_LOG_TRIVIAL(error) << "SSL/Stream truncated error detected. This may indicate:";
-                BOOST_LOG_TRIVIAL(error) << "  - Server closed connection prematurely";
-                BOOST_LOG_TRIVIAL(error) << "  - Network timeout or connection reset";
-                BOOST_LOG_TRIVIAL(error) << "  - Incomplete response received";
+                BOOST_LOG_TRIVIAL(error) << "SSL/Stream truncated – server closed or network timeout";
             }
+            throw;  // rethrow so caller (e.g. markDoneWorker) can handle
         }
         catch (const std::exception& e)
         {
             BOOST_LOG_TRIVIAL(error) << "Http client POST failed: " << e.what();
+            throw;
         }
 
         return responseCode;
@@ -434,15 +425,17 @@ struct HttpClient::Impl
     bool hostAlive()
     {
         const std::string target{"/status"};
-
-        // Container to hold the response
         http::response<http::dynamic_body> response;
-        if (http::status::ok != get(target, response))
+        try
         {
-            return false;
+            if (http::status::ok != get(target, response))
+                return false;
+            return true;
         }
-
-        return true;
+        catch (const std::exception&)
+        {
+            return false;  // connection error / timeout – server considered not alive
+        }
     }
 
     http::status getXPartNumber(uint32_t& number)
