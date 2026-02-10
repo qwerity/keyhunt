@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <utility>
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -34,10 +35,10 @@ struct HttpClient::Impl
 {
     ServerConfig config;
     net::io_context ioc;
-    beast::tcp_stream tcpStream;
+    std::unique_ptr<beast::tcp_stream> tcpStream;  // new stream per request to avoid "second connect" hang
     std::mutex connectionMutex;
 
-    explicit Impl(ServerConfig config) : config(std::move(config)), ioc(), tcpStream(ioc) {}
+    explicit Impl(ServerConfig config) : config(std::move(config)), ioc(), tcpStream(std::make_unique<beast::tcp_stream>(ioc)) {}
 
     Impl(const Impl& other) = delete;
     Impl(const Impl&& other) = delete;
@@ -58,14 +59,13 @@ struct HttpClient::Impl
     static constexpr int kConnectTimeoutSec = 45;   // connect() can hang indefinitely; 45s for slow/far networks
     static constexpr int kReadWriteTimeoutSec = 45;
 
-    void setSocketTimeouts()
+    void setSocketTimeouts(beast::tcp_stream& stream)
     {
-        beast::error_code ec;
 #if defined(_WIN32) || defined(_WIN64)
         DWORD timeoutMs = static_cast<DWORD>(kReadWriteTimeoutSec) * 1000;
         const auto* opt = reinterpret_cast<const char*>(&timeoutMs);
-        if (setsockopt(tcpStream.socket().native_handle(), SOL_SOCKET, SO_RCVTIMEO, opt, sizeof(timeoutMs)) != 0 ||
-            setsockopt(tcpStream.socket().native_handle(), SOL_SOCKET, SO_SNDTIMEO, opt, sizeof(timeoutMs)) != 0)
+        if (setsockopt(stream.socket().native_handle(), SOL_SOCKET, SO_RCVTIMEO, opt, sizeof(timeoutMs)) != 0 ||
+            setsockopt(stream.socket().native_handle(), SOL_SOCKET, SO_SNDTIMEO, opt, sizeof(timeoutMs)) != 0)
         {
             BOOST_LOG_TRIVIAL(warning) << "Http client: failed to set socket timeout (" << kReadWriteTimeoutSec << "s), requests may hang";
         }
@@ -73,37 +73,35 @@ struct HttpClient::Impl
         struct timeval tv;
         tv.tv_sec = kReadWriteTimeoutSec;
         tv.tv_usec = 0;
-        if (setsockopt(tcpStream.socket().native_handle(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0 ||
-            setsockopt(tcpStream.socket().native_handle(), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0)
+        if (setsockopt(stream.socket().native_handle(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0 ||
+            setsockopt(stream.socket().native_handle(), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0)
         {
             BOOST_LOG_TRIVIAL(warning) << "Http client: failed to set socket timeout (" << kReadWriteTimeoutSec << "s), requests may hang";
         }
 #endif
     }
 
-    void connectToServer()
+    void connectToServer(beast::tcp_stream& stream)
     {
         beast::error_code ec;
         ec.clear();
         net::ip::address_v4 ipv4 = net::ip::address_v4::from_string(config.host.c_str(), ec);
         if (!ec)
         {
-            // Direct connection using IP address with connect timeout
             uint16_t portNum = static_cast<uint16_t>(std::stoul(config.port));
             tcp::endpoint endpoint(ipv4, portNum);
-            connectWithTimeout(endpoint);
+            connectWithTimeout(stream, endpoint);
         }
         else
         {
-            // Hostname: resolve then connect with timeout
             tcp::resolver resolver(ioc);
             auto const results = resolver.resolve(tcp::v4(), config.host, config.port);
-            connectWithTimeout(results);
+            connectWithTimeout(stream, results);
         }
-        setSocketTimeouts();
+        setSocketTimeouts(stream);
     }
 
-    void connectWithTimeout(const tcp::endpoint& endpoint)
+    void connectWithTimeout(beast::tcp_stream& stream, const tcp::endpoint& endpoint)
     {
         BOOST_LOG_TRIVIAL(info) << "Http client: connecting to " << config.host << ":" << config.port << " (" << kConnectTimeoutSec << "s timeout)...";
         ioc.restart();
@@ -114,10 +112,10 @@ struct HttpClient::Impl
         net::steady_timer timer(ioc);
         timer.expires_after(std::chrono::seconds(kConnectTimeoutSec));
         timer.async_wait([&](beast::error_code e) {
-            if (!e) { timedOut = true; tcpStream.socket().cancel(connectEc); }
+            if (!e) { timedOut = true; stream.socket().cancel(connectEc); }
             done = true;
         });
-        tcpStream.socket().async_connect(endpoint, [&](beast::error_code e) { connectEc = e; done = true; });
+        stream.socket().async_connect(endpoint, [&](beast::error_code e) { connectEc = e; done = true; });
 
         while (!done)
             ioc.run_one();
@@ -138,7 +136,7 @@ struct HttpClient::Impl
         BOOST_LOG_TRIVIAL(info) << "Http client: connected to " << config.host << ":" << config.port;
     }
 
-    void connectWithTimeout(const tcp::resolver::results_type& results)
+    void connectWithTimeout(beast::tcp_stream& stream, const tcp::resolver::results_type& results)
     {
         BOOST_LOG_TRIVIAL(info) << "Http client: connecting to " << config.host << ":" << config.port << " (" << kConnectTimeoutSec << "s timeout)...";
         ioc.restart();
@@ -149,10 +147,10 @@ struct HttpClient::Impl
         net::steady_timer timer(ioc);
         timer.expires_after(std::chrono::seconds(kConnectTimeoutSec));
         timer.async_wait([&](beast::error_code e) {
-            if (!e) { timedOut = true; tcpStream.socket().cancel(connectEc); }
+            if (!e) { timedOut = true; stream.socket().cancel(connectEc); }
             done = true;
         });
-        net::async_connect(tcpStream.socket(), results.begin(), results.end(),
+        net::async_connect(stream.socket(), results.begin(), results.end(),
             [&](beast::error_code e, tcp::resolver::results_type::iterator) { connectEc = e; done = true; });
 
         while (!done)
@@ -181,25 +179,16 @@ struct HttpClient::Impl
         http::status responseCode{http::status::not_found};
         try
         {
-            // Validate configuration
             if (config.host.empty() || config.port.empty())
             {
                 BOOST_LOG_TRIVIAL(error) << "Http client failed: host or port is empty. Host: '" << config.host << "', Port: '" << config.port << "'";
                 return responseCode;
             }
 
-            // Close socket if it's already open
-            beast::error_code ec;
-            if (tcpStream.socket().is_open())
-            {
-                tcpStream.socket().shutdown(tcp::socket::shutdown_both, ec);
-                tcpStream.socket().close(ec);
-            }
+            // New stream per request to avoid "second connect" hang when reusing same socket
+            tcpStream = std::make_unique<beast::tcp_stream>(ioc);
+            connectToServer(*tcpStream);
 
-            // Connect to the server (handles both IP addresses and hostnames)
-            connectToServer();
-
-            // Set up the HTTP GET request with the Authorization header
             http::request<http::string_body> request{http::verb::get, target, http11Version};
             request.set(http::field::host, config.host);
             request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
@@ -209,16 +198,13 @@ struct HttpClient::Impl
                 request.set("X-Machine-Id", config.machineId);
             }
 
-            // Send the request
-            http::write(tcpStream, request);
+            http::write(*tcpStream, request);
 
-            // Buffer is used to read raw network data
             beast::flat_buffer buffer;
 
-            // Receive the HTTP response with error handling
             try
             {
-                http::read(tcpStream, buffer, response);
+                http::read(*tcpStream, buffer, response);
                 responseCode = response.result();
             }
             catch (const beast::system_error& e)
@@ -249,17 +235,12 @@ struct HttpClient::Impl
                 }
             }
 
-            // Gracefully close the socket
-            ec.clear(); // Reuse existing ec variable
-            tcpStream.socket().shutdown(tcp::socket::shutdown_both, ec);
-            tcpStream.socket().close(ec);
-
-            // Handle potential errors (ignore not_connected and already_closed)
-            // Errors are silently ignored as connection was successful
+            beast::error_code ec;
+            tcpStream->socket().shutdown(tcp::socket::shutdown_both, ec);
+            tcpStream->socket().close(ec);
         }
         catch (const beast::system_error& e)
         {
-            // More detailed error logging
             BOOST_LOG_TRIVIAL(error) << "Http client GET system error: " << e.what()
                                      << " (code: " << e.code() << ", category: " << e.code().category().name() << ")";
             if (e.code().category() == boost::asio::error::get_ssl_category() ||
@@ -296,18 +277,9 @@ struct HttpClient::Impl
                 return responseCode;
             }
 
-            // Close socket if it's already open
-            beast::error_code ec;
-            if (tcpStream.socket().is_open())
-            {
-                tcpStream.socket().shutdown(tcp::socket::shutdown_both, ec);
-                tcpStream.socket().close(ec);
-            }
+            tcpStream = std::make_unique<beast::tcp_stream>(ioc);
+            connectToServer(*tcpStream);
 
-            // Connect to the server (handles both IP addresses and hostnames)
-            connectToServer();
-
-            // Set up an HTTP POST request message
             http::request<http::string_body> req{http::verb::post, target, http11Version};
             req.set(http::field::host, config.host);
             req.set(http::field::content_type, contentType);
@@ -319,17 +291,13 @@ struct HttpClient::Impl
             req.body() = body;
             req.prepare_payload();
 
-            // Send the HTTP request to the remote host
-            http::write(tcpStream, req);
-            // At this point, request was successfully sent to server
+            http::write(*tcpStream, req);
 
-            // This buffer is used for reading the response
             beast::flat_buffer buffer;
 
-            // Receive the HTTP response with error handling
             try
             {
-                http::read(tcpStream, buffer, response);
+                http::read(*tcpStream, buffer, response);
                 responseCode = response.result();
             }
             catch (const beast::system_error& e)
@@ -363,13 +331,9 @@ struct HttpClient::Impl
                 }
             }
 
-            // Gracefully close the socket
-            ec.clear(); // Reuse existing ec variable
-            tcpStream.socket().shutdown(tcp::socket::shutdown_both, ec);
-            tcpStream.socket().close(ec);
-
-            // Handle potential errors (ignore not_connected and already_closed)
-            // Errors are silently ignored as connection was successful
+            beast::error_code ec;
+            tcpStream->socket().shutdown(tcp::socket::shutdown_both, ec);
+            tcpStream->socket().close(ec);
         }
         catch (const beast::system_error& e)
         {
