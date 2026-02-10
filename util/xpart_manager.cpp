@@ -39,15 +39,18 @@ struct XPartManager::Impl
     std::condition_variable markDoneCondition;
     std::thread markDoneThread;
 
-    // Целевой размер очереди: от числа видеокарт, заранее заполняем (~1 запрос get_number в минуту)
     size_t targetQueueSize;
+    size_t gpuCount;
+    size_t markDoneMinBatchSize;  // min queue size before sending mark_done batch, scales with GPU count
 
-    explicit Impl(std::shared_ptr<HttpClient> client, bool random, size_t gpuCount)
+    explicit Impl(std::shared_ptr<HttpClient> client, bool random, size_t gpuCount_)
         : httpClient(std::move(client))
         , randomMode(random)
-        , targetQueueSize(std::max<size_t>(4u, kBufferMinutesXKeysPerGpu * std::max<size_t>(gpuCount, 1)))
+        , targetQueueSize(std::max<size_t>(4u, kBufferMinutesXKeysPerGpu * std::max<size_t>(gpuCount_, 1)))
+        , gpuCount(std::max<size_t>(1, gpuCount_))
+        , markDoneMinBatchSize(std::max(kMarkDoneMinBatchSize, gpuCount))
     {
-        BOOST_LOG_TRIVIAL(info) << std::format("XPartManager: queue buffer = {} numbers, refill when < {} ({}%), {} GPU(s)", targetQueueSize, std::max<size_t>(1, targetQueueSize * kRefillThresholdPercent / 100), kRefillThresholdPercent, std::max<size_t>(gpuCount, 1));
+        BOOST_LOG_TRIVIAL(info) << std::format("XPartManager: queue buffer = {} numbers, refill when < {} ({}%), {} GPU(s), mark_done min batch = {}", targetQueueSize, std::max<size_t>(1, targetQueueSize * kRefillThresholdPercent / 100), kRefillThresholdPercent, gpuCount, markDoneMinBatchSize);
         fetcherThread = std::thread([this]() { fetcherWorker(); });
         markDoneThread = std::thread([this]() { markDoneWorker(); });
     }
@@ -165,14 +168,14 @@ struct XPartManager::Impl
         {
             std::unique_lock<std::mutex> lock(markDoneMutex);
             markDoneCondition.wait(lock, [this]() {
-                return markDoneQueue.size() >= kMarkDoneMinBatchSize || stopFlag;
+                return markDoneQueue.size() >= markDoneMinBatchSize || stopFlag;
             });
 
             while (!markDoneQueue.empty())
             {
                 std::vector<uint32_t> batch;
                 const size_t toTake = std::min(kMarkDoneBatchSize, markDoneQueue.size());
-                if (toTake >= kMarkDoneMinBatchSize || stopFlag)
+                if (toTake >= markDoneMinBatchSize || stopFlag)
                 {
                     for (size_t i = 0; i < toTake && !markDoneQueue.empty(); ++i)
                     {
@@ -185,6 +188,11 @@ struct XPartManager::Impl
                     break;
                 }
                 lock.unlock();
+
+                // Small delay between batches so we don't open 2nd/3rd connect immediately after
+                // previous close (server/listen backlog or client TIME_WAIT often then accepts 3rd connect).
+                constexpr unsigned int kMarkDoneDelayBetweenBatchesMs = 400;
+                std::this_thread::sleep_for(std::chrono::milliseconds(kMarkDoneDelayBetweenBatchesMs));
 
                 // Critical: if markDone is not delivered, process exits (no silent loss of progress).
                 constexpr int maxRetries = 2;

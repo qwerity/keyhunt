@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <thread>
 #include <utility>
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -56,8 +57,9 @@ struct HttpClient::Impl
     }
 
     // Timeouts to prevent infinite hang when server is slow/unreachable (log stops without errors)
-    static constexpr int kConnectTimeoutSec = 45;   // connect() can hang indefinitely; 45s for slow/far networks
+    static constexpr int kConnectTimeoutSec = 60;   // single attempt; retry once on timeout
     static constexpr int kReadWriteTimeoutSec = 45;
+    static constexpr int kConnectRetryDelaySec = 3;
 
     void setSocketTimeouts(beast::tcp_stream& stream)
     {
@@ -185,9 +187,25 @@ struct HttpClient::Impl
                 return responseCode;
             }
 
-            // New stream per request to avoid "second connect" hang when reusing same socket
-            tcpStream = std::make_unique<beast::tcp_stream>(ioc);
-            connectToServer(*tcpStream);
+            for (int connectAttempt = 0; connectAttempt < 2; ++connectAttempt)
+            {
+                tcpStream = std::make_unique<beast::tcp_stream>(ioc);
+                try
+                {
+                    connectToServer(*tcpStream);
+                    break;
+                }
+                catch (const beast::system_error& e)
+                {
+                    if (e.code() == beast::error::timeout && connectAttempt < 1)
+                    {
+                        BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout, retrying in " << kConnectRetryDelaySec << "s...";
+                        std::this_thread::sleep_for(std::chrono::seconds(kConnectRetryDelaySec));
+                    }
+                    else
+                        throw;
+                }
+            }
 
             http::request<http::string_body> request{http::verb::get, target, http11Version};
             request.set(http::field::host, config.host);
@@ -277,8 +295,25 @@ struct HttpClient::Impl
                 return responseCode;
             }
 
-            tcpStream = std::make_unique<beast::tcp_stream>(ioc);
-            connectToServer(*tcpStream);
+            for (int connectAttempt = 0; connectAttempt < 2; ++connectAttempt)
+            {
+                tcpStream = std::make_unique<beast::tcp_stream>(ioc);
+                try
+                {
+                    connectToServer(*tcpStream);
+                    break;
+                }
+                catch (const beast::system_error& e)
+                {
+                    if (e.code() == beast::error::timeout && connectAttempt < 1)
+                    {
+                        BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout, retrying in " << kConnectRetryDelaySec << "s...";
+                        std::this_thread::sleep_for(std::chrono::seconds(kConnectRetryDelaySec));
+                    }
+                    else
+                        throw;
+                }
+            }
 
             http::request<http::string_body> req{http::verb::post, target, http11Version};
             req.set(http::field::host, config.host);
