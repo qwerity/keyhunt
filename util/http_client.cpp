@@ -11,11 +11,14 @@
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/ssl.hpp>
+#include <boost/asio/connect.hpp>
 #include <boost/beast/http.hpp>
 
-#include <utility>
+#include <atomic>
 #include <chrono>
+#include <utility>
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <winsock2.h>
@@ -52,6 +55,7 @@ struct HttpClient::Impl
     }
 
     // Timeouts to prevent infinite hang when server is slow/unreachable (log stops without errors)
+    static constexpr int kConnectTimeoutSec = 25;   // connect() can hang indefinitely without this; restart "fixes" until it happens again
     static constexpr int kReadWriteTimeoutSec = 45;
 
     void setSocketTimeouts()
@@ -80,38 +84,85 @@ struct HttpClient::Impl
     void connectToServer()
     {
         beast::error_code ec;
-        
-        // Try to parse as IP address first (more efficient for IP addresses)
         ec.clear();
         net::ip::address_v4 ipv4 = net::ip::address_v4::from_string(config.host.c_str(), ec);
         if (!ec)
         {
-            // Direct connection using IP address
-            try
-            {
-                uint16_t portNum = static_cast<uint16_t>(std::stoul(config.port));
-                tcp::endpoint endpoint(ipv4, portNum);
-                ec.clear();
-                tcpStream.socket().connect(endpoint, ec);
-                if (ec)
-                {
-                    throw beast::system_error{ec};
-                }
-                setSocketTimeouts();
-            }
-            catch (const std::exception& e)
-            {
-                BOOST_LOG_TRIVIAL(error) << "Failed to connect to IP " << config.host << ":" << config.port << " - " << e.what();
-                throw;
-            }
+            // Direct connection using IP address with connect timeout
+            uint16_t portNum = static_cast<uint16_t>(std::stoul(config.port));
+            tcp::endpoint endpoint(ipv4, portNum);
+            connectWithTimeout(endpoint);
         }
         else
         {
-            // Use resolver for hostname
+            // Hostname: resolve then connect with timeout
             tcp::resolver resolver(ioc);
             auto const results = resolver.resolve(tcp::v4(), config.host, config.port);
-            tcpStream.connect(results);
-            setSocketTimeouts();
+            connectWithTimeout(results);
+        }
+        setSocketTimeouts();
+    }
+
+    void connectWithTimeout(const tcp::endpoint& endpoint)
+    {
+        ioc.restart();
+        beast::error_code connectEc;
+        std::atomic<bool> done{false};
+        bool timedOut = false;
+
+        net::steady_timer timer(ioc);
+        timer.expires_after(std::chrono::seconds(kConnectTimeoutSec));
+        timer.async_wait([&](beast::error_code e) {
+            if (!e) { timedOut = true; tcpStream.socket().cancel(connectEc); }
+            done = true;
+        });
+        tcpStream.socket().async_connect(endpoint, [&](beast::error_code e) { connectEc = e; done = true; });
+
+        while (!done)
+            ioc.run_one();
+        timer.cancel();
+
+        if (timedOut)
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout (" << kConnectTimeoutSec << "s) to " << config.host << ":" << config.port;
+            throw beast::system_error{beast::error::timeout};
+        }
+        if (connectEc)
+        {
+            BOOST_LOG_TRIVIAL(error) << "Failed to connect to " << config.host << ":" << config.port << " - " << connectEc.message();
+            throw beast::system_error{connectEc};
+        }
+    }
+
+    void connectWithTimeout(const tcp::resolver::results_type& results)
+    {
+        ioc.restart();
+        beast::error_code connectEc;
+        std::atomic<bool> done{false};
+        bool timedOut = false;
+
+        net::steady_timer timer(ioc);
+        timer.expires_after(std::chrono::seconds(kConnectTimeoutSec));
+        timer.async_wait([&](beast::error_code e) {
+            if (!e) { timedOut = true; tcpStream.socket().cancel(connectEc); }
+            done = true;
+        });
+        net::async_connect(tcpStream.socket(), results.begin(), results.end(),
+            [&](beast::error_code e, tcp::resolver::results_type::iterator) { connectEc = e; done = true; });
+
+        while (!done)
+            ioc.run_one();
+        timer.cancel();
+
+        if (timedOut)
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout (" << kConnectTimeoutSec << "s) to " << config.host << ":" << config.port;
+            throw beast::system_error{beast::error::timeout};
+        }
+        if (connectEc)
+        {
+            BOOST_LOG_TRIVIAL(error) << "Failed to connect to " << config.host << ":" << config.port << " - " << connectEc.message();
+            throw beast::system_error{connectEc};
         }
     }
 
