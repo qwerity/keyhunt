@@ -15,6 +15,14 @@
 #include <boost/beast/http.hpp>
 
 #include <utility>
+#include <chrono>
+
+#if defined(_WIN32) || defined(_WIN64)
+#include <winsock2.h>
+#else
+#include <sys/socket.h>
+#include <sys/types.h>
+#endif
 
 using tcp = net::ip::tcp;
 namespace ssl = net::ssl;
@@ -43,6 +51,32 @@ struct HttpClient::Impl
         return std::format("{}:{} | {}", config.host, config.port, maskedToken);
     }
 
+    // Timeouts to prevent infinite hang when server is slow/unreachable (log stops without errors)
+    static constexpr int kReadWriteTimeoutSec = 45;
+
+    void setSocketTimeouts()
+    {
+        beast::error_code ec;
+#if defined(_WIN32) || defined(_WIN64)
+        DWORD timeoutMs = static_cast<DWORD>(kReadWriteTimeoutSec) * 1000;
+        const auto* opt = reinterpret_cast<const char*>(&timeoutMs);
+        if (setsockopt(tcpStream.socket().native_handle(), SOL_SOCKET, SO_RCVTIMEO, opt, sizeof(timeoutMs)) != 0 ||
+            setsockopt(tcpStream.socket().native_handle(), SOL_SOCKET, SO_SNDTIMEO, opt, sizeof(timeoutMs)) != 0)
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Http client: failed to set socket timeout (" << kReadWriteTimeoutSec << "s), requests may hang";
+        }
+#else
+        struct timeval tv;
+        tv.tv_sec = kReadWriteTimeoutSec;
+        tv.tv_usec = 0;
+        if (setsockopt(tcpStream.socket().native_handle(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0 ||
+            setsockopt(tcpStream.socket().native_handle(), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0)
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Http client: failed to set socket timeout (" << kReadWriteTimeoutSec << "s), requests may hang";
+        }
+#endif
+    }
+
     void connectToServer()
     {
         beast::error_code ec;
@@ -63,6 +97,7 @@ struct HttpClient::Impl
                 {
                     throw beast::system_error{ec};
                 }
+                setSocketTimeouts();
             }
             catch (const std::exception& e)
             {
@@ -76,6 +111,7 @@ struct HttpClient::Impl
             tcp::resolver resolver(ioc);
             auto const results = resolver.resolve(tcp::v4(), config.host, config.port);
             tcpStream.connect(results);
+            setSocketTimeouts();
         }
     }
 

@@ -215,14 +215,23 @@ struct XPartManager::Impl
         }
     }
 
+    // Max wait for next X part (avoids infinite hang if server/HTTP is stuck and log just stops)
+    static constexpr unsigned int kGetNextXPartTimeoutSec = 90;
+
     uint32_t getNextXPart()
     {
         std::unique_lock<std::mutex> lock(queueMutex);
-        
-        // Wait for X part to be available
-        queueCondition.wait(lock, [this]() {
+
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kGetNextXPartTimeoutSec);
+        const bool hasItem = queueCondition.wait_until(lock, deadline, [this]() {
             return !xPartQueue.empty() || stopFlag;
         });
+
+        if (!hasItem && xPartQueue.empty())
+        {
+            BOOST_LOG_TRIVIAL(warning) << std::format("XPartManager: no X part within {}s (server slow or unreachable?), using random X part", kGetNextXPartTimeoutSec);
+            return utils::randomUINT32_t();
+        }
 
         if (stopFlag && xPartQueue.empty())
         {
