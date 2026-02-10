@@ -78,14 +78,14 @@ struct ResultsProcessor::Impl
                         if (!gContext->httpClient->setXPartFound(result.privateXPart, result.privateYPart))
                         {
                             BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: setFound delivery failed for ({}, {}). Exiting.", result.privateXPart, result.privateYPart);
-                            std::exit(1);
+                            std::quick_exit(1);
                         }
                         online = true;
                     }
                     catch (const std::exception& e)
                     {
                         BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: setFound delivery failed ({}). Exiting.", e.what());
-                        std::exit(1);
+                        std::quick_exit(1);
                     }
                     utils::backupToTGAsync(resultsStr);
                 }

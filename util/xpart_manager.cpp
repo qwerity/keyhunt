@@ -209,7 +209,7 @@ struct XPartManager::Impl
                     {
                         // Exit immediately: connection/timeout exception = delivery not sent
                         BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: markDone delivery failed ({}). Exiting.", e.what());
-                        std::exit(1);
+                        std::quick_exit(1);  // avoid destructors/CUDA teardown that can cause "cudaErrorInvalidDevice"
                     }
                     if (attempt < maxRetries - 1 && !stopFlag)
                     {
@@ -224,7 +224,7 @@ struct XPartManager::Impl
                 if (!success && !stopFlag)
                 {
                     BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: markDone delivery failed for {} num(s) after {} retries. Exiting.", batch.size(), maxRetries);
-                    std::exit(1);
+                    std::quick_exit(1);
                 }
                 if (stopFlag && !batch.empty())
                 {

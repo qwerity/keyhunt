@@ -55,7 +55,7 @@ struct HttpClient::Impl
     }
 
     // Timeouts to prevent infinite hang when server is slow/unreachable (log stops without errors)
-    static constexpr int kConnectTimeoutSec = 25;   // connect() can hang indefinitely without this; restart "fixes" until it happens again
+    static constexpr int kConnectTimeoutSec = 45;   // connect() can hang indefinitely; 45s for slow/far networks
     static constexpr int kReadWriteTimeoutSec = 45;
 
     void setSocketTimeouts()
@@ -105,6 +105,7 @@ struct HttpClient::Impl
 
     void connectWithTimeout(const tcp::endpoint& endpoint)
     {
+        BOOST_LOG_TRIVIAL(info) << "Http client: connecting to " << config.host << ":" << config.port << " (" << kConnectTimeoutSec << "s timeout)...";
         ioc.restart();
         beast::error_code connectEc;
         std::atomic<bool> done{false};
@@ -134,10 +135,12 @@ struct HttpClient::Impl
             BOOST_LOG_TRIVIAL(error) << "Failed to connect to " << config.host << ":" << config.port << " - " << connectEc.message();
             throw beast::system_error{connectEc};
         }
+        BOOST_LOG_TRIVIAL(info) << "Http client: connected to " << config.host << ":" << config.port;
     }
 
     void connectWithTimeout(const tcp::resolver::results_type& results)
     {
+        BOOST_LOG_TRIVIAL(info) << "Http client: connecting to " << config.host << ":" << config.port << " (" << kConnectTimeoutSec << "s timeout)...";
         ioc.restart();
         beast::error_code connectEc;
         std::atomic<bool> done{false};
@@ -168,6 +171,7 @@ struct HttpClient::Impl
             BOOST_LOG_TRIVIAL(error) << "Failed to connect to " << config.host << ":" << config.port << " - " << connectEc.message();
             throw beast::system_error{connectEc};
         }
+        BOOST_LOG_TRIVIAL(info) << "Http client: connected to " << config.host << ":" << config.port;
     }
 
     http::status get(const std::string& target, http::response<http::dynamic_body>& response)
