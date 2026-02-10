@@ -1,5 +1,6 @@
 #include "key_hunter.h"
 
+#include <chrono>
 #include <thread>
 #include <format>
 
@@ -129,12 +130,19 @@ struct KeyHunter::Impl
             results[i].privateXPart = privateXPart;
             results[i].privateYPart = (iteration * keysNumberPerIteration) + results[i].idx;
 
+            constexpr unsigned int kResultsQueueFullLogIntervalSec = 15;
+            auto lastQueueFullLog = std::chrono::steady_clock::now();
             while (!gContext->hash160SearchResultsQueue->push(results[i]))
             {
                 if (stopFlag)
                     return;
 
-                // If the queue is full, yield to avoid busy-wait
+                const auto now = std::chrono::steady_clock::now();
+                if (std::chrono::duration_cast<std::chrono::seconds>(now - lastQueueFullLog).count() >= kResultsQueueFullLogIntervalSec)
+                {
+                    BOOST_LOG_TRIVIAL(warning) << std::format("[{}] results queue full, waiting... (consumer slow?)", cudaInfo.id);
+                    lastQueueFullLog = now;
+                }
                 std::this_thread::yield();
             }
         }

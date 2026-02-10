@@ -217,17 +217,30 @@ struct XPartManager::Impl
 
     // Max wait for next X part (avoids infinite hang if server/HTTP is stuck and log just stops)
     static constexpr unsigned int kGetNextXPartTimeoutSec = 90;
+ек    static constexpr unsigned int kWaitChunkSec = 30;  // log every Ns so user sees process is alive
 
     uint32_t getNextXPart()
     {
         std::unique_lock<std::mutex> lock(queueMutex);
 
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kGetNextXPartTimeoutSec);
-        const bool hasItem = queueCondition.wait_until(lock, deadline, [this]() {
-            return !xPartQueue.empty() || stopFlag;
-        });
+        unsigned int waitedSec = 0;
+        while (waitedSec < kGetNextXPartTimeoutSec)
+        {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWaitChunkSec);
+            const bool hasItem = queueCondition.wait_until(lock, deadline, [this]() {
+                return !xPartQueue.empty() || stopFlag;
+            });
+            if (hasItem && !xPartQueue.empty())
+                break;
+            if (stopFlag && xPartQueue.empty())
+                break;
+            waitedSec += kWaitChunkSec;
+            if (waitedSec < kGetNextXPartTimeoutSec && xPartQueue.empty())
+                BOOST_LOG_TRIVIAL(info) << std::format("XPartManager: waiting for X part... ({}s/{}s)", waitedSec, kGetNextXPartTimeoutSec);
+        }
 
-        if (!hasItem && xPartQueue.empty())
+        const bool timedOut = (waitedSec >= kGetNextXPartTimeoutSec && xPartQueue.empty());
+        if (timedOut)
         {
             BOOST_LOG_TRIVIAL(warning) << std::format("XPartManager: no X part within {}s (server slow or unreachable?), using random X part", kGetNextXPartTimeoutSec);
             return utils::randomUINT32_t();
