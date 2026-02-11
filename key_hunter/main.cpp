@@ -121,7 +121,7 @@ int main()
     if (useXPartManager)
     {
         BOOST_LOG_TRIVIAL(info) << std::format("Initializing XPartManager for async X part distribution (multi-GPU optimized, queue size: {})", gpuDevicesCount);
-        auto fetcherClient = std::make_shared<HttpClient>(context->config.server(), 5, 5);  // strict 5s timeout for get_number
+        auto fetcherClient = std::make_shared<HttpClient>(context->config.server(), 10, 10);  // strict 10s timeout for get_number
         context->xPartManager = std::make_shared<XPartManager>(fetcherClient, context->httpClient, context->config.dataGenerationIsRandom(), static_cast<size_t>(gpuDevicesCount));
     }
     else

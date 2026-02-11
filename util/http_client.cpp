@@ -285,15 +285,17 @@ struct HttpClient::Impl
                     e.code().category() == boost::asio::error::get_ssl_category())
                 {
                     BOOST_LOG_TRIVIAL(warning) << "Http client connection error: " << e.what() << " (code: " << e.code() << ")";
-                    // Try to read partial response if available
-                    if (response.result() != http::status::unknown)
+                    // On explicit read timeout we never had a full response – don't use partial response.result() (e.g. 200) or caller will parse empty body
+                    if (e.code() == beast::error::timeout)
+                    {
+                        responseCode = http::status::request_timeout;
+                    }
+                    else if (response.result() != http::status::unknown)
                     {
                         responseCode = response.result();
                     }
                     else
                     {
-                        // If request was sent but response truncated, mark as timeout
-                        // The caller can decide if this is acceptable (request was sent)
                         responseCode = http::status::request_timeout;
                     }
                 }
@@ -396,17 +398,18 @@ struct HttpClient::Impl
                 {
                     BOOST_LOG_TRIVIAL(warning) << "Http client connection error after request sent: " << e.what() << " (code: " << e.code() << ")";
                     BOOST_LOG_TRIVIAL(warning) << "Request was sent successfully, server likely processed it despite connection error";
-                    
-                    // Try to read partial response if available
-                    if (response.result() != http::status::unknown)
+                    // On explicit read timeout we never got a full response – don't use partial response.result()
+                    if (e.code() == beast::error::timeout)
+                    {
+                        responseCode = http::status::request_timeout;
+                    }
+                    else if (response.result() != http::status::unknown)
                     {
                         responseCode = response.result();
                     }
                     else
                     {
-                        // Request was sent, but response truncated - mark as accepted
-                        // Caller should treat this as success since request reached server
-                        responseCode = http::status::accepted; // 202 Accepted - request received but response incomplete
+                        responseCode = http::status::accepted;
                     }
                 }
                 else
