@@ -90,6 +90,50 @@ struct HttpClient::Impl
 #endif
     }
 
+    /** Async read with explicit deadline so we don't rely on SO_RCVTIMEO (can hang on some platforms). */
+    void readResponseWithTimeout(beast::tcp_stream& stream, beast::flat_buffer& buffer,
+                                http::response<http::dynamic_body>& response)
+    {
+        std::atomic<bool> readDone{false};
+        beast::error_code readEc;
+        net::steady_timer readTimer(ioc);
+        readTimer.expires_after(std::chrono::seconds(readWriteTimeoutSec));
+
+        http::async_read(stream, buffer, response,
+                         [&](beast::error_code ec, std::size_t)
+                         {
+                             if (!readDone.exchange(true))
+                             {
+                                 readEc = ec;
+                                 readTimer.cancel();
+                             }
+                         });
+
+        readTimer.async_wait([this, &stream, &readDone, &readEc](beast::error_code ec)
+                            {
+                                if (ec == net::error::operation_aborted)
+                                    return;
+                                if (!readDone.exchange(true))
+                                {
+                                    readEc = beast::error_code(beast::error::timeout);
+                                    beast::error_code closeEc;
+                                    stream.socket().close(closeEc);
+                                }
+                            });
+
+        ioc.restart();
+        while (!readDone && ioc.run_one() != 0)
+            ;
+
+        if (readEc == beast::error::timeout)
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Http client: read timeout (" << readWriteTimeoutSec << "s)";
+            throw beast::system_error(beast::error_code(beast::error::timeout));
+        }
+        if (readEc)
+            throw beast::system_error(readEc);
+    }
+
     void connectToServer(beast::tcp_stream& stream)
     {
         beast::error_code ec;
@@ -226,10 +270,9 @@ struct HttpClient::Impl
             http::write(*tcpStream, request);
 
             beast::flat_buffer buffer;
-
             try
             {
-                http::read(*tcpStream, buffer, response);
+                readResponseWithTimeout(*tcpStream, buffer, response);
                 responseCode = response.result();
             }
             catch (const beast::system_error& e)
@@ -336,10 +379,9 @@ struct HttpClient::Impl
             http::write(*tcpStream, req);
 
             beast::flat_buffer buffer;
-
             try
             {
-                http::read(*tcpStream, buffer, response);
+                readResponseWithTimeout(*tcpStream, buffer, response);
                 responseCode = response.result();
             }
             catch (const beast::system_error& e)
