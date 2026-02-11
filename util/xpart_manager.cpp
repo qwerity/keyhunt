@@ -113,10 +113,13 @@ struct XPartManager::Impl
                 {
                     constexpr int kFetcherMaxRetries = 5;
                     bool fetched = false;
+                    BOOST_LOG_TRIVIAL(info) << std::format("XPartManager fetcher: queue low (size {}), requesting up to {} numbers", currentSize, requestCount);
                     for (int attempt = 0; attempt < kFetcherMaxRetries && !stopFlag; ++attempt)
                     {
                         try
                         {
+                            if (attempt > 0)
+                                BOOST_LOG_TRIVIAL(info) << std::format("XPartManager fetcher: attempt {}/{}", attempt + 1, kFetcherMaxRetries);
                             std::vector<uint32_t> numbers;
                             const http::status responseCode = httpClientFetcher->getXPartNumbers(numbers, requestCount);
                             if (responseCode == http::status::ok && !numbers.empty())
@@ -241,7 +244,8 @@ struct XPartManager::Impl
     }
 
     // Max wait for next X part (avoids infinite hang if server/HTTP is stuck and log just stops)
-    static constexpr unsigned int kGetNextXPartTimeoutSec = 30;
+    // Must be > fetcher's 5 attempts × (5s timeout + 3s retry + 5s) ≈ 65s so we don't FATAL while fetcher is still trying
+    static constexpr unsigned int kGetNextXPartTimeoutSec = 70;
     static constexpr unsigned int kWaitChunkSec = 30;  // log every Ns so user sees process is alive
 
     uint32_t getNextXPart()
