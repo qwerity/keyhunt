@@ -39,7 +39,19 @@ struct HttpClient::Impl
     std::unique_ptr<beast::tcp_stream> tcpStream;  // new stream per request to avoid "second connect" hang
     std::mutex connectionMutex;
 
-    explicit Impl(ServerConfig config) : config(std::move(config)), ioc(), tcpStream(std::make_unique<beast::tcp_stream>(ioc)) {}
+    int connectTimeoutSec;
+    int readWriteTimeoutSec;
+    static constexpr int kConnectRetryDelaySec = 3;
+    static constexpr int kDefaultConnectSec = 60;
+    static constexpr int kDefaultReadWriteSec = 45;
+
+    explicit Impl(ServerConfig config, int connectSec = -1, int readWriteSec = -1)
+        : config(std::move(config))
+        , ioc()
+        , tcpStream(std::make_unique<beast::tcp_stream>(ioc))
+        , connectTimeoutSec(connectSec >= 0 ? connectSec : kDefaultConnectSec)
+        , readWriteTimeoutSec(readWriteSec >= 0 ? readWriteSec : kDefaultReadWriteSec)
+    {}
 
     Impl(const Impl& other) = delete;
     Impl(const Impl&& other) = delete;
@@ -56,29 +68,24 @@ struct HttpClient::Impl
         return std::format("{}:{} | {}", config.host, config.port, maskedToken);
     }
 
-    // Timeouts to prevent infinite hang when server is slow/unreachable (log stops without errors)
-    static constexpr int kConnectTimeoutSec = 60;   // single attempt; retry once on timeout
-    static constexpr int kReadWriteTimeoutSec = 45;
-    static constexpr int kConnectRetryDelaySec = 3;
-
     void setSocketTimeouts(beast::tcp_stream& stream)
     {
 #if defined(_WIN32) || defined(_WIN64)
-        DWORD timeoutMs = static_cast<DWORD>(kReadWriteTimeoutSec) * 1000;
+        DWORD timeoutMs = static_cast<DWORD>(readWriteTimeoutSec) * 1000;
         const auto* opt = reinterpret_cast<const char*>(&timeoutMs);
         if (setsockopt(stream.socket().native_handle(), SOL_SOCKET, SO_RCVTIMEO, opt, sizeof(timeoutMs)) != 0 ||
             setsockopt(stream.socket().native_handle(), SOL_SOCKET, SO_SNDTIMEO, opt, sizeof(timeoutMs)) != 0)
         {
-            BOOST_LOG_TRIVIAL(warning) << "Http client: failed to set socket timeout (" << kReadWriteTimeoutSec << "s), requests may hang";
+            BOOST_LOG_TRIVIAL(warning) << "Http client: failed to set socket timeout (" << readWriteTimeoutSec << "s), requests may hang";
         }
 #else
         struct timeval tv;
-        tv.tv_sec = kReadWriteTimeoutSec;
+        tv.tv_sec = readWriteTimeoutSec;
         tv.tv_usec = 0;
         if (setsockopt(stream.socket().native_handle(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0 ||
             setsockopt(stream.socket().native_handle(), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0)
         {
-            BOOST_LOG_TRIVIAL(warning) << "Http client: failed to set socket timeout (" << kReadWriteTimeoutSec << "s), requests may hang";
+            BOOST_LOG_TRIVIAL(warning) << "Http client: failed to set socket timeout (" << readWriteTimeoutSec << "s), requests may hang";
         }
 #endif
     }
@@ -105,14 +112,14 @@ struct HttpClient::Impl
 
     void connectWithTimeout(beast::tcp_stream& stream, const tcp::endpoint& endpoint)
     {
-        BOOST_LOG_TRIVIAL(info) << "Http client: connecting to " << config.host << ":" << config.port << " (" << kConnectTimeoutSec << "s timeout)...";
+        BOOST_LOG_TRIVIAL(info) << "Http client: connecting to " << config.host << ":" << config.port << " (" << connectTimeoutSec << "s timeout)...";
         ioc.restart();
         beast::error_code connectEc;
         std::atomic<bool> done{false};
         bool timedOut = false;
 
         net::steady_timer timer(ioc);
-        timer.expires_after(std::chrono::seconds(kConnectTimeoutSec));
+        timer.expires_after(std::chrono::seconds(connectTimeoutSec));
         timer.async_wait([&](beast::error_code e) {
             if (!e) { timedOut = true; stream.socket().cancel(connectEc); }
             done = true;
@@ -127,7 +134,7 @@ struct HttpClient::Impl
             connectEc.value() == static_cast<int>(boost::system::errc::operation_canceled);
         if (canceledOrTimeout)
         {
-            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout or canceled (" << kConnectTimeoutSec << "s) to " << config.host << ":" << config.port;
+            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout or canceled (" << connectTimeoutSec << "s) to " << config.host << ":" << config.port;
             throw beast::system_error{beast::error_code{beast::error::timeout}};
         }
         if (connectEc)
@@ -140,14 +147,14 @@ struct HttpClient::Impl
 
     void connectWithTimeout(beast::tcp_stream& stream, const tcp::resolver::results_type& results)
     {
-        BOOST_LOG_TRIVIAL(info) << "Http client: connecting to " << config.host << ":" << config.port << " (" << kConnectTimeoutSec << "s timeout)...";
+        BOOST_LOG_TRIVIAL(info) << "Http client: connecting to " << config.host << ":" << config.port << " (" << connectTimeoutSec << "s timeout)...";
         ioc.restart();
         beast::error_code connectEc;
         std::atomic<bool> done{false};
         bool timedOut = false;
 
         net::steady_timer timer(ioc);
-        timer.expires_after(std::chrono::seconds(kConnectTimeoutSec));
+        timer.expires_after(std::chrono::seconds(connectTimeoutSec));
         timer.async_wait([&](beast::error_code e) {
             if (!e) { timedOut = true; stream.socket().cancel(connectEc); }
             done = true;
@@ -163,7 +170,7 @@ struct HttpClient::Impl
             connectEc.value() == static_cast<int>(boost::system::errc::operation_canceled);
         if (canceledOrTimeout)
         {
-            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout or canceled (" << kConnectTimeoutSec << "s) to " << config.host << ":" << config.port;
+            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout or canceled (" << connectTimeoutSec << "s) to " << config.host << ":" << config.port;
             throw beast::system_error{beast::error_code{beast::error::timeout}};
         }
         if (connectEc)
@@ -608,7 +615,7 @@ struct HttpClient::Impl
     }
 };
 
-HttpClient::HttpClient(const ServerConfig& config) : mImpl(std::make_unique<Impl>(config)) {}
+HttpClient::HttpClient(const ServerConfig& config, int connectTimeoutSec, int readWriteTimeoutSec) : mImpl(std::make_unique<Impl>(config, connectTimeoutSec, readWriteTimeoutSec)) {}
 HttpClient::~HttpClient() = default;
 
 std::string HttpClient::hostConfig() const

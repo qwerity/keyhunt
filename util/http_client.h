@@ -15,7 +15,8 @@ constexpr uint32_t http11Version{11}; // HTTP1.1 version
 class HttpClient
 {
 public:
-    explicit HttpClient(const ServerConfig& config);
+    /** connectTimeoutSec and readWriteTimeoutSec: use defaults 60/45 if negative. */
+    explicit HttpClient(const ServerConfig& config, int connectTimeoutSec = -1, int readWriteTimeoutSec = -1);
     ~HttpClient();
 
     HttpClient(const HttpClient& other) = delete;

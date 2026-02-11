@@ -111,49 +111,43 @@ struct XPartManager::Impl
                 }
                 else
                 {
-                    try
+                    constexpr int kFetcherMaxRetries = 5;
+                    bool fetched = false;
+                    for (int attempt = 0; attempt < kFetcherMaxRetries && !stopFlag; ++attempt)
                     {
-                        std::vector<uint32_t> numbers;
-                        const http::status responseCode = httpClientFetcher->getXPartNumbers(numbers, requestCount);
-                        if (responseCode == http::status::ok && !numbers.empty())
+                        try
                         {
-                            std::lock_guard<std::mutex> lock(queueMutex);
-                            for (uint32_t n : numbers)
-                            {
-                                xPartQueue.push(n);
-                            }
-                            queueCondition.notify_all();
-                        }
-                        else
-                        {
-                            if (responseCode != http::status::ok)
-                            {
-                                BOOST_LOG_TRIVIAL(warning) << std::format("XPartManager fetcher: getXPartNumbers failed (code: {}), falling back to single request", static_cast<int>(responseCode));
-                            }
-                            uint32_t single = 0;
-                            if (httpClientFetcher->getXPartNumber(single) == http::status::ok)
+                            std::vector<uint32_t> numbers;
+                            const http::status responseCode = httpClientFetcher->getXPartNumbers(numbers, requestCount);
+                            if (responseCode == http::status::ok && !numbers.empty())
                             {
                                 std::lock_guard<std::mutex> lock(queueMutex);
-                                xPartQueue.push(single);
-                                queueCondition.notify_one();
+                                for (uint32_t n : numbers)
+                                {
+                                    xPartQueue.push(n);
+                                }
+                                queueCondition.notify_all();
+                                fetched = true;
+                                break;
+                            }
+                        }
+                        catch (const std::exception& e)
+                        {
+                            if (attempt < kFetcherMaxRetries - 1)
+                            {
+                                BOOST_LOG_TRIVIAL(warning) << std::format("XPartManager fetcher: get_number failed ({}), retry {}/{}", e.what(), attempt + 1, kFetcherMaxRetries);
                             }
                             else
                             {
-                                BOOST_LOG_TRIVIAL(warning) << "XPartManager fetcher: getXPartNumber failed, pushing random X part(s)";
-                                std::lock_guard<std::mutex> lock(queueMutex);
-                                for (uint32_t i = 0; i < requestCount; ++i)
-                                    xPartQueue.push(utils::randomUINT32_t());
-                                queueCondition.notify_all();
+                                BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: XPartManager fetcher: get_number failed after {} attempts ({}). Exiting.", kFetcherMaxRetries, e.what());
+                                std::quick_exit(1);
                             }
                         }
                     }
-                    catch (const std::exception& e)
+                    if (!fetched && !stopFlag)
                     {
-                        BOOST_LOG_TRIVIAL(warning) << std::format("XPartManager fetcher: get_number request failed ({}), pushing random X part(s)", e.what());
-                        std::lock_guard<std::mutex> lock(queueMutex);
-                        for (uint32_t i = 0; i < requestCount; ++i)
-                            xPartQueue.push(utils::randomUINT32_t());
-                        queueCondition.notify_all();
+                        BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: XPartManager fetcher: get_number failed after {} attempts (no numbers from server). Exiting.", kFetcherMaxRetries);
+                        std::quick_exit(1);
                     }
                 }
             }
