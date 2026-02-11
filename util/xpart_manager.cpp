@@ -25,7 +25,8 @@ constexpr unsigned int kRefillThresholdPercent = 50;  // refill при currentSi
 
 struct XPartManager::Impl
 {
-    std::shared_ptr<HttpClient> httpClient;
+    std::shared_ptr<HttpClient> httpClientFetcher;   // get_number only – not blocked by mark_done
+    std::shared_ptr<HttpClient> httpClientMarkDone;  // mark_done only
     bool randomMode;
     std::atomic<bool> stopFlag{false};
 
@@ -43,8 +44,9 @@ struct XPartManager::Impl
     size_t gpuCount;
     size_t markDoneMinBatchSize;  // min queue size before sending mark_done batch, scales with GPU count
 
-    explicit Impl(std::shared_ptr<HttpClient> client, bool random, size_t gpuCount_)
-        : httpClient(std::move(client))
+    explicit Impl(std::shared_ptr<HttpClient> clientFetcher, std::shared_ptr<HttpClient> clientMarkDone, bool random, size_t gpuCount_)
+        : httpClientFetcher(std::move(clientFetcher))
+        , httpClientMarkDone(std::move(clientMarkDone))
         , randomMode(random)
         , targetQueueSize(std::max<size_t>(4u, kBufferMinutesXKeysPerGpu * std::max<size_t>(gpuCount_, 1)))
         , gpuCount(std::max<size_t>(1, gpuCount_))
@@ -112,7 +114,7 @@ struct XPartManager::Impl
                     try
                     {
                         std::vector<uint32_t> numbers;
-                        const http::status responseCode = httpClient->getXPartNumbers(numbers, requestCount);
+                        const http::status responseCode = httpClientFetcher->getXPartNumbers(numbers, requestCount);
                         if (responseCode == http::status::ok && !numbers.empty())
                         {
                             std::lock_guard<std::mutex> lock(queueMutex);
@@ -129,7 +131,7 @@ struct XPartManager::Impl
                                 BOOST_LOG_TRIVIAL(warning) << std::format("XPartManager fetcher: getXPartNumbers failed (code: {}), falling back to single request", static_cast<int>(responseCode));
                             }
                             uint32_t single = 0;
-                            if (httpClient->getXPartNumber(single) == http::status::ok)
+                            if (httpClientFetcher->getXPartNumber(single) == http::status::ok)
                             {
                                 std::lock_guard<std::mutex> lock(queueMutex);
                                 xPartQueue.push(single);
@@ -201,7 +203,7 @@ struct XPartManager::Impl
                 {
                     try
                     {
-                        success = httpClient->markXPartDone(batch);
+                        success = httpClientMarkDone->markXPartDone(batch);
                         if (success)
                         {
 #ifdef KEYHUNT_DEBUG_LOGS
@@ -302,8 +304,8 @@ struct XPartManager::Impl
     }
 };
 
-XPartManager::XPartManager(std::shared_ptr<HttpClient> httpClient, bool randomMode, size_t gpuCount)
-    : mImpl(std::make_unique<Impl>(std::move(httpClient), randomMode, gpuCount))
+XPartManager::XPartManager(std::shared_ptr<HttpClient> httpClientFetcher, std::shared_ptr<HttpClient> httpClientMarkDone, bool randomMode, size_t gpuCount)
+    : mImpl(std::make_unique<Impl>(std::move(httpClientFetcher), std::move(httpClientMarkDone), randomMode, gpuCount))
 {
 }
 
