@@ -247,7 +247,7 @@ struct XPartManager::Impl
     }
 
     // Max wait for next X part (avoids infinite hang if server/HTTP is stuck and log just stops)
-    static constexpr unsigned int kGetNextXPartTimeoutSec = 90;
+    static constexpr unsigned int kGetNextXPartTimeoutSec = 30;
     static constexpr unsigned int kWaitChunkSec = 30;  // log every Ns so user sees process is alive
 
     uint32_t getNextXPart()
@@ -273,8 +273,8 @@ struct XPartManager::Impl
         const bool timedOut = (waitedSec >= kGetNextXPartTimeoutSec && xPartQueue.empty());
         if (timedOut)
         {
-            BOOST_LOG_TRIVIAL(warning) << std::format("XPartManager: no X part within {}s (queue empty – check XPartManager fetcher / Http client logs above for connect or timeout errors), using random X part", kGetNextXPartTimeoutSec);
-            return utils::randomUINT32_t();
+            BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: no X part within {}s (queue empty – fetcher not delivering). Exiting.", kGetNextXPartTimeoutSec);
+            std::quick_exit(1);
         }
 
         if (stopFlag && xPartQueue.empty())
@@ -286,9 +286,8 @@ struct XPartManager::Impl
 
         if (xPartQueue.empty())
         {
-            lock.unlock();
-            BOOST_LOG_TRIVIAL(warning) << "XPartManager queue unexpectedly empty, falling back to random";
-            return utils::randomUINT32_t();
+            BOOST_LOG_TRIVIAL(fatal) << "FATAL: XPartManager queue unexpectedly empty. Exiting.";
+            std::quick_exit(1);
         }
 
         uint32_t xPart = xPartQueue.front();
