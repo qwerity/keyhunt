@@ -124,6 +124,10 @@ struct HttpClient::Impl
         ioc.restart();
         while (!readDone && ioc.run_one() != 0)
             ;
+        // Drain any remaining handler (e.g. async_read completion after we closed the stream on timeout)
+        // so the next request does not run this handler with invalid stack references
+        while (ioc.run_one() != 0)
+            ;
 
         if (readEc == beast::error::timeout)
         {
