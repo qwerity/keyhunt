@@ -85,3 +85,10 @@ set_target_properties(ecc_cuda PROPERTIES
 target_link_libraries(ecc_cuda PRIVATE CUDA::cudart_static)
 
 ####################################################################################################################################################################################
+# C API for Rust (or other host) — C++ wrapper around ecc_cuda
+add_library(keyhunt_cuda_capi STATIC keyhunt_capi.cpp keyhunt_capi.h)
+target_include_directories(keyhunt_cuda_capi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(keyhunt_cuda_capi PUBLIC ${CMAKE_SOURCE_DIR})
+target_link_libraries(keyhunt_cuda_capi PUBLIC ecc_cuda)
+
+####################################################################################################################################################################################

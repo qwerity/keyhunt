@@ -27,7 +27,6 @@ struct XPartManager::Impl
 {
     std::shared_ptr<HttpClient> httpClientFetcher;   // get_number only – not blocked by mark_done
     std::shared_ptr<HttpClient> httpClientMarkDone;  // mark_done only
-    bool randomMode;
     std::atomic<bool> stopFlag{false};
 
     std::queue<uint32_t> xPartQueue;
@@ -44,10 +43,9 @@ struct XPartManager::Impl
     size_t gpuCount;
     size_t markDoneMinBatchSize;  // min queue size before sending mark_done batch, scales with GPU count
 
-    explicit Impl(std::shared_ptr<HttpClient> clientFetcher, std::shared_ptr<HttpClient> clientMarkDone, bool random, size_t gpuCount_)
+    explicit Impl(std::shared_ptr<HttpClient> clientFetcher, std::shared_ptr<HttpClient> clientMarkDone, size_t gpuCount_)
         : httpClientFetcher(std::move(clientFetcher))
         , httpClientMarkDone(std::move(clientMarkDone))
-        , randomMode(random)
         , targetQueueSize(std::max<size_t>(4u, kBufferMinutesXKeysPerGpu * std::max<size_t>(gpuCount_, 1)))
         , gpuCount(std::max<size_t>(1, gpuCount_))
         , markDoneMinBatchSize(std::max(kMarkDoneMinBatchSize, gpuCount))
@@ -100,18 +98,7 @@ struct XPartManager::Impl
                 const size_t needCount = targetQueueSize - currentSize;
                 const uint32_t requestCount = static_cast<uint32_t>(std::min(needCount, static_cast<size_t>(kGetNumberMaxCount)));
 
-                if (randomMode)
-                {
-                    std::lock_guard<std::mutex> lock(queueMutex);
-                    for (uint32_t i = 0; i < requestCount; ++i)
-                    {
-                        xPartQueue.push(utils::randomUINT32_t());
-                    }
-                    queueCondition.notify_all();
-                }
-                else
-                {
-                    constexpr int kFetcherMaxRetries = 5;
+                constexpr int kFetcherMaxRetries = 5;
                     bool fetched = false;
                     BOOST_LOG_TRIVIAL(info) << std::format("XPartManager fetcher: queue low (size {}), requesting up to {} numbers", currentSize, requestCount);
                     for (int attempt = 0; attempt < kFetcherMaxRetries && !stopFlag; ++attempt)
@@ -152,7 +139,6 @@ struct XPartManager::Impl
                         BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: XPartManager fetcher: get_number failed after {} attempts (no numbers from server). Exiting.", kFetcherMaxRetries);
                         std::quick_exit(1);
                     }
-                }
             }
             else
             {
@@ -277,9 +263,8 @@ struct XPartManager::Impl
 
         if (stopFlag && xPartQueue.empty())
         {
-            lock.unlock();
-            BOOST_LOG_TRIVIAL(warning) << "XPartManager stopped, falling back to random X part";
-            return utils::randomUINT32_t();
+            BOOST_LOG_TRIVIAL(fatal) << "FATAL: XPartManager stopped and queue empty. Exiting.";
+            std::quick_exit(5);
         }
 
         if (xPartQueue.empty())
@@ -301,8 +286,8 @@ struct XPartManager::Impl
     }
 };
 
-XPartManager::XPartManager(std::shared_ptr<HttpClient> httpClientFetcher, std::shared_ptr<HttpClient> httpClientMarkDone, bool randomMode, size_t gpuCount)
-    : mImpl(std::make_unique<Impl>(std::move(httpClientFetcher), std::move(httpClientMarkDone), randomMode, gpuCount))
+XPartManager::XPartManager(std::shared_ptr<HttpClient> httpClientFetcher, std::shared_ptr<HttpClient> httpClientMarkDone, size_t gpuCount)
+    : mImpl(std::make_unique<Impl>(std::move(httpClientFetcher), std::move(httpClientMarkDone), gpuCount))
 {
 }
 

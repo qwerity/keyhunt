@@ -1,104 +1,107 @@
 # cuda-keyhunt-pvk
 
-## CMake options
-| Option | Default | Description |
-|--------|---------|--------------|
-| `BUILD_TESTS` | OFF | Build test executables. |
-| `KEYHUNT_DEBUG_LOGS` | OFF | Enable verbose debug logging (Found, mark_done, trace, XPartManager). |
+Поиск ключей по hash160 на GPU (CUDA). Хост на **Rust** (рекомендуется) или C++; ядро — общее, вызывается через C API.
 
-Example with debug logs:
+---
+
+## Сборка
+
+### Rust
+
+**Нужно:** Rust (cargo). Для GPU — CUDA Toolkit и предварительная сборка CUDA-библиотек (см. ниже).
+
+**Без GPU** (только проверить, что хост собирается):
+
 ```bash
-cmake -B build -DKEYHUNT_DEBUG_LOGS=ON
-cmake --build build --target cuda-keyhunt-pvk
+cd rust && cargo build
 ```
 
-## How to compile for all GPU support
-- `cmake -G "Visual Studio 16 2019" -A x64 -DCMAKE_CUDA_ARCHITECTURES="all" -S . -B build`
-- `cmake --build .\build\ --config=Release -j 14 --target cuda-keyhunt-pvk`
+Бинарник: `rust/target/debug/keyhunt-pvk`. Запуск закончится сообщением об отсутствии CUDA-устройств.
 
-## How to compile for concrete GPUs support
-- `cmake -G "Visual Studio 16 2019" -A x64 -DCMAKE_CUDA_ARCHITECTURES=86 -S . -B build`
-- `cmake --build .\build\ --config=Release -j 14 --target gpu_info`
-- Run GPU info to get the existing GPUs capability
-  - `.\bin\gpu_info.exe`
-  - Output example:
+**С GPU:**
+
+1. Собрать CUDA-библиотеки из корня проекта (один раз):
+
+   **Linux / WSL:**
+
+   ```bash
+   cmake -B build -DCMAKE_CUDA_ARCHITECTURES=86
+   cmake --build build --target keyhunt_cuda_capi
+   ```
+
+   **Windows:**
+   ```bash
+   cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_CUDA_ARCHITECTURES=86 -S . -B build
+   cmake --build build --config=Release --target keyhunt_cuda_capi
+   ```
+
+2. Собрать Rust, указав папку с библиотеками:
+
+   **Linux / WSL:**
+   ```bash
+   KEYHUNT_CUDA_LIB_DIR=$PWD/build/cuda cargo build --manifest-path rust/Cargo.toml --features cuda
+   ```
+
+   **Windows (из корня проекта):**
+   ```bash
+   set KEYHUNT_CUDA_LIB_DIR=%CD%\build\cuda\Release
+   cargo build --manifest-path rust/Cargo.toml --features cuda
+   ```
+
+3. Бинарник: `rust/target/debug/keyhunt-pvk` (или `release` при `cargo build --release`).
+
+---
+
+### C++ (legacy)
+
+**Нужно:** CMake, CUDA Toolkit, C++20, Boost (log, iostreams, regex), OpenSSL (есть в репозитории), на Linux — TBB.
+
+**Linux / WSL:**
+
+```bash
+cmake -B build -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build --config=Release -j $(nproc) --target cuda-keyhunt-pvk
 ```
-ID:     0
-Name:   NVIDIA GeForce RTX 3080 Ti
-Minor: 8, Major: 6
-Capability: 86
-warpSize: 32
-Memory: 12287
-multiProcessorCount: 80
-maxThreadsPerMultiProcessor: 1536
-globalL1CacheSupported: 1
-localL1CacheSupported: 1
-l2CacheSize: 6291456
-persistingL2CacheMaxSize: 4325376
 
-ID:     1
-Name:   NVIDIA GeForce RTX 2060 SUPER
-Minor: 7, Major: 5
-Capability: 75
-warpSize: 32
-Memory: 8191
-multiProcessorCount: 34
-maxThreadsPerMultiProcessor: 1024
-globalL1CacheSupported: 1
-localL1CacheSupported: 1
-l2CacheSize: 4194304
-persistingL2CacheMaxSize: 0
+**Windows:**
+
+```bash
+cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_CUDA_ARCHITECTURES=86 -S . -B build
+cmake --build build --config=Release -j 14 --target cuda-keyhunt-pvk
 ```
-  - So now we have Capability for each of device, and ready compile `cuda-keyhunt-pvk` for concrete devices
-    - `cmake -G "Visual Studio 16 2019" -A x64 -DCMAKE_CUDA_ARCHITECTURES="75;86" -S . -B build`
-    - `cmake --build .\build\ --config=Release -j 14 --target cuda-keyhunt-pvk`
 
-## Build
-There is needed to install following packages to be able to compile
+Бинарник: `bin/cuda-keyhunt-pvk` (или `bin/release/`). Рядом положите `config.json`.
 
-### Ubuntu 24.04
-- nvidia-cuda-toolkit (12.0.1)
-- libtbb-dev
-- libboost-dev-all
+---
 
-### Windows x64
-- Visual Studio 2019/2022 Community 
-- [NVidia Cuda Toolkit 12.6.1](https://developer.download.nvidia.com/compute/cuda/12.6.1/local_installers/cuda_12.6.1_560.94_windows.exe)
-- Boost 1.86
-  - [Download archive](https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.7z)
-  - Unpack to `C:/boost/boost-1.86.0/` -> BOOST_ROOT
-  - Open Powershell in **BOOST_ROOT**
-    - `./bootstrap.bat`
-    - If there is existing previous builds please remove `bin.v2` and `stage` directories
-    - `./b2 -j14 toolset=msvc-14.2,msvc-14.3 cxxflags="/std:c++20" threading=multi address-model=64 link=static runtime-link=static variant=debug,release --with-headers --with-system --with-log --with-iostreams --with-regex stage`
-- Openssl 3.4.0 // no need to do this, already added to the project
-  - Open VS 2019 development prompt 
-  - `perl Configure VC-WIN64A -march=native enable-asm no-shared no-docs no-tests --prefix=C:\Users\ksh\workspace\openssl-3.4.0\build --openssldir=C:\Users\ksh\workspace\openssl-3.4.0\build`
-  - `set CL=/MP && nmake install` // for multi-thread compilation
+## Архитектура GPU
 
-## Build Linux / WSL
-- From project root:
-  - `cmake -B build -DCMAKE_CUDA_ARCHITECTURES=all`  (or one arch, e.g. `86`, **`120` для RTX 5090 (sm_120)**)
-  - `cmake --build build --config=Release -j $(nproc) --target cuda-keyhunt-pvk`
-- Binary: `bin/cuda-keyhunt-pvk` (or `bin/release/` if configured). Copy `config.json` next to the binary.
+`CMAKE_CUDA_ARCHITECTURES`: `86` (RTX 30xx), `75` (RTX 20xx), `120` (RTX 5090), или `all` для всех. Несколько через точку с запятой: `75;86`.
 
-## Build Win x64
-- Open Terminal in project directory
-- `cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_CUDA_ARCHITECTURES=86 -S . -B build`  
-  (опции: `-DKEYHUNT_DEBUG_LOGS=ON`, `-DBUILD_TESTS=ON` при необходимости)
-- `cmake --build .\build\ --config=Release -j 14 --target cuda-keyhunt-pvk`
-- If all good you can find the binary in `{project directory}/bin` folder
-- Copy the config.json to bin folder
+Узнать capability своей карты: собрать таргет `gpu_info`, запустить — в выводе будет `Capability: XX`.
 
+---
 
-## Convert Hex string Hash160 target file to binary
-- Build `convert_hash160_to_binary` target
-- `convert_hash160_to_binary hex_str_hash160_targetx.txt`
-- This will generate `hex_str_hash160_targetx.txt.bin` binary file
-- Replace in config file the targets list with binary files
+## Зависимости (C++ и CUDA)
 
+- **Ubuntu:** `nvidia-cuda-toolkit`, `libtbb-dev`, `libboost-dev-all`
+- **Windows:** Visual Studio 2019/2022, [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads), Boost (headers + system, log, iostreams, regex). OpenSSL уже в проекте.
 
-## use vast ai 
-- create instance with custom template
+---
 
-- wget https://storage.googleapis.com/bbdatav2/startup.sh && chmod +x ./startup.sh && ./startup.sh
+## Конфиг и запуск
+
+Рядом с бинарником должен лежать `config.json`. Пример: `example.config.json`. Ключи: `hash160_targets` (список файлов с целями), `server` (url, port, authorisationHeader), `pointsPerThread`, `blockSize`, `gridSize`, `forcePrivateXPart`, `specificXValues` и др.
+
+---
+
+## Дополнительно
+
+**Опции CMake:** `BUILD_TESTS=ON`, `KEYHUNT_DEBUG_LOGS=ON` (подробный лог).
+
+**Конвертация hex → binary для целей:** собрать `convert_hash160_to_binary`, вызвать с путём к .txt — получите .bin для `hash160_targets`.
+
+**Vast.ai:** инстанс с нужным шаблоном, затем:
+```bash
+wget https://storage.googleapis.com/bbdatav2/startup.sh && chmod +x ./startup.sh && ./startup.sh
+```

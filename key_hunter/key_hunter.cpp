@@ -195,26 +195,18 @@ struct KeyHunter::Impl
             return gContext->xPartManager->getNextXPart();
         }
 
-        // Fallback to old synchronous method
+        // Synchronous method: from server or fixed from config
+        if (gContext->config.hunter().forcePrivateXPart)
+        {
+            return gContext->config.hunter().privateXPart;
+        }
         uint32_t privateXPart{0};
-        if (gContext->config.dataGenerationIsRandom())
+        const http::status responseCode = gContext->httpClient->getXPartNumber(privateXPart);
+        if (responseCode != http::status::ok)
         {
-            privateXPart = utils::randomUINT32_t();
+            BOOST_LOG_TRIVIAL(fatal) << std::format("FATAL: getXPartNumber failed (status {}). Exiting.", static_cast<int>(responseCode));
+            std::quick_exit(4);
         }
-        else if (!gContext->config.hunter().forcePrivateXPart)
-        {
-            http::status responseCode{http::status::unknown};
-            responseCode = gContext->httpClient->getXPartNumber(privateXPart);
-            if (responseCode != http::status::ok)
-            {
-                privateXPart = utils::randomUINT32_t();
-            }
-        }
-        else
-        {
-            privateXPart = gContext->config.hunter().privateXPart;
-        }
-
         return privateXPart;
     }
 

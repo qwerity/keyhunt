@@ -77,13 +77,10 @@ void setupPrivateXPart(const std::shared_ptr<GlobalContext>& context)
 
     if (!hostIsAlive)
     {
-        BOOST_LOG_TRIVIAL(info) << "Host is NOT alive, continue with random private X part";
-        context->config.setRandomGeneration(true);
+        BOOST_LOG_TRIVIAL(error) << "Host is NOT alive, cannot get X parts. Exiting.";
+        std::quick_exit(3);
     }
-    else
-    {
-        BOOST_LOG_TRIVIAL(info) << "Host is alive, will get private x from http service";
-    }
+    BOOST_LOG_TRIVIAL(info) << "Host is alive, will get private x from http service";
 }
 
 int main()
@@ -114,15 +111,14 @@ int main()
 
     // Initialize XPartManager for async non-blocking X part distribution (improves multi-GPU performance)
     // Only use it if not in forcePrivateXPart mode, not using specificXValues, and HTTP is available
-    const bool useXPartManager = !context->config.hunter().forcePrivateXPart && 
+    const bool useXPartManager = !context->config.hunter().forcePrivateXPart &&
                                   context->config.hunter().specificXValues.empty() &&
-                                  !context->config.dataGenerationIsRandom() &&
                                   context->httpClient->hostAlive();
     if (useXPartManager)
     {
         BOOST_LOG_TRIVIAL(info) << std::format("Initializing XPartManager for async X part distribution (multi-GPU optimized, queue size: {})", gpuDevicesCount);
         auto fetcherClient = std::make_shared<HttpClient>(context->config.server(), 10, 10);  // strict 10s timeout for get_number
-        context->xPartManager = std::make_shared<XPartManager>(fetcherClient, context->httpClient, context->config.dataGenerationIsRandom(), static_cast<size_t>(gpuDevicesCount));
+        context->xPartManager = std::make_shared<XPartManager>(fetcherClient, context->httpClient, static_cast<size_t>(gpuDevicesCount));
     }
     else
     {

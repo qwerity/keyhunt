@@ -14,7 +14,7 @@ class XPartManager
 public:
     /** httpClientFetcher: used for get_number (fetcher thread). httpClientMarkDone: used for mark_done.
      *  Separate clients so fetcher is not blocked by markDone holding the connection mutex. */
-    explicit XPartManager(std::shared_ptr<HttpClient> httpClientFetcher, std::shared_ptr<HttpClient> httpClientMarkDone, bool randomMode, size_t gpuCount = 1);
+    explicit XPartManager(std::shared_ptr<HttpClient> httpClientFetcher, std::shared_ptr<HttpClient> httpClientMarkDone, size_t gpuCount = 1);
     ~XPartManager();
 
     XPartManager(const XPartManager&) = delete;
