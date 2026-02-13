@@ -52,6 +52,40 @@ cd rust && cargo build
 
 ---
 
+### Утилиты (Rust)
+
+В том же крейте собраны бинарники:
+
+| Бинарник | Назначение |
+|----------|------------|
+| `decrypt_results` | Расшифровка `results.enc` (тот же формат/ключ, что при записи keyhunt). |
+| `convert_hash160_to_binary` | Конвертация hex-файла (40 hex на hash) в .bin (20 байт на hash) для `hash160_targets`. |
+| `gpu_info` | Вывод списка CUDA-устройств (нужна фича `gpu-info`, в runtime — CUDA-драйвер). |
+
+**Сборка утилит** (из корня проекта):
+
+```bash
+./scripts/build_tools.sh
+```
+
+Или вручную:
+
+```bash
+cd rust
+cargo build --release --bin decrypt_results --bin convert_hash160_to_binary
+cargo build --release --bin gpu_info --features gpu-info
+```
+
+Примеры:
+
+```bash
+./rust/target/release/decrypt_results [results.enc]
+./rust/target/release/convert_hash160_to_binary hashes.txt hashes.bin
+./rust/target/release/gpu_info
+```
+
+---
+
 ### C++ (legacy)
 
 **Нужно:** CMake, CUDA Toolkit, C++20, Boost (log, iostreams, regex), OpenSSL (есть в репозитории), на Linux — TBB.
@@ -74,11 +108,13 @@ cmake --build build --config=Release -j 14 --target cuda-keyhunt-pvk
 
 ---
 
-## Архитектура GPU
+## Архитектура GPU и переиспользование ядра
 
 `CMAKE_CUDA_ARCHITECTURES`: `86` (RTX 30xx), `75` (RTX 20xx), `120` (RTX 5090), или `all` для всех. Несколько через точку с запятой: `75;86`.
 
-Узнать capability своей карты: собрать таргет `gpu_info`, запустить — в выводе будет `Capability: XX`.
+Узнать capability своей карты: собрать и запустить `gpu_info` (Rust) или таргет `gpu_info` (C++).
+
+**Ядро CUDA** вынесено в C API (`cuda/keyhunt_capi.h` + `keyhunt_capi.cpp`), линкуется с `ecc_cuda`. Сейчас используется клюхантом (hash160, X-part, итерации). В будущем тот же/расширенный слой можно переиспользовать под другие проекты (mnemonic-hunter, другие сценарии) без дублирования ECC/hash160 — достаточно добавлять новые C API-функции или отдельные бинарники, вызывающие общее ядро. Подробнее: `docs/ARCHITECTURE.md`.
 
 ---
 
@@ -99,7 +135,7 @@ cmake --build build --config=Release -j 14 --target cuda-keyhunt-pvk
 
 **Опции CMake:** `BUILD_TESTS=ON`, `KEYHUNT_DEBUG_LOGS=ON` (подробный лог).
 
-**Конвертация hex → binary для целей:** собрать `convert_hash160_to_binary`, вызвать с путём к .txt — получите .bin для `hash160_targets`.
+**Конвертация hex → binary для целей:** утилита `convert_hash160_to_binary` (см. «Утилиты (Rust)»).
 
 **Vast.ai:** инстанс с нужным шаблоном, затем:
 ```bash

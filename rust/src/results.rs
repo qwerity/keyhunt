@@ -3,8 +3,9 @@
 use crate::config::Config;
 use crate::http_client::HttpClient;
 use crossbeam_channel::Receiver;
+use std::fs::File;
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::Duration;
@@ -82,6 +83,43 @@ fn write_encrypted(path: &str, line: &str) -> bool {
     if file.write_all(ct).is_err() { return false; }
     if file.flush().is_err() { return false; }
     true
+}
+
+/// Read and decrypt all records from a results.enc file (same format/key as write).
+pub fn read_encrypted_results(path: &str) -> Result<Vec<String>, crate::Error> {
+    let key = hex::decode(AES_KEY_HEX).map_err(|e| crate::Error::Config(e.to_string()))?;
+    let key: [u8; 32] = key.try_into().map_err(|_| crate::Error::Config("AES key must be 32 bytes".into()))?;
+    let iv = hex::decode(AES_IV_HEX).map_err(|e| crate::Error::Config(e.to_string()))?;
+    let iv: [u8; 12] = iv.try_into().map_err(|_| crate::Error::Config("AES IV must be 12 bytes".into()))?;
+    use aes_gcm::{
+        aead::{Aead, KeyInit},
+        Aes256Gcm,
+    };
+    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| crate::Error::Config("Aes256Gcm init".into()))?;
+    let nonce = aes_gcm::Nonce::from(iv);
+    let mut f = File::open(path).map_err(crate::Error::Io)?;
+    const TAG_SIZE: usize = 16;
+    let mut out = Vec::new();
+    loop {
+        let mut len_buf = [0u8; 4];
+        if f.read_exact(&mut len_buf).is_err() {
+            break;
+        }
+        let length = u32::from_le_bytes(len_buf) as usize;
+        if length < TAG_SIZE {
+            return Err(crate::Error::Config("invalid record length in results.enc".into()));
+        }
+        let mut tag = [0u8; TAG_SIZE];
+        f.read_exact(&mut tag).map_err(crate::Error::Io)?;
+        let mut ct = vec![0u8; length - TAG_SIZE];
+        f.read_exact(&mut ct).map_err(crate::Error::Io)?;
+        let mut full = ct;
+        full.extend_from_slice(&tag);
+        let plain = cipher.decrypt(&nonce, full.as_ref()).map_err(|e| crate::Error::Config(format!("decrypt: {}", e)))?;
+        let s = String::from_utf8(plain).map_err(|e| crate::Error::Config(format!("utf8: {}", e)))?;
+        out.push(s);
+    }
+    Ok(out)
 }
 
 fn append_plain(path: &str, line: &str) -> bool {

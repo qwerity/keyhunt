@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
 
 /// 20-byte hash as 5 x u32 (matches CUDA hash160).
@@ -41,6 +41,15 @@ impl Hash160 {
     /// Words for C API (host byte order; C API passes to CUDA which may swap internally).
     pub fn to_words(&self) -> [u32; 5] {
         self.0
+    }
+
+    /// 20 bytes little-endian (for writing .bin files).
+    pub fn to_bytes_le(&self) -> [u8; 20] {
+        let mut out = [0u8; 20];
+        for (i, &w) in self.0.iter().enumerate() {
+            out[i * 4..][..4].copy_from_slice(&w.to_le_bytes());
+        }
+        out
     }
 }
 
@@ -83,6 +92,15 @@ pub fn read_hash160_hex(path: &Path) -> Result<HashSet<Hash160>, crate::Error> {
         }
     }
     Ok(set)
+}
+
+/// Write hashes to binary file: 20 bytes per hash (LE).
+pub fn write_hash160_binary(path: &Path, hashes: &HashSet<Hash160>) -> Result<(), crate::Error> {
+    let mut f = File::create(path).map_err(crate::Error::Io)?;
+    for h in hashes {
+        f.write_all(&h.to_bytes_le()).map_err(crate::Error::Io)?;
+    }
+    Ok(())
 }
 
 /// Load all targets from list of paths. .bin = binary, else hex.

@@ -33,10 +33,29 @@ num-format = "0.4"
 thiserror = "2.0"
 anyhow = "1.0"
 
+# CUDA runtime (only for gpu_info binary)
+# One of cuda-version-from-build-system or cuda-11* / cuda-12* must be enabled when using gpu-info
+cudarc = { version = "0.13", optional = true, features = ["cuda-11080"] }
+
 [build-dependencies]
 cc = "1.0"
 
+[[bin]]
+name = "decrypt_results"
+path = "src/bin/decrypt_results.rs"
+
+[[bin]]
+name = "convert_hash160_to_binary"
+path = "src/bin/convert_hash160_to_binary.rs"
+
+[[bin]]
+name = "gpu_info"
+path = "src/bin/gpu_info.rs"
+required-features = ["gpu-info"]
+
 [features]
 default = []
-# Build with CUDA lib (set KEYHUNT_CUDA_LIB or build cuda first)
+# Build with keyhunt CUDA lib (set KEYHUNT_CUDA_LIB_DIR, build cuda first)
 cuda = []
+# For gpu_info binary: CUDA runtime only (cudarc). Pick a cuda-* feature if needed.
+gpu-info = ["cudarc", "cudarc/cuda-version-from-build-system"]
