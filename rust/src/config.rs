@@ -16,12 +16,29 @@ pub struct LogConfig {
     pub severity: u32,
 }
 
+fn deserialize_port<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Port {
+        Num(u16),
+        Str(String),
+    }
+    match Port::deserialize(deserializer)? {
+        Port::Num(n) => Ok(n.to_string()),
+        Port::Str(s) => Ok(s),
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerConfig {
     #[serde(default)]
     pub url: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_port")]
     pub port: String,
     #[serde(default)]
     pub authorisation_header: String,
