@@ -3,7 +3,8 @@
 
 build/
 out/
-bin/
+# только корневая bin/ (C++ бинарники), rust/src/bin/ — исходники утилит, трекаем
+/bin/
 cmake-build-*/
 
 /CMakeSettings.json
