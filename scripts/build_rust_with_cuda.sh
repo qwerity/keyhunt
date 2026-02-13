@@ -19,6 +19,7 @@ cmake --build build --target util -j "$(nproc 2>/dev/null || echo 4)"
 
 echo "=== 2/2 Rust (cuda, release) ==="
 export KEYHUNT_CUDA_LIB_DIR="$PWD/build/cuda"
+export KEYHUNT_PROJECT_ROOT="$PWD"
 # Чтобы линкер нашёл libcudart_static.a, задаём CUDA_PATH по nvcc (если ещё не задан)
 if [ -z "${CUDA_PATH:-}" ] && [ -z "${CUDA_HOME:-}" ]; then
   NVCC=$(which nvcc 2>/dev/null)
@@ -28,7 +29,7 @@ if [ -z "${CUDA_PATH:-}" ] && [ -z "${CUDA_HOME:-}" ]; then
     [ -n "$CUDA_PATH" ] && echo "CUDA_PATH=$CUDA_PATH"
   fi
 fi
-# Явно передать -L в линкер, чтобы линкер нашёл libcudart_static.a (cuda-13.x в targets/x86_64-linux/lib)
+# -L для cudart_static
 for _d in \
   "$CUDA_PATH/targets/x86_64-linux/lib" "$CUDA_PATH/lib64" "$CUDA_PATH/lib" \
   "$CUDA_HOME/targets/x86_64-linux/lib" "$CUDA_HOME/lib64" "$CUDA_HOME/lib" \
@@ -36,6 +37,9 @@ for _d in \
   /usr/local/cuda-13.1/targets/x86_64-linux/lib /opt/cuda/lib64; do
   [ -n "$_d" ] && [ -f "${_d}/libcudart_static.a" ] && export RUSTFLAGS="${RUSTFLAGS:-} -L $_d" && echo "RUSTFLAGS -L $_d" && break
 done
+# -L для wallycore и secp256k1 (util)
+[ -d "$PWD/external/wallycore/lib" ] && export RUSTFLAGS="${RUSTFLAGS:-} -L $PWD/external/wallycore/lib"
+[ -d /usr/lib/x86_64-linux-gnu ] && export RUSTFLAGS="${RUSTFLAGS:-} -L /usr/lib/x86_64-linux-gnu"
 if ! cargo build --release --manifest-path rust/Cargo.toml --features cuda --bin keyhunt-pvk 2>&1 | tee /tmp/keyhunt_rust_build.log; then
   echo "--- последние 40 строк (ошибка линковки) ---"
   tail -40 /tmp/keyhunt_rust_build.log

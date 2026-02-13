@@ -103,10 +103,32 @@ fn main() {
 
         #[cfg(target_os = "linux")]
         {
+            // Пути к wallycore и secp256k1 (CMake: external/wallycore/lib; secp256k1 — система или external)
+            let project_root = std::env::var("KEYHUNT_PROJECT_ROOT").unwrap_or_else(|_| {
+                std::path::Path::new(&lib_dir)
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "..".into())
+            });
+            let wally_lib = std::path::Path::new(&project_root).join("external/wallycore/lib");
+            if wally_lib.exists() {
+                println!("cargo:rustc-link-search=native={}", wally_lib.display());
+            }
+            // secp256k1 часто в системе (libsecp256k1-dev) или в build
+            for secp_path in [
+                format!("{}/external/secp256k1/.libs", project_root),
+                format!("{}/build/_deps/secp256k1-build", project_root),
+                "/usr/lib/x86_64-linux-gnu".to_string(),
+            ] {
+                if std::path::Path::new(&secp_path).exists() {
+                    println!("cargo:rustc-link-search=native={}", secp_path);
+                    break;
+                }
+            }
             println!("cargo:rustc-link-lib=stdc++");
             println!("cargo:rustc-link-lib=pthread");
             println!("cargo:rustc-link-lib=dl");
-            // Зависимости util (Boost, OpenSSL, wallycore, secp256k1)
             println!("cargo:rustc-link-lib=boost_log");
             println!("cargo:rustc-link-lib=boost_log_setup");
             println!("cargo:rustc-link-lib=boost_iostreams");
