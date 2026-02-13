@@ -72,9 +72,17 @@ fn main() {
             }
         }
 
-        // Порядок: зависимости первыми (линкер подтягивает символы по мере обхода)
+        // Порядок: зависимости первыми. ecc_cuda — целиком (--whole-archive), иначе линкер не подтянет secp256k1::* из своих .o
         println!("cargo:rustc-link-lib=static=cudart_static");
+        #[cfg(target_os = "linux")]
+        {
+            println!("cargo:rustc-link-arg=-Wl,--whole-archive");
+        }
         println!("cargo:rustc-link-lib=static=ecc_cuda");
+        #[cfg(target_os = "linux")]
+        {
+            println!("cargo:rustc-link-arg=-Wl,--no-whole-archive");
+        }
         println!("cargo:rustc-link-lib=static=keyhunt_cuda_capi");
         #[cfg(target_os = "linux")]
         {
