@@ -37,31 +37,32 @@ fn main() {
             }
         }
 
-        // CUDA Toolkit: линкер ищет libcudart_static.a (Linux)
+        // CUDA Toolkit: находим libcudart_static.a и добавляем его каталог в link-search
         #[cfg(target_os = "linux")]
         {
-            let cuda_root = std::env::var("CUDA_PATH")
+            let candidates = std::env::var("CUDA_PATH")
                 .or_else(|_| std::env::var("CUDA_HOME"))
-                .or_else(|_| detect_cuda_from_nvcc());
-            if let Ok(root) = cuda_root {
+                .or_else(|_| detect_cuda_from_nvcc())
+                .into_iter()
+                .chain(["/usr/local/cuda".into(), "/opt/cuda".into()]);
+            let mut found = false;
+            for root in candidates {
                 for subdir in ["lib64", "lib64/stubs", "lib"] {
-                    let lib = std::path::Path::new(&root).join(subdir);
-                    if lib.exists() {
-                        println!("cargo:rustc-link-search=native={}", lib.display());
+                    let path = std::path::Path::new(&root).join(subdir).join("libcudart_static.a");
+                    if path.exists() {
+                        let dir = path.parent().unwrap();
+                        println!("cargo:rustc-link-search=native={}", dir.display());
+                        println!("cargo:warning=Using cudart_static from {}", dir.display());
+                        found = true;
+                        break;
                     }
                 }
-                if !std::path::Path::new(&root).join("lib64").exists()
-                    && !std::path::Path::new(&root).join("lib").exists()
-                {
-                    eprintln!("cargo:warning=CUDA root {} has no lib64/ or lib/", root);
+                if found {
+                    break;
                 }
-            } else {
-                // фиксированные пути без CUDA_PATH
-                for path in ["/usr/local/cuda/lib64", "/opt/cuda/lib64", "/usr/lib/x86_64-linux-gnu"] {
-                    if std::path::Path::new(path).exists() {
-                        println!("cargo:rustc-link-search=native={}", path);
-                    }
-                }
+            }
+            if !found {
+                eprintln!("cargo:warning=libcudart_static.a not found. Set CUDA_PATH to CUDA root (e.g. /usr/local/cuda).");
             }
         }
 
