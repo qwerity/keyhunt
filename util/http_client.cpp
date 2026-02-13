@@ -42,6 +42,7 @@ struct HttpClient::Impl
     int connectTimeoutSec;
     int readWriteTimeoutSec;
     static constexpr int kConnectRetryDelaySec = 3;
+    static constexpr int kMaxRequestAttempts = 3;  // retry full request (connect + read) up to 3 times
     static constexpr int kDefaultConnectSec = 60;
     static constexpr int kDefaultReadWriteSec = 45;
 
@@ -234,101 +235,123 @@ struct HttpClient::Impl
         std::lock_guard<std::mutex> lock(connectionMutex);
 
         http::status responseCode{http::status::not_found};
-        try
-        {
-            if (config.host.empty() || config.port.empty())
-            {
-                BOOST_LOG_TRIVIAL(error) << "Http client failed: host or port is empty. Host: '" << config.host << "', Port: '" << config.port << "'";
-                return responseCode;
-            }
 
-            for (int connectAttempt = 0; connectAttempt < 2; ++connectAttempt)
+        for (int requestAttempt = 0; requestAttempt < kMaxRequestAttempts; ++requestAttempt)
+        {
+            try
             {
-                tcpStream = std::make_unique<beast::tcp_stream>(ioc);
+                if (config.host.empty() || config.port.empty())
+                {
+                    BOOST_LOG_TRIVIAL(error) << "Http client failed: host or port is empty. Host: '" << config.host << "', Port: '" << config.port << "'";
+                    return responseCode;
+                }
+
+                if (requestAttempt > 0)
+                    BOOST_LOG_TRIVIAL(info) << "Http client GET attempt " << (requestAttempt + 1) << "/" << kMaxRequestAttempts;
+
+                for (int connectAttempt = 0; connectAttempt < 2; ++connectAttempt)
+                {
+                    tcpStream = std::make_unique<beast::tcp_stream>(ioc);
+                    try
+                    {
+                        connectToServer(*tcpStream);
+                        break;
+                    }
+                    catch (const beast::system_error& e)
+                    {
+                        if (e.code() == beast::error::timeout && connectAttempt < 1)
+                        {
+                            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout, retrying in " << kConnectRetryDelaySec << "s...";
+                            std::this_thread::sleep_for(std::chrono::seconds(kConnectRetryDelaySec));
+                        }
+                        else
+                            throw;
+                    }
+                }
+
+                http::request<http::string_body> request{http::verb::get, target, http11Version};
+                request.set(http::field::host, config.host);
+                request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+                request.set(http::field::authorization, config.authorisationHeader);
+                if (!config.machineId.empty())
+                {
+                    request.set("X-Machine-Id", config.machineId);
+                }
+
+                http::write(*tcpStream, request);
+
+                beast::flat_buffer buffer;
                 try
                 {
-                    connectToServer(*tcpStream);
-                    break;
+                    readResponseWithTimeout(*tcpStream, buffer, response);
+                    responseCode = response.result();
                 }
                 catch (const beast::system_error& e)
                 {
-                    if (e.code() == beast::error::timeout && connectAttempt < 1)
+                    // Handle stream truncated and other network errors
+                    if (e.code() == beast::error::timeout ||
+                        e.code() == boost::asio::error::eof ||
+                        e.code() == boost::asio::error::connection_reset ||
+                        e.code() == boost::asio::ssl::error::stream_truncated ||
+                        e.code().category() == boost::asio::error::get_ssl_category())
                     {
-                        BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout, retrying in " << kConnectRetryDelaySec << "s...";
-                        std::this_thread::sleep_for(std::chrono::seconds(kConnectRetryDelaySec));
+                        BOOST_LOG_TRIVIAL(warning) << "Http client connection error: " << e.what() << " (code: " << e.code() << ")";
+                        if (e.code() == beast::error::timeout)
+                        {
+                            responseCode = http::status::request_timeout;
+                        }
+                        else if (response.result() != http::status::unknown)
+                        {
+                            responseCode = response.result();
+                        }
+                        else
+                        {
+                            responseCode = http::status::request_timeout;
+                        }
                     }
                     else
+                    {
                         throw;
+                    }
                 }
-            }
 
-            http::request<http::string_body> request{http::verb::get, target, http11Version};
-            request.set(http::field::host, config.host);
-            request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-            request.set(http::field::authorization, config.authorisationHeader);
-            if (!config.machineId.empty())
-            {
-                request.set("X-Machine-Id", config.machineId);
-            }
-
-            http::write(*tcpStream, request);
-
-            beast::flat_buffer buffer;
-            try
-            {
-                readResponseWithTimeout(*tcpStream, buffer, response);
-                responseCode = response.result();
+                beast::error_code ec;
+                tcpStream->socket().shutdown(tcp::socket::shutdown_both, ec);
+                tcpStream->socket().close(ec);
+                return responseCode;
             }
             catch (const beast::system_error& e)
             {
-                // Handle stream truncated and other network errors
-                if (e.code() == beast::error::timeout || 
-                    e.code() == boost::asio::error::eof ||
-                    e.code() == boost::asio::error::connection_reset ||
-                    e.code() == boost::asio::ssl::error::stream_truncated ||
-                    e.code().category() == boost::asio::error::get_ssl_category())
+                if (requestAttempt < kMaxRequestAttempts - 1)
                 {
-                    BOOST_LOG_TRIVIAL(warning) << "Http client connection error: " << e.what() << " (code: " << e.code() << ")";
-                    // On explicit read timeout we never had a full response – don't use partial response.result() (e.g. 200) or caller will parse empty body
-                    if (e.code() == beast::error::timeout)
-                    {
-                        responseCode = http::status::request_timeout;
-                    }
-                    else if (response.result() != http::status::unknown)
-                    {
-                        responseCode = response.result();
-                    }
-                    else
-                    {
-                        responseCode = http::status::request_timeout;
-                    }
+                    BOOST_LOG_TRIVIAL(warning) << "Http client GET failed (" << (requestAttempt + 1) << "/" << kMaxRequestAttempts << "): " << e.code().message() << ", retrying in " << kConnectRetryDelaySec << "s...";
+                    std::this_thread::sleep_for(std::chrono::seconds(kConnectRetryDelaySec));
                 }
                 else
                 {
-                    throw; // Re-throw if it's not a connection error
+                    BOOST_LOG_TRIVIAL(error) << "Http client GET failed: " << e.code().message() << " (code: " << e.code() << ")";
+                    if (e.code().category() == boost::asio::error::get_ssl_category() ||
+                        e.code() == boost::asio::ssl::error::stream_truncated ||
+                        (e.what() && std::string(e.what()).find("stream truncated") != std::string::npos))
+                    {
+                        BOOST_LOG_TRIVIAL(error) << "SSL/Stream truncated – server closed or network timeout";
+                    }
+                    throw;
                 }
             }
-
-            beast::error_code ec;
-            tcpStream->socket().shutdown(tcp::socket::shutdown_both, ec);
-            tcpStream->socket().close(ec);
-        }
-        catch (const beast::system_error& e)
-        {
-            BOOST_LOG_TRIVIAL(error) << "Http client GET system error: " << e.what()
-                                     << " (code: " << e.code() << ", category: " << e.code().category().name() << ")";
-            if (e.code().category() == boost::asio::error::get_ssl_category() ||
-                e.code() == boost::asio::ssl::error::stream_truncated ||
-                (e.what() && std::string(e.what()).find("stream truncated") != std::string::npos))
+            catch (const std::exception& e)
             {
-                BOOST_LOG_TRIVIAL(error) << "SSL/Stream truncated – server closed or network timeout";
+                if (requestAttempt < kMaxRequestAttempts - 1)
+                {
+                    BOOST_LOG_TRIVIAL(warning) << "Http client GET failed (" << (requestAttempt + 1) << "/" << kMaxRequestAttempts << "): " << e.what() << ", retrying in " << kConnectRetryDelaySec << "s...";
+                    std::this_thread::sleep_for(std::chrono::seconds(kConnectRetryDelaySec));
+                }
+                else
+                {
+                    BOOST_LOG_TRIVIAL(error) << "Http client GET failed: " << e.what();
+                    throw;
+                }
             }
-            throw;  // rethrow so caller (e.g. XPartManager fetcher) can log and handle
-        }
-        catch (const std::exception& e)
-        {
-            BOOST_LOG_TRIVIAL(error) << "Http client GET failed: " << e.what();
-            throw;
         }
 
         return responseCode;
@@ -340,108 +363,127 @@ struct HttpClient::Impl
         std::lock_guard<std::mutex> lock(connectionMutex);
 
         http::status responseCode{http::status::not_found};
-        try
+
+        for (int requestAttempt = 0; requestAttempt < kMaxRequestAttempts; ++requestAttempt)
         {
-            const std::string& contentType = "application/json";
-
-            // Validate configuration
-            if (config.host.empty() || config.port.empty())
+            try
             {
-                BOOST_LOG_TRIVIAL(error) << "Http client failed: host or port is empty. Host: '" << config.host << "', Port: '" << config.port << "'";
-                return responseCode;
-            }
+                const std::string& contentType = "application/json";
 
-            for (int connectAttempt = 0; connectAttempt < 2; ++connectAttempt)
-            {
-                tcpStream = std::make_unique<beast::tcp_stream>(ioc);
+                if (config.host.empty() || config.port.empty())
+                {
+                    BOOST_LOG_TRIVIAL(error) << "Http client failed: host or port is empty. Host: '" << config.host << "', Port: '" << config.port << "'";
+                    return responseCode;
+                }
+
+                if (requestAttempt > 0)
+                    BOOST_LOG_TRIVIAL(info) << "Http client POST attempt " << (requestAttempt + 1) << "/" << kMaxRequestAttempts;
+
+                for (int connectAttempt = 0; connectAttempt < 2; ++connectAttempt)
+                {
+                    tcpStream = std::make_unique<beast::tcp_stream>(ioc);
+                    try
+                    {
+                        connectToServer(*tcpStream);
+                        break;
+                    }
+                    catch (const beast::system_error& e)
+                    {
+                        if (e.code() == beast::error::timeout && connectAttempt < 1)
+                        {
+                            BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout, retrying in " << kConnectRetryDelaySec << "s...";
+                            std::this_thread::sleep_for(std::chrono::seconds(kConnectRetryDelaySec));
+                        }
+                        else
+                            throw;
+                    }
+                }
+
+                http::request<http::string_body> req{http::verb::post, target, http11Version};
+                req.set(http::field::host, config.host);
+                req.set(http::field::content_type, contentType);
+                req.set("Authorization", config.authorisationHeader);
+                if (!config.machineId.empty())
+                {
+                    req.set("X-Machine-Id", config.machineId);
+                }
+                req.body() = body;
+                req.prepare_payload();
+
+                http::write(*tcpStream, req);
+
+                beast::flat_buffer buffer;
                 try
                 {
-                    connectToServer(*tcpStream);
-                    break;
+                    readResponseWithTimeout(*tcpStream, buffer, response);
+                    responseCode = response.result();
                 }
                 catch (const beast::system_error& e)
                 {
-                    if (e.code() == beast::error::timeout && connectAttempt < 1)
+                    if (e.code() == beast::error::timeout ||
+                        e.code() == boost::asio::error::eof ||
+                        e.code() == boost::asio::error::connection_reset ||
+                        e.code() == boost::asio::ssl::error::stream_truncated ||
+                        e.code().category() == boost::asio::error::get_ssl_category())
                     {
-                        BOOST_LOG_TRIVIAL(warning) << "Http client: connect timeout, retrying in " << kConnectRetryDelaySec << "s...";
-                        std::this_thread::sleep_for(std::chrono::seconds(kConnectRetryDelaySec));
+                        BOOST_LOG_TRIVIAL(warning) << "Http client connection error after request sent: " << e.what() << " (code: " << e.code() << ")";
+                        BOOST_LOG_TRIVIAL(warning) << "Request was sent successfully, server likely processed it despite connection error";
+                        if (e.code() == beast::error::timeout)
+                        {
+                            responseCode = http::status::request_timeout;
+                        }
+                        else if (response.result() != http::status::unknown)
+                        {
+                            responseCode = response.result();
+                        }
+                        else
+                        {
+                            responseCode = http::status::accepted;
+                        }
                     }
                     else
+                    {
                         throw;
+                    }
                 }
-            }
 
-            http::request<http::string_body> req{http::verb::post, target, http11Version};
-            req.set(http::field::host, config.host);
-            req.set(http::field::content_type, contentType);
-            req.set("Authorization", config.authorisationHeader);
-            if (!config.machineId.empty())
-            {
-                req.set("X-Machine-Id", config.machineId);
-            }
-            req.body() = body;
-            req.prepare_payload();
-
-            http::write(*tcpStream, req);
-
-            beast::flat_buffer buffer;
-            try
-            {
-                readResponseWithTimeout(*tcpStream, buffer, response);
-                responseCode = response.result();
+                beast::error_code ec;
+                tcpStream->socket().shutdown(tcp::socket::shutdown_both, ec);
+                tcpStream->socket().close(ec);
+                return responseCode;
             }
             catch (const beast::system_error& e)
             {
-                // Handle stream truncated and other network errors
-                // If request was sent successfully, server likely processed it
-                if (e.code() == beast::error::timeout || 
-                    e.code() == boost::asio::error::eof ||
-                    e.code() == boost::asio::error::connection_reset ||
-                    e.code() == boost::asio::ssl::error::stream_truncated ||
-                    e.code().category() == boost::asio::error::get_ssl_category())
+                if (requestAttempt < kMaxRequestAttempts - 1)
                 {
-                    BOOST_LOG_TRIVIAL(warning) << "Http client connection error after request sent: " << e.what() << " (code: " << e.code() << ")";
-                    BOOST_LOG_TRIVIAL(warning) << "Request was sent successfully, server likely processed it despite connection error";
-                    // On explicit read timeout we never got a full response – don't use partial response.result()
-                    if (e.code() == beast::error::timeout)
-                    {
-                        responseCode = http::status::request_timeout;
-                    }
-                    else if (response.result() != http::status::unknown)
-                    {
-                        responseCode = response.result();
-                    }
-                    else
-                    {
-                        responseCode = http::status::accepted;
-                    }
+                    BOOST_LOG_TRIVIAL(warning) << "Http client POST failed (" << (requestAttempt + 1) << "/" << kMaxRequestAttempts << "): " << e.code().message() << ", retrying in " << kConnectRetryDelaySec << "s...";
+                    std::this_thread::sleep_for(std::chrono::seconds(kConnectRetryDelaySec));
                 }
                 else
                 {
-                    throw; // Re-throw if it's not a connection error
+                    BOOST_LOG_TRIVIAL(error) << "Http client POST failed: " << e.code().message() << " (code: " << e.code() << ")";
+                    if (e.code().category() == boost::asio::error::get_ssl_category() ||
+                        e.code() == boost::asio::ssl::error::stream_truncated ||
+                        (e.what() && std::string(e.what()).find("stream truncated") != std::string::npos))
+                    {
+                        BOOST_LOG_TRIVIAL(error) << "SSL/Stream truncated – server closed or network timeout";
+                    }
+                    throw;
                 }
             }
-
-            beast::error_code ec;
-            tcpStream->socket().shutdown(tcp::socket::shutdown_both, ec);
-            tcpStream->socket().close(ec);
-        }
-        catch (const beast::system_error& e)
-        {
-            BOOST_LOG_TRIVIAL(error) << "Http client POST system error: " << e.what()
-                                     << " (code: " << e.code() << ", category: " << e.code().category().name() << ")";
-            if (e.code().category() == boost::asio::error::get_ssl_category() ||
-                e.code() == boost::asio::ssl::error::stream_truncated ||
-                (e.what() && std::string(e.what()).find("stream truncated") != std::string::npos))
+            catch (const std::exception& e)
             {
-                BOOST_LOG_TRIVIAL(error) << "SSL/Stream truncated – server closed or network timeout";
+                if (requestAttempt < kMaxRequestAttempts - 1)
+                {
+                    BOOST_LOG_TRIVIAL(warning) << "Http client POST failed (" << (requestAttempt + 1) << "/" << kMaxRequestAttempts << "): " << e.what() << ", retrying in " << kConnectRetryDelaySec << "s...";
+                    std::this_thread::sleep_for(std::chrono::seconds(kConnectRetryDelaySec));
+                }
+                else
+                {
+                    BOOST_LOG_TRIVIAL(error) << "Http client POST failed: " << e.what();
+                    throw;
+                }
             }
-            throw;  // rethrow so caller (e.g. markDoneWorker) can handle
-        }
-        catch (const std::exception& e)
-        {
-            BOOST_LOG_TRIVIAL(error) << "Http client POST failed: " << e.what();
-            throw;
         }
 
         return responseCode;
