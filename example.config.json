@@ -4,7 +4,7 @@
   ],
   "statusCallbackPeriodMs": 5000,
   "blockSize": 256,
-  "pointsPerThread": 16,
+  "pointsPerThread": 8,
   "keysNumberToGenerate": 0,
   "forcePrivateXPart": false,
   "privateXPart": 2,
