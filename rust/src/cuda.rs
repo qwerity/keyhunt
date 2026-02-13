@@ -26,8 +26,8 @@ pub struct KeyhuntSearchResult {
     pub private_key: [u32; 8],
 }
 
+// ecc_cuda линкуется в build.rs с --whole-archive (полный путь к .a), не здесь
 #[link(name = "keyhunt_cuda_capi")]
-#[link(name = "ecc_cuda")]
 #[link(name = "cudart_static")]
 #[link(name = "stdc++")]
 extern "C" {
