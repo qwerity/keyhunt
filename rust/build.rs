@@ -89,11 +89,31 @@ fn main() {
         #[cfg(not(target_os = "linux"))]
         println!("cargo:rustc-link-lib=static=ecc_cuda");
         println!("cargo:rustc-link-lib=static=keyhunt_cuda_capi");
+
+        // ecc_cuda (ecc.cu) использует util/secp256k1.h → secp256k1::G(), doublePoint, addPoints из util
+        let util_dir = std::env::var("KEYHUNT_UTIL_LIB_DIR").unwrap_or_else(|_| {
+            std::path::Path::new(&lib_dir)
+                .parent()
+                .map(|p| p.join("util"))
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "../build/util".into())
+        });
+        println!("cargo:rustc-link-search=native={}", util_dir);
+        println!("cargo:rustc-link-lib=static=util");
+
         #[cfg(target_os = "linux")]
         {
             println!("cargo:rustc-link-lib=stdc++");
             println!("cargo:rustc-link-lib=pthread");
             println!("cargo:rustc-link-lib=dl");
+            // Зависимости util (Boost, OpenSSL, wallycore, secp256k1)
+            println!("cargo:rustc-link-lib=boost_log");
+            println!("cargo:rustc-link-lib=boost_log_setup");
+            println!("cargo:rustc-link-lib=boost_iostreams");
+            println!("cargo:rustc-link-lib=ssl");
+            println!("cargo:rustc-link-lib=crypto");
+            println!("cargo:rustc-link-lib=wallycore");
+            println!("cargo:rustc-link-lib=secp256k1");
         }
         #[cfg(target_os = "windows")]
         println!("cargo:rustc-link-lib=libcmt");

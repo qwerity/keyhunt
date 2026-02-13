@@ -12,9 +12,10 @@ cd "$(dirname "$0")/.."
 
 ARCH="${1:-86}"
 
-echo "=== 1/2 CUDA (arch=$ARCH) ==="
+echo "=== 1/2 CMake (CUDA + util) ==="
 cmake -B build -DCMAKE_CUDA_ARCHITECTURES="$ARCH"
 cmake --build build --target keyhunt_cuda_capi -j "$(nproc 2>/dev/null || echo 4)"
+cmake --build build --target util -j "$(nproc 2>/dev/null || echo 4)"
 
 echo "=== 2/2 Rust (cuda, release) ==="
 export KEYHUNT_CUDA_LIB_DIR="$PWD/build/cuda"
