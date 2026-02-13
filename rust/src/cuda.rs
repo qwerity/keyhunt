@@ -12,6 +12,7 @@ pub struct KeyhuntHash160 {
 }
 
 #[repr(C)]
+#[derive(Clone)]
 pub struct KeyhuntSearchResult {
     pub cuda_device_id: i32,
     pub thread_id: u32,
@@ -87,7 +88,7 @@ impl KeyhuntHandle {
     }
 
     pub fn set_targets(&self, targets: &[Hash160]) -> Result<(), crate::Error> {
-        let mut raw: Vec<KeyhuntHash160> = targets.iter().map(|h| KeyhuntHash160 { h: h.to_words() }).collect();
+        let raw: Vec<KeyhuntHash160> = targets.iter().map(|h| KeyhuntHash160 { h: h.to_words() }).collect();
         let r = unsafe { keyhunt_set_targets(self.ptr, raw.as_ptr(), raw.len()) };
         if r != 0 {
             let msg = unsafe { CStr::from_ptr(keyhunt_last_error()).to_string_lossy().into_owned() };

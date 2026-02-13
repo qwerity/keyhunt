@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
+use std::time::Instant;
 
 #[cfg(feature = "cuda")]
 use crate::cuda::{device_count, keyhunt_search_result_from_c, KeyhuntHandle, KeyhuntSearchResult};
@@ -255,7 +256,7 @@ fn run_one_gpu(
                 &mut min_mkeys,
                 status_period,
                 device_id,
-                status_callback.as_ref(),
+                status_callback.as_ref().map(|v| &**v),
             );
 
             if config.force_private_x_part() {
