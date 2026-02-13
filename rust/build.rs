@@ -90,7 +90,8 @@ fn main() {
         println!("cargo:rustc-link-lib=static=ecc_cuda");
         println!("cargo:rustc-link-lib=static=keyhunt_cuda_capi");
 
-        // ecc_cuda (ecc.cu) использует util/secp256k1.h → secp256k1::G(), doublePoint, addPoints из util
+        // ecc_cuda (ecc.cu) использует util/secp256k1.h → secp256k1::G(), doublePoint, addPoints из util.
+        // Линкуем наш libutil.a по полному пути, иначе -lutil подхватывает системный libutil (login_tty и т.д.).
         let util_dir = std::env::var("KEYHUNT_UTIL_LIB_DIR").unwrap_or_else(|_| {
             std::path::Path::new(&lib_dir)
                 .parent()
@@ -98,8 +99,18 @@ fn main() {
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|| "../build/util".into())
         });
-        println!("cargo:rustc-link-search=native={}", util_dir);
-        println!("cargo:rustc-link-lib=static=util");
+        let util_path = std::path::Path::new(&util_dir).join("libutil.a");
+        if util_path.exists() {
+            if let Ok(canon) = util_path.canonicalize() {
+                println!("cargo:rustc-link-arg=-Wl,{}", canon.display());
+            } else {
+                println!("cargo:rustc-link-search=native={}", util_dir);
+                println!("cargo:rustc-link-lib=static=util");
+            }
+        } else {
+            println!("cargo:rustc-link-search=native={}", util_dir);
+            println!("cargo:rustc-link-lib=static=util");
+        }
 
         #[cfg(target_os = "linux")]
         {
