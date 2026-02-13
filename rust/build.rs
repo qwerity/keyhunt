@@ -47,7 +47,13 @@ fn main() {
                 .chain(["/usr/local/cuda".into(), "/opt/cuda".into()]);
             let mut found = false;
             for root in candidates {
-                for subdir in ["lib64", "lib64/stubs", "lib"] {
+                for subdir in [
+                    "targets/x86_64-linux/lib",
+                    "targets/x86_64-linux-gnu/lib",
+                    "lib64",
+                    "lib64/stubs",
+                    "lib",
+                ] {
                     let path = std::path::Path::new(&root).join(subdir).join("libcudart_static.a");
                     if path.exists() {
                         let dir = path.parent().unwrap();
