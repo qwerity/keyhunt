@@ -73,16 +73,21 @@ fn main() {
         }
 
         // Порядок: зависимости первыми. ecc_cuda — целиком (--whole-archive), иначе линкер не подтянет secp256k1::* из своих .o
+        // Передаём libecc_cuda.a явно между --whole-archive и --no-whole-archive (Cargo иначе ставит флаги не рядом с .a)
         println!("cargo:rustc-link-lib=static=cudart_static");
         #[cfg(target_os = "linux")]
         {
-            println!("cargo:rustc-link-arg=-Wl,--whole-archive");
+            let ecc_path = std::path::Path::new(&lib_dir).join("libecc_cuda.a");
+            if let Ok(canon) = ecc_path.canonicalize() {
+                println!("cargo:rustc-link-arg=-Wl,--whole-archive");
+                println!("cargo:rustc-link-arg=-Wl,{}", canon.display());
+                println!("cargo:rustc-link-arg=-Wl,--no-whole-archive");
+            } else {
+                println!("cargo:rustc-link-lib=static=ecc_cuda");
+            }
         }
+        #[cfg(not(target_os = "linux"))]
         println!("cargo:rustc-link-lib=static=ecc_cuda");
-        #[cfg(target_os = "linux")]
-        {
-            println!("cargo:rustc-link-arg=-Wl,--no-whole-archive");
-        }
         println!("cargo:rustc-link-lib=static=keyhunt_cuda_capi");
         #[cfg(target_os = "linux")]
         {
