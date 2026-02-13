@@ -18,6 +18,19 @@ cmake --build build --target keyhunt_cuda_capi -j "$(nproc 2>/dev/null || echo 4
 
 echo "=== 2/2 Rust (cuda, release) ==="
 export KEYHUNT_CUDA_LIB_DIR="$PWD/build/cuda"
-cargo build --release --manifest-path rust/Cargo.toml --features cuda
+# Чтобы линкер нашёл libcudart_static.a, задаём CUDA_PATH по nvcc (если ещё не задан)
+if [ -z "${CUDA_PATH:-}" ] && [ -z "${CUDA_HOME:-}" ]; then
+  NVCC=$(which nvcc 2>/dev/null)
+  if [ -n "$NVCC" ]; then
+    REAL=$(realpath "$NVCC" 2>/dev/null || readlink -f "$NVCC" 2>/dev/null || echo "$NVCC")
+    export CUDA_PATH="$(cd "$(dirname "$(dirname "$REAL")")" 2>/dev/null && pwd)"
+    [ -n "$CUDA_PATH" ] && echo "CUDA_PATH=$CUDA_PATH"
+  fi
+fi
+if ! cargo build --release --manifest-path rust/Cargo.toml --features cuda --bin keyhunt-pvk 2>&1 | tee /tmp/keyhunt_rust_build.log; then
+  echo "--- последние 40 строк (ошибка линковки) ---"
+  tail -40 /tmp/keyhunt_rust_build.log
+  exit 1
+fi
 
 echo "OK: rust/target/release/keyhunt-pvk"
