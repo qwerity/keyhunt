@@ -77,7 +77,6 @@ void CudaAtomicList::cleanup() const
     {
         uint32_t* p = h_countHostPtr;
         h_countHostPtr = nullptr;
-        (void)cudaHostUnregister(p);
         free(p);
     }
 
@@ -85,7 +84,6 @@ void CudaAtomicList::cleanup() const
     {
         void* p = h_hostPtr;
         h_hostPtr = nullptr;
-        (void)cudaHostUnregister(p);
         free(p);
     }
 }
