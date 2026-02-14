@@ -31,9 +31,9 @@ public:
 
 private:
     void *d_devPtr{nullptr};
-    void *h_hostPtr{nullptr};
+    mutable void *h_hostPtr{nullptr};
 
-    uint32_t *h_countHostPtr{nullptr};
+    mutable uint32_t *h_countHostPtr{nullptr};
     uint32_t *d_countDevPtr{nullptr};
 
     uint32_t h_maxSize{0};

@@ -72,10 +72,12 @@ void CudaAtomicList::cleanup() const
     if (h_countHostPtr != nullptr)
     {
         cudaCheckError(cudaFreeHost(h_countHostPtr));
+        h_countHostPtr = nullptr;
     }
 
     if (h_hostPtr != nullptr)
     {
         cudaCheckError(cudaFreeHost(h_hostPtr));
+        h_hostPtr = nullptr;
     }
 }
