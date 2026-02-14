@@ -2,6 +2,7 @@
 #include "defines.h"
 #include "utils.cuh"
 
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -71,13 +72,19 @@ void CudaAtomicList::cleanup() const
 {
     if (h_countHostPtr != nullptr)
     {
-        cudaCheckError(cudaFreeHost(h_countHostPtr));
+        uint32_t* p = h_countHostPtr;
         h_countHostPtr = nullptr;
+        cudaError_t e = cudaFreeHost(p);
+        if (e != cudaSuccess)
+            (void)fprintf(stderr, "cudaFreeHost(count): %s\n", cudaGetErrorString(e));
     }
 
     if (h_hostPtr != nullptr)
     {
-        cudaCheckError(cudaFreeHost(h_hostPtr));
+        void* p = h_hostPtr;
         h_hostPtr = nullptr;
+        cudaError_t e = cudaFreeHost(p);
+        if (e != cudaSuccess)
+            (void)fprintf(stderr, "cudaFreeHost(data): %s\n", cudaGetErrorString(e));
     }
 }

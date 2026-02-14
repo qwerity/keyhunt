@@ -158,7 +158,7 @@ void keyhunt_destroy(KeyhuntHandle h)
 {
     if (!h) return;
     auto* ctx = static_cast<KeyhuntContext*>(h);
-    ctx->result_list.cleanup();
+    // Не вызываем cleanup() здесь — деструктор CudaAtomicList вызовет его при delete ctx
     delete ctx;
 }
 
