@@ -158,7 +158,8 @@ void keyhunt_destroy(KeyhuntHandle h)
 {
     if (!h) return;
     auto* ctx = static_cast<KeyhuntContext*>(h);
-    // Не вызываем cleanup() здесь — деструктор CudaAtomicList вызовет его при delete ctx
+    // Убедиться, что активное устройство — то же, на котором выделялась pinned memory
+    (void)cudaSetDevice(ctx->device_id);
     delete ctx;
 }
 
