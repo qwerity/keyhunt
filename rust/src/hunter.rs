@@ -178,8 +178,9 @@ fn run_one_gpu(
             return;
         }
         let keys_per_iter = handle.keys_per_iteration();
+        // Как в C++: при 0 берём u32::MAX ключей (полное пространство Y для одного X), не u64::MAX
         let total_to_generate = if config.keys_number_to_generate() == 0 {
-            u64::MAX
+            u32::MAX as u64
         } else {
             config.keys_number_to_generate() as u64
         };
