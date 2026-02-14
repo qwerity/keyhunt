@@ -12,7 +12,7 @@
         if ((err) != cudaSuccess) \
         { \
             const auto errStr = cudaGetErrorString(err); \
-            fprintf(stderr, "[%d] %s at {%s:%d}\n", err, errStr, __FILE__, __LINE__); \
+            fprintf(stderr, "[%d] %s at {%s:%d} (%s)\n", (int)(err), errStr, __FILE__, __LINE__, __func__); \
             fflush(stderr); \
             fflush(stdout); \
             exit(13); \
