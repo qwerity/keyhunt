@@ -27,20 +27,23 @@ void CudaAtomicList::init(const uint32_t itemSize, const uint32_t maxItems)
 {
     h_itemSize = itemSize;
 
-    // The number of results found in the most recent kernel run
-    h_countHostPtr = nullptr;
-    cudaCheckError(cudaHostAlloc(&h_countHostPtr, sizeof(uint32_t), cudaHostAllocMapped));
+    // malloc + cudaHostRegister: освобождаем через free(), не cudaFreeHost — не зависит от контекста CUDA при выходе
+    h_countHostPtr = static_cast<uint32_t*>(malloc(sizeof(uint32_t)));
+    if (!h_countHostPtr)
+        cudaCheckError(cudaErrorMemoryAllocation);
+    cudaCheckError(cudaHostRegister(h_countHostPtr, sizeof(uint32_t), cudaHostRegisterMapped));
 
-    // Number of items in the list
     d_countDevPtr = nullptr;
     cudaCheckError(cudaHostGetDevicePointer(&d_countDevPtr, h_countHostPtr, 0));
 
     *h_countHostPtr = 0;
-    // Storage for results data
-    h_hostPtr = nullptr;
-    cudaCheckError(cudaHostAlloc(&h_hostPtr, itemSize * maxItems, cudaHostAllocMapped));
 
-    // Storage for results data (device to host pointer)
+    const size_t dataSize = static_cast<size_t>(itemSize) * maxItems;
+    h_hostPtr = malloc(dataSize);
+    if (!h_hostPtr)
+        cudaCheckError(cudaErrorMemoryAllocation);
+    cudaCheckError(cudaHostRegister(h_hostPtr, dataSize, cudaHostRegisterMapped));
+
     d_devPtr = nullptr;
     cudaCheckError(cudaHostGetDevicePointer(&d_devPtr, h_hostPtr, 0));
 
@@ -74,17 +77,15 @@ void CudaAtomicList::cleanup() const
     {
         uint32_t* p = h_countHostPtr;
         h_countHostPtr = nullptr;
-        cudaError_t e = cudaFreeHost(p);
-        if (e != cudaSuccess)
-            (void)fprintf(stderr, "cudaFreeHost(count): %s\n", cudaGetErrorString(e));
+        (void)cudaHostUnregister(p);
+        free(p);
     }
 
     if (h_hostPtr != nullptr)
     {
         void* p = h_hostPtr;
         h_hostPtr = nullptr;
-        cudaError_t e = cudaFreeHost(p);
-        if (e != cudaSuccess)
-            (void)fprintf(stderr, "cudaFreeHost(data): %s\n", cudaGetErrorString(e));
+        (void)cudaHostUnregister(p);
+        free(p);
     }
 }
