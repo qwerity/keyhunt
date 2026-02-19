@@ -154,6 +154,68 @@ uint32_t keyhunt_get_results(KeyhuntHandle h, KeyhuntSearchResult* out_results, 
     return to_copy;
 }
 
+int keyhunt_pregenerate_keys(KeyhuntHandle h, uint32_t private_x_part, uint32_t iteration)
+{
+    if (!h) { KEYHUNT_SET_ERR("keyhunt_pregenerate_keys: null handle"); return -1; }
+    auto* ctx = static_cast<KeyhuntContext*>(h);
+    try {
+        ctx->ecc->pregenerateKeysAsync(private_x_part, iteration);
+        return 0;
+    } catch (const std::exception& e) {
+        KEYHUNT_SET_ERR_FMT("keyhunt_pregenerate_keys: %s", e.what());
+        return -1;
+    }
+}
+
+int keyhunt_launch_kernel(KeyhuntHandle h)
+{
+    if (!h) { KEYHUNT_SET_ERR("keyhunt_launch_kernel: null handle"); return -1; }
+    auto* ctx = static_cast<KeyhuntContext*>(h);
+    try {
+        ctx->ecc->launchKernelAsync();
+        return 0;
+    } catch (const std::exception& e) {
+        KEYHUNT_SET_ERR_FMT("keyhunt_launch_kernel: %s", e.what());
+        return -1;
+    }
+}
+
+uint32_t keyhunt_sync_and_get_results(KeyhuntHandle h, KeyhuntSearchResult* out_results,
+                                      uint32_t max_count, uint32_t iteration,
+                                      uint32_t private_x_part)
+{
+    if (!h || !out_results || max_count == 0) return 0;
+    auto* ctx = static_cast<KeyhuntContext*>(h);
+
+    // Synchronize the kernel launched by keyhunt_launch_kernel.
+    ctx->ecc->syncKernel();
+
+    const uint32_t n = ctx->result_list.size();
+    if (n == 0) return 0;
+    const uint32_t keys_per_iter = ctx->keys_per_iteration;
+    const uint32_t to_copy = (n < max_count) ? n : max_count;
+
+    std::vector<Hash160SearchResult> buf(to_copy);
+    ctx->result_list.read(buf.data(), to_copy);
+    ctx->result_list.clear();
+
+    for (uint32_t i = 0; i < to_copy; ++i) {
+        const auto& s = buf[i];
+        KeyhuntSearchResult* r = &out_results[i];
+        r->cuda_device_id = ctx->device_id;
+        r->thread_id = s.thread;
+        r->block_id = s.block;
+        r->idx = s.idx;
+        r->compressed = s.compressed;
+        for (int j = 0; j < 5; ++j) r->digest[j] = s.digest[j];
+        r->iteration = iteration;
+        r->private_x_part = private_x_part;
+        r->private_y_part = iteration * keys_per_iter + s.idx;
+        for (int j = 0; j < 8; ++j) r->private_key[j] = s.privateKey[j];
+    }
+    return to_copy;
+}
+
 void keyhunt_destroy(KeyhuntHandle h)
 {
     if (!h) return;

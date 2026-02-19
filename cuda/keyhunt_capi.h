@@ -65,6 +65,7 @@ uint32_t keyhunt_keys_per_iteration(KeyhuntHandle h);
 
 /**
  * Run one iteration: generate private keys for (private_x_part, iteration) and check hash160.
+ * BLOCKING — returns only after GPU kernel completes.
  */
 int keyhunt_run_iteration(KeyhuntHandle h, uint32_t private_x_part, uint32_t iteration);
 
@@ -74,6 +75,40 @@ int keyhunt_run_iteration(KeyhuntHandle h, uint32_t private_x_part, uint32_t ite
  */
 uint32_t keyhunt_get_results(KeyhuntHandle h, KeyhuntSearchResult* out_results, uint32_t max_count,
                              uint32_t iteration, uint32_t private_x_part);
+
+/* ---- Double-buffer pipeline API (zero GPU idle between xpart transitions) ----
+ *
+ * Typical call sequence:
+ *
+ *   keyhunt_pregenerate_keys(h, x, 0);     // async key-gen into staging buffer
+ *   keyhunt_launch_kernel(h);              // sync key-gen, swap, launch kernel async
+ *   loop:
+ *     keyhunt_pregenerate_keys(h, x_next, iter_next); // overlap with running kernel
+ *     keyhunt_sync_and_get_results(h, out, max, iter, x);  // sync kernel + read
+ *     keyhunt_launch_kernel(h);            // sync key-gen, swap, launch next kernel
+ */
+
+/**
+ * Step 1: start generating private keys for (x, iter) into the staging buffer,
+ * asynchronously on the init stream.  Returns immediately; does NOT block.
+ */
+int keyhunt_pregenerate_keys(KeyhuntHandle h, uint32_t private_x_part, uint32_t iteration);
+
+/**
+ * Step 2: synchronize the init stream (wait for pregenerate_keys to finish),
+ * promote staging→current buffer, then launch the hash-check kernel asynchronously.
+ * Returns immediately; kernel runs in background.
+ */
+int keyhunt_launch_kernel(KeyhuntHandle h);
+
+/**
+ * Step 3: synchronize the generator stream (wait for kernel launched by launch_kernel),
+ * then read results.  Returns number of results written into out_results.
+ * iteration and private_x_part label the results for the caller.
+ */
+uint32_t keyhunt_sync_and_get_results(KeyhuntHandle h, KeyhuntSearchResult* out_results,
+                                      uint32_t max_count, uint32_t iteration,
+                                      uint32_t private_x_part);
 
 /**
  * Destroy context and release GPU resources.

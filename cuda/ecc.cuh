@@ -26,6 +26,19 @@ public:
     void fillPublicKeys() const;
     void generatePrivateKeysForXPerIteration(uint32_t privateXPart, uint32_t iteration) const;
 
+    // ---------- Double-buffer pipeline API ----------
+    // Step 1: generate private keys into the STAGING buffer asynchronously.
+    //         Returns immediately; GPU key-gen runs on mInitStream.
+    void pregenerateKeysAsync(uint32_t privateXPart, uint32_t iteration) const;
+
+    // Step 2: sync mInitStream (wait for key-gen), swap buffers, launch the
+    //         hash-check kernel on the CURRENT buffer async (mGeneratorStream).
+    //         Returns immediately; kernel runs in background.
+    void launchKernelAsync() const;
+
+    // Step 3: sync mGeneratorStream (wait for kernel).
+    void syncKernel() const;
+
     void getPrivateKeys(std::vector<uint256_t>& h_privateKeys) const;
     /** Valid only after fillPublicKeys(). After calculatePublicKeysAndCheckHash160() public keys are not written to global memory. */
     void getPublicKeys(std::vector<uint256_t>& h_publicKeysX, std::vector<uint256_t>& h_publicKeysY) const;

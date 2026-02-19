@@ -199,6 +199,8 @@ fn run_one_gpu(
 
         if !config.specific_x_values().is_empty() {
             for (i, &private_x) in config.specific_x_values().iter().enumerate() {
+                log::info!("[{}] [{}/{}] Generating for privateXPart: {:#x}",
+                    device_id, i + 1, config.specific_x_values().len(), private_x);
                 run_iterations_for_x(
                     &mut handle,
                     private_x,
@@ -215,9 +217,8 @@ fn run_one_gpu(
                     status_period,
                     device_id,
                     status_callback.as_deref(),
+                    None, // no xpart manager for specific values
                 );
-                log::info!("[{}] [{}/{}] Generating for privateXPart: {:#x}",
-                    device_id, i + 1, config.specific_x_values().len(), private_x);
             }
             return;
         }
@@ -258,6 +259,7 @@ fn run_one_gpu(
                 status_period,
                 device_id,
                 status_callback.as_ref().map(|v| &**v),
+                xpart_manager.as_deref(),
             );
 
             if config.force_private_x_part() {
@@ -272,6 +274,18 @@ fn run_one_gpu(
     }
 }
 
+/// Run iterations for a single xpart using the double-buffer pipeline.
+///
+/// Timeline per iteration:
+///   ┌─ pregenerate_keys(next) ──────────────┐   ← mInitStream  (async)
+///   │                                        │
+///   └── kernel(current) ────────────────────┘   ← mGeneratorStream (async)
+///        ↓ sync_and_get_results()
+///        → process results on CPU (while next keygen already running)
+///
+/// Returns the (xpart, first_iter) that was pre-generated but not yet launched,
+/// so the caller can pass it directly to the next keyhunt_launch_kernel call.
+/// Returns `None` if an error occurred.
 #[cfg(feature = "cuda")]
 fn run_iterations_for_x(
     handle: &mut KeyhuntHandle,
@@ -289,13 +303,34 @@ fn run_iterations_for_x(
     status_period_ms: u64,
     device_id: i32,
     status_cb: Option<&(dyn Fn(StatusInfo) + Send + Sync)>,
-) {
+    xpart_manager: Option<&crate::xpart::XPartManager>,
+) -> Option<(u32, u32)> {
+    // Warm-up: generate keys for iter 0 into staging buffer, then launch kernel.
+    if handle.pregenerate_keys(private_x, 0).is_err() { return None; }
+    if handle.launch_kernel().is_err() { return None; }
+
     for iter in 0..total_iters {
         let t0 = Instant::now();
-        if handle.run_iteration(private_x, iter).is_err() {
-            break;
-        }
-        let n = handle.get_results(result_buf, iter, private_x);
+
+        // Determine the NEXT (xpart, iter) to pre-generate while the current kernel runs.
+        // At the last iteration of this xpart, try to peek at the next xpart from the
+        // pre-fetch queue — this eliminates any GPU idle gap between xpart transitions.
+        let (next_x, next_iter) = if iter + 1 < total_iters {
+            (private_x, iter + 1)
+        } else {
+            // Last iteration: try to get next xpart without blocking.
+            let nx = xpart_manager
+                .and_then(|xm| xm.try_get_next_x_part())
+                .unwrap_or(private_x);  // fallback: re-use same xpart (caller will break if needed)
+            (nx, 0u32)
+        };
+
+        // While the current kernel runs, pre-generate keys for the next iteration / xpart.
+        // mInitStream and mGeneratorStream are independent → true concurrency on the GPU.
+        if handle.pregenerate_keys(next_x, next_iter).is_err() { return None; }
+
+        // Sync the kernel that was launched in the PREVIOUS loop step, then read results.
+        let n = handle.sync_and_get_results(result_buf, iter, private_x);
         for i in 0..n as usize {
             let r = &result_buf[i];
             let digest_be = crate::hash160::Hash160([
@@ -310,6 +345,11 @@ fn run_iterations_for_x(
                 let _ = result_tx.try_send(out);
             }
         }
+
+        // Launch the kernel for the pre-generated keys (sync keygen first internally,
+        // then swap buffers and launch).  The kernel starts immediately after.
+        if handle.launch_kernel().is_err() { return None; }
+
         let elapsed = t0.elapsed().as_millis() as u64;
         *total_keys += keys_per_iter as u64;
         *total_ms += elapsed;
@@ -341,6 +381,31 @@ fn run_iterations_for_x(
             *period_ms = 0;
         }
     }
+
+    // The last kernel launched in the loop is still running.
+    // Sync it and read its results before returning.
+    let n = handle.sync_and_get_results(result_buf, total_iters - 1, private_x);
+    for i in 0..n as usize {
+        let r = &result_buf[i];
+        let digest_be = crate::hash160::Hash160([
+            r.digest[0].to_be(),
+            r.digest[1].to_be(),
+            r.digest[2].to_be(),
+            r.digest[3].to_be(),
+            r.digest[4].to_be(),
+        ]);
+        if targets.contains(&digest_be) {
+            let out = keyhunt_search_result_from_c(r);
+            let _ = result_tx.try_send(out);
+        }
+    }
+
+    // Return the (xpart, iter) that was pre-generated into the staging buffer
+    // so the outer loop can launch it directly (no extra keygen delay).
+    let last_next_x = xpart_manager
+        .and_then(|xm| xm.try_get_next_x_part())
+        .unwrap_or(private_x);
+    Some((last_next_x, 0))
 }
 
 #[cfg(feature = "cuda")]

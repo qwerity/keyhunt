@@ -43,7 +43,14 @@ struct ECC::Impl
     thrust::udevice_vector<uint256_t> d_publicKeysX;
     thrust::udevice_vector<uint256_t> d_publicKeysY;
 
-    thrust::udevice_vector<uint256_t> d_privateKeys;
+    // Double-buffer: kernel reads from d_privateKeys[mCurBuf],
+    // key-gen writes to d_privateKeys[1 - mCurBuf].
+    thrust::udevice_vector<uint256_t> d_privateKeys[2];
+    int mCurBuf{0};  // index currently in use by the kernel
+
+    // Legacy alias for old single-buffer path (points to d_privateKeys[mCurBuf])
+    thrust::udevice_vector<uint256_t>& d_privateKeysCur() { return d_privateKeys[mCurBuf]; }
+    thrust::udevice_vector<uint256_t>& d_privateKeysNext() { return d_privateKeys[1 - mCurBuf]; }
 
     thrust::udevice_vector<secp256k1_ge_storage> d_gTable;
     thrust::udevice_vector<uint64_t> d_gTableX_4limb;
@@ -59,7 +66,8 @@ struct ECC::Impl
 
     ~Impl()
     {
-        release(d_privateKeys);
+        release(d_privateKeys[0]);
+        release(d_privateKeys[1]);
         release(d_publicKeysX);
         release(d_publicKeysY);
 
@@ -158,12 +166,13 @@ struct ECC::Impl
     void allocatePrivateKeysDeviceMemory()
     {
         const uint32_t keysNumberPerIteration = getKeysNumberPerIteration();
-        d_privateKeys.resize(keysNumberPerIteration);
+        d_privateKeys[0].resize(keysNumberPerIteration);
+        d_privateKeys[1].resize(keysNumberPerIteration);
     }
 
     void getPrivateKeys(thrust::host_vector<uint256_t>& h_privateKeys) const
     {
-        h_privateKeys = d_privateKeys;
+        h_privateKeys = d_privateKeys[mCurBuf];
     }
 
     void getPublicKeys(std::vector<uint256_t>& h_publicKeysX, std::vector<uint256_t>& h_publicKeysY) const
@@ -177,35 +186,81 @@ struct ECC::Impl
 
     void setPrivateKeys(const std::vector<uint256_t>& h_privateKeys)
     {
-        if (h_privateKeys.size() != d_privateKeys.size())
+        if (h_privateKeys.size() != d_privateKeys[mCurBuf].size())
         {
             throw std::runtime_error("Private keys size mismatch");
         }
-        
-        thrust::copy(h_privateKeys.begin(), h_privateKeys.end(), d_privateKeys.begin());
+        thrust::copy(h_privateKeys.begin(), h_privateKeys.end(), d_privateKeys[mCurBuf].begin());
     }
 
+    // Legacy sync path — writes to current buffer and waits.
     void generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration)
     {
         const uint32_t keysNumberPerIteration = getKeysNumberPerIteration();
 
-        if (d_privateKeys.size() != keysNumberPerIteration)
+        if (d_privateKeys[mCurBuf].size() != keysNumberPerIteration)
         {
             throw std::runtime_error("Private keys device storage has wrong size");
         }
 
         const uint32_t increment = iteration * keysNumberPerIteration;
 
-        // {x, 0}, {x, 1}, ... , {x, keysNumberPerIteration - 1}
         cudaCheckError(cudaKernelSyncLaunch(mInitStream, [&]()
         {
             thrust::transform(thrust::cuda::par.on(mInitStream),
                               thrust::counting_iterator<uint32_t>(0u),
                               thrust::counting_iterator<uint32_t>(keysNumberPerIteration),
-                              d_privateKeys.begin(),
+                              d_privateKeys[mCurBuf].begin(),
                               PrivateKeyForXWithRandomYFunctor(privateXPart, increment)
             );
         }, "generatePrivateKeysForXPerIteration"));
+    }
+
+    // Pipeline step 1: write private keys into the STAGING (next) buffer, async.
+    // Returns immediately; mInitStream runs concurrently with mGeneratorStream.
+    void pregenerateKeysAsync(const uint32_t privateXPart, const uint32_t iteration)
+    {
+        const uint32_t keysNumberPerIteration = getKeysNumberPerIteration();
+        const uint32_t increment = iteration * keysNumberPerIteration;
+        const int nextBuf = 1 - mCurBuf;
+
+        thrust::transform(thrust::cuda::par.on(mInitStream),
+                          thrust::counting_iterator<uint32_t>(0u),
+                          thrust::counting_iterator<uint32_t>(keysNumberPerIteration),
+                          d_privateKeys[nextBuf].begin(),
+                          PrivateKeyForXWithRandomYFunctor(privateXPart, increment));
+        // No sync — caller is responsible for synchronizing mInitStream before launchKernelAsync.
+    }
+
+    // Pipeline step 2: sync key-gen, swap buffers, launch kernel async.
+    void launchKernelAsync()
+    {
+        // Wait for the key-gen (mInitStream) to finish writing to the staging buffer.
+        cudaCheckError(cudaStreamSynchronize(mInitStream));
+
+        // Promote staging buffer → current.
+        mCurBuf = 1 - mCurBuf;
+
+        const uint256_t* privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys[mCurBuf].data());
+        constexpr uint32_t sharedMem = 0;
+        publicKeyAndCheckHash160FusedKernel<<<mGridSize, mBlockSize, sharedMem, mGeneratorStream>>>(privateKeysPtr);
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess)
+        {
+            fprintf(stderr, "launchKernelAsync: CUDA error: %s\n", cudaGetErrorString(err));
+        }
+        // No stream sync — caller calls syncKernel() when it needs results.
+    }
+
+    // Pipeline step 3: wait for the running kernel to finish.
+    void syncKernel()
+    {
+        cudaError_t err = cudaStreamSynchronize(mGeneratorStream);
+        if (err != cudaSuccess)
+        {
+            fprintf(stderr, "syncKernel: CUDA sync error: %s\n", cudaGetErrorString(err));
+            cudaCheckError(err);
+        }
     }
 
     static void convertUint256ToFeStorage(const secp256k1::uint256& src, secp256k1_fe_storage& dst)
@@ -331,6 +386,17 @@ struct ECC::Impl
         fprintf(stdout, "gTable generation completed!\n");
     }
 
+    // Upload gTable pointers to constant memory once (never changes after init).
+    void uploadGTablePointersToConstMem()
+    {
+        const secp256k1_ge_storage* d_gTableRawPtr = thrust::raw_pointer_cast(d_gTable.data());
+        cudaCheckError(cudaMemcpyToSymbol(d_gTable_ptr, &d_gTableRawPtr, sizeof(secp256k1_ge_storage*)));
+        const uint64_t* d_gTableXRaw = thrust::raw_pointer_cast(d_gTableX_4limb.data());
+        const uint64_t* d_gTableYRaw = thrust::raw_pointer_cast(d_gTableY_4limb.data());
+        cudaCheckError(cudaMemcpyToSymbol(d_gTableX_4limb_ptr, &d_gTableXRaw, sizeof(uint64_t*)));
+        cudaCheckError(cudaMemcpyToSymbol(d_gTableY_4limb_ptr, &d_gTableYRaw, sizeof(uint64_t*)));
+    }
+
     void allocateGTableDeviceMemory()
     {
         constexpr uint32_t tableSize = ECMULT_GEN_PREC_N * ECMULT_GEN_PREC_G;
@@ -345,6 +411,8 @@ struct ECC::Impl
             // If loading failed, generate the table
             generateGTable();
         }
+        // Upload gTable pointers to constant memory once — avoids per-iteration memcpy.
+        uploadGTablePointersToConstMem();
     }
 
     void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t gridSize, const uint32_t blockSize)
@@ -371,18 +439,11 @@ struct ECC::Impl
 
     void calculatePublicKeysAndCheckHash160()
     {
-        // Copy gTable pointer for fillPublicKeys (secp256k1 path)
-        const secp256k1_ge_storage* d_gTableRawPtr = thrust::raw_pointer_cast(d_gTable.data());
-        cudaCheckError(cudaMemcpyToSymbol(d_gTable_ptr, &d_gTableRawPtr, sizeof(secp256k1_ge_storage*)));
-        // 4-limb GTable pointers for fused kernel
-        const uint64_t* d_gTableXRaw = thrust::raw_pointer_cast(d_gTableX_4limb.data());
-        const uint64_t* d_gTableYRaw = thrust::raw_pointer_cast(d_gTableY_4limb.data());
-        cudaCheckError(cudaMemcpyToSymbol(d_gTableX_4limb_ptr, &d_gTableXRaw, sizeof(uint64_t*)));
-        cudaCheckError(cudaMemcpyToSymbol(d_gTableY_4limb_ptr, &d_gTableYRaw, sizeof(uint64_t*)));
+        // gTable pointers are set once in uploadGTablePointersToConstMem() during init.
+        // No per-iteration copies needed.
 
-        // Fused kernel (4-limb): public key + hash + check in one pass
         constexpr uint32_t mSharedMemSize{0};
-        const uint256_t *privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys.data());
+        const uint256_t *privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys[mCurBuf].data());
         publicKeyAndCheckHash160FusedKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
         cudaError_t err = cudaGetLastError();
         if (err != cudaSuccess)
@@ -402,10 +463,9 @@ struct ECC::Impl
         constexpr uint256_t infinite{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
         thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysX.begin(), d_publicKeysX.end(), infinite);
         thrust::fill(thrust::cuda_cub::par.on(mGeneratorStream), d_publicKeysY.begin(), d_publicKeysY.end(), infinite);
-        const secp256k1_ge_storage* d_gTableRawPtr = thrust::raw_pointer_cast(d_gTable.data());
-        cudaCheckError(cudaMemcpyToSymbol(d_gTable_ptr, &d_gTableRawPtr, sizeof(secp256k1_ge_storage*)));
+        // gTable pointer already in constant memory from uploadGTablePointersToConstMem().
         constexpr uint32_t mSharedMemSize{0};
-        const uint256_t *privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys.data());
+        const uint256_t *privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys[mCurBuf].data());
         publicKeyGenerationKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
         cudaCheckError(cudaStreamSynchronize(mGeneratorStream));
     }
@@ -458,4 +518,19 @@ void ECC::getPublicKeys(std::vector<uint256_t>& h_publicKeysX, std::vector<uint2
 void ECC::setPrivateKeys(const std::vector<uint256_t>& h_privateKeys) const
 {
     mImpl->setPrivateKeys(h_privateKeys);
+}
+
+void ECC::pregenerateKeysAsync(const uint32_t privateXPart, const uint32_t iteration) const
+{
+    mImpl->pregenerateKeysAsync(privateXPart, iteration);
+}
+
+void ECC::launchKernelAsync() const
+{
+    mImpl->launchKernelAsync();
+}
+
+void ECC::syncKernel() const
+{
+    mImpl->syncKernel();
 }

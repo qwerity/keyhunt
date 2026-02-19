@@ -53,6 +53,17 @@ extern "C" {
     fn keyhunt_destroy(h: *mut std::ffi::c_void);
     fn keyhunt_device_count() -> i32;
     fn keyhunt_last_error() -> *const i8;
+
+    // --- Double-buffer pipeline API ---
+    fn keyhunt_pregenerate_keys(h: *mut std::ffi::c_void, private_x_part: u32, iteration: u32) -> i32;
+    fn keyhunt_launch_kernel(h: *mut std::ffi::c_void) -> i32;
+    fn keyhunt_sync_and_get_results(
+        h: *mut std::ffi::c_void,
+        out_results: *mut KeyhuntSearchResult,
+        max_count: u32,
+        iteration: u32,
+        private_x_part: u32,
+    ) -> u32;
 }
 
 pub struct KeyhuntHandle {
@@ -126,6 +137,40 @@ impl KeyhuntHandle {
         private_x_part: u32,
     ) -> u32 {
         unsafe { keyhunt_get_results(self.ptr, out.as_mut_ptr(), out.len() as u32, iteration, private_x_part) }
+    }
+
+    // --- Double-buffer pipeline API ---
+
+    /// Step 1: start generating private keys for (x, iter) into the staging buffer.
+    /// Returns immediately (async GPU op).
+    pub fn pregenerate_keys(&self, private_x_part: u32, iteration: u32) -> Result<(), crate::Error> {
+        let r = unsafe { keyhunt_pregenerate_keys(self.ptr, private_x_part, iteration) };
+        if r != 0 {
+            let msg = unsafe { CStr::from_ptr(keyhunt_last_error()).to_string_lossy().into_owned() };
+            return Err(crate::Error::Cuda(msg));
+        }
+        Ok(())
+    }
+
+    /// Step 2: sync key-gen, swap buffers, launch hash-check kernel async.
+    /// Returns immediately (kernel runs in background).
+    pub fn launch_kernel(&self) -> Result<(), crate::Error> {
+        let r = unsafe { keyhunt_launch_kernel(self.ptr) };
+        if r != 0 {
+            let msg = unsafe { CStr::from_ptr(keyhunt_last_error()).to_string_lossy().into_owned() };
+            return Err(crate::Error::Cuda(msg));
+        }
+        Ok(())
+    }
+
+    /// Step 3: sync kernel + read results.  Use after launch_kernel.
+    pub fn sync_and_get_results(
+        &self,
+        out: &mut [KeyhuntSearchResult],
+        iteration: u32,
+        private_x_part: u32,
+    ) -> u32 {
+        unsafe { keyhunt_sync_and_get_results(self.ptr, out.as_mut_ptr(), out.len() as u32, iteration, private_x_part) }
     }
 
     pub fn device_id(&self) -> i32 {
