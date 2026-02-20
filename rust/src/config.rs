@@ -90,6 +90,11 @@ pub struct Config {
     pub grid_size: u32,
     pub server: Option<ServerConfig>,
     pub log: Option<LogConfig>,
+
+    /// Test / offline mode: generate random x parts in-process instead of
+    /// fetching from a server.  Range is always the full u32 space [0, u32::MAX].
+    #[serde(default)]
+    pub random_x_part_queue: bool,
 }
 
 fn default_status_callback_ms() -> u32 {
@@ -98,6 +103,7 @@ fn default_status_callback_ms() -> u32 {
 fn default_public_key_compression() -> u32 {
     DEFAULT_PUBLIC_KEY_COMPRESSION
 }
+
 
 impl Config {
     pub fn load(path: &std::path::Path) -> Result<Self, crate::Error> {
@@ -167,5 +173,10 @@ impl Config {
 
     pub fn keys_number_to_generate(&self) -> u32 {
         self.keys_number_to_generate
+    }
+
+    /// True when random x part queue is enabled (offline/test mode).
+    pub fn random_x_part_queue(&self) -> bool {
+        self.random_x_part_queue
     }
 }

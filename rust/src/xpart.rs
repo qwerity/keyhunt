@@ -1,4 +1,8 @@
 //! Async X part distribution: fetcher thread + mark_done batch thread.
+//!
+//! Two modes:
+//!   • `new()` — fetches x parts from an HTTP server (production).
+//!   • `new_random()` — generates random x parts in-process (test / offline mode).
 
 use crate::http_client::HttpClient;
 use crossbeam_channel::{bounded, Receiver, Sender};
@@ -19,6 +23,7 @@ pub struct XPartManager {
 }
 
 impl XPartManager {
+    /// Production mode: fetches x parts from the HTTP server.
     /// fetcher_client: get_number only. mark_client: mark_done only (can be shared).
     pub fn new(
         fetcher_client: HttpClient,
@@ -54,6 +59,29 @@ impl XPartManager {
         }
     }
 
+    /// Test / offline mode: generates random x parts in-process, full u32 range.
+    /// No server required. `mark_done` calls are silently dropped.
+    ///
+    /// Enable via `"randomXPartQueue": true` in config.
+    pub fn new_random(gpu_count: usize) -> Self {
+        let target_queue = (6 * gpu_count.max(1)).max(4);
+        let (get_tx, get_rx) = bounded::<u32>(target_queue * 2);
+        // mark_tx: discard all done notifications (no server in random mode)
+        let (mark_tx, _mark_rx_drop) = bounded::<u32>(1024);
+
+        let fetcher_handle = thread::spawn(move || {
+            random_fetcher_worker(get_tx);
+        });
+
+        XPartManager {
+            get_rx,
+            mark_tx,
+            stop: AtomicBool::new(false),
+            fetcher_handle: Some(fetcher_handle),
+            mark_handle: None,
+        }
+    }
+
     /// Blocking: wait until a new x part is available.
     pub fn get_next_x_part(&self) -> u32 {
         self.get_rx.recv().unwrap_or(0)
@@ -83,6 +111,31 @@ impl Drop for XPartManager {
         }
         if let Some(h) = self.mark_handle.take() {
             let _ = h.join();
+        }
+    }
+}
+
+/// Random-queue worker: fills the channel with random u32 x values.
+/// Runs until the channel receiver is dropped (XPartManager is dropped).
+fn random_fetcher_worker(get_tx: Sender<u32>) {
+    // xorshift64 seeded from system time — no external crate needed.
+    let mut state: u64 = {
+        let t = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+        if t == 0 { 0xDEAD_BEEF_CAFE_1234 } else { t }
+    };
+
+    loop {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        let x = state as u32;
+
+        match get_tx.send(x) {
+            Ok(()) => {}
+            Err(_) => break, // receiver dropped → stop
         }
     }
 }

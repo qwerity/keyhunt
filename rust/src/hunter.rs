@@ -83,7 +83,14 @@ pub fn run(
             config.force_private_x_part(), config.keys_number_to_generate());
     }
 
-    let xpart_manager: Option<XPartManager> = if use_xpart && http_client.is_some() {
+    let xpart_manager: Option<XPartManager> = if config.random_x_part_queue()
+        && config.specific_x_values().is_empty()
+        && !config.force_private_x_part()
+    {
+        // Test / offline mode: random x part queue, no server required.
+        log::info!("XPartManager: random queue mode (full u32 range)");
+        Some(XPartManager::new_random(gpu_count as usize))
+    } else if use_xpart && http_client.is_some() {
         let fetcher = crate::http_client::HttpClient::new(
             config.server().unwrap(),
             Some(10),
