@@ -102,7 +102,8 @@ pub fn run(
             Some(10),
         );
         let mark = http_client.as_ref().unwrap().clone();
-        log::info!("Initializing XPartManager for async X part distribution");
+        let queue_size = crate::xpart::target_queue_size(gpu_count as usize);
+        log::info!("Initializing XPartManager for async X part distribution (target queue: {} active x-parts)", queue_size);
         Some(XPartManager::new(
             fetcher,
             mark,

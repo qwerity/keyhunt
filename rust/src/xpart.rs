@@ -14,6 +14,15 @@ const GET_NUMBER_MAX: u32 = 1000;
 const MARK_DONE_BATCH: usize = 500;
 const FETCHER_SLEEP_MS: u64 = 200;
 
+/// Target number of x-parts to keep in the local queue (per GPU).
+/// Lower = fewer "active" x on server; higher = less risk of GPU starvation.
+const TARGET_QUEUE_PER_GPU: usize = 2;
+
+/// Returns the target queue size for a given GPU count (for logging).
+pub fn target_queue_size(gpu_count: usize) -> usize {
+    (TARGET_QUEUE_PER_GPU * gpu_count.max(1)).max(2)
+}
+
 pub struct XPartManager {
     get_rx: Receiver<u32>,
     mark_tx: Sender<u32>,
@@ -30,8 +39,9 @@ impl XPartManager {
         mark_client: std::sync::Arc<HttpClient>,
         gpu_count: usize,
     ) -> Self {
-        let target_queue = (6 * gpu_count.max(1)).max(4);
-        let (get_tx, get_rx) = bounded::<u32>(target_queue * 2);
+        let target_queue = target_queue_size(gpu_count);
+        let cap = target_queue + gpu_count.max(1) * 2;
+        let (get_tx, get_rx) = bounded::<u32>(cap);
         let (mark_tx, mark_rx) = bounded::<u32>(1024);
 
         let stop_fetcher = AtomicBool::new(false);
@@ -64,8 +74,9 @@ impl XPartManager {
     ///
     /// Enable via `"randomXPartQueue": true` in config.
     pub fn new_random(gpu_count: usize) -> Self {
-        let target_queue = (6 * gpu_count.max(1)).max(4);
-        let (get_tx, get_rx) = bounded::<u32>(target_queue * 2);
+        let target_queue = target_queue_size(gpu_count);
+        let cap = target_queue + gpu_count.max(1) * 2;
+        let (get_tx, get_rx) = bounded::<u32>(cap);
         // mark_tx: discard all done notifications (no server in random mode)
         let (mark_tx, _mark_rx_drop) = bounded::<u32>(1024);
 
