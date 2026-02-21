@@ -17,11 +17,22 @@ log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 WORK_DIR="/workspace"
 BASE_URL="https://storage.googleapis.com/bbdatav2"
 
+# Первый аргумент — опциональный суффикс для CUDA-библиотеки (например 89 → libecc_cuda_89.so)
+CUDA_SUFFIX=""
+if [[ -n "${1:-}" && "$1" =~ ^[0-9]+$ ]]; then
+    CUDA_SUFFIX="_$1"
+    shift
+fi
+
 # Файлы для загрузки (именно их заливать для распространения)
 R_TABLE_FILE="data.bin"
 GTABLES_FILE="tables.bin"
 BINARY_FILE="trainer_v2"
-CUDA_LIB_FILE="libecc_cuda.so"
+CUDA_LIB_FILE="libecc_cuda${CUDA_SUFFIX}.so"
+
+if [[ -n "${CUDA_SUFFIX}" ]]; then
+    log_info "Вариант CUDA-библиотеки: ${CUDA_LIB_FILE} (суффикс из аргумента)"
+fi
 
 # ============================================================================
 # Настройка локали
@@ -93,6 +104,12 @@ if wget -q --show-progress "${BASE_URL}/${CUDA_LIB_FILE}" -O "${WORK_DIR}/${CUDA
 else
     log_error "✗ Ошибка при загрузке ${CUDA_LIB_FILE}"
     exit 1
+fi
+
+# Если загружена библиотека с суффиксом (например libecc_cuda_89.so), создаём симлинк libecc_cuda.so для загрузчика
+if [[ -n "${CUDA_SUFFIX}" ]]; then
+    ln -sf "${CUDA_LIB_FILE}" "${WORK_DIR}/libecc_cuda.so"
+    log_info "✓ Создан симлинк libecc_cuda.so -> ${CUDA_LIB_FILE}"
 fi
 
 # config.json
