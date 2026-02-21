@@ -1,11 +1,10 @@
 //! Key hunter: one GPU thread — get X part, run iterations, push results.
 
 use crate::config::Config;
-use crate::hash160::{Hash160, read_hash160_targets};
+use crate::hash160::{Hash160Targets, read_hash160_targets};
 use crate::results::{run_results_processor, Hash160SearchResult};
 use crate::xpart::XPartManager;
 use crossbeam_channel::bounded;
-use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -16,6 +15,11 @@ use crate::cuda::{device_count, keyhunt_search_result_from_c, KeyhuntHandle, Key
 
 const RESULT_QUEUE_CAP: usize = 1024;
 const STATUS_LOG_INTERVAL_MS: u64 = 5000;
+
+#[inline]
+fn gpu_tag(device_id: i32) -> String {
+    format!("[GPU {}]", device_id)
+}
 
 pub struct StatusInfo {
     pub data_per_second: f64,
@@ -45,12 +49,13 @@ pub fn run(
         log::warn!("No hash160 targets in config, stopping");
         return Ok(());
     }
-    let targets = read_hash160_targets(targets_paths)?;
+    let targets: Hash160Targets = read_hash160_targets(targets_paths)?;
     if targets.is_empty() {
         log::warn!("Loaded 0 hash160 targets, stopping");
         return Ok(());
     }
     log::info!("Loaded {} hash160 targets", targets.len());
+    let targets = Arc::new(targets);
 
     #[cfg(feature = "cuda")]
     let gpu_count = device_count();
@@ -118,7 +123,7 @@ pub fn run(
     let mut handles = Vec::new();
     for device_id in 0..gpu_count {
         let config = config.clone();
-        let targets = targets.clone();
+        let targets = Arc::clone(&targets);
         let result_tx = result_tx.clone();
         let xpart = xpart_arc.clone();
         let http = http_client.clone();
@@ -127,7 +132,7 @@ pub fn run(
             run_one_gpu(
                 device_id,
                 &config,
-                &targets,
+                targets,
                 result_tx,
                 xpart,
                 http,
@@ -146,7 +151,7 @@ pub fn run(
 fn run_one_gpu(
     device_id: i32,
     config: &Config,
-    targets: &HashSet<Hash160>,
+    targets: Arc<Hash160Targets>,
     result_tx: crossbeam_channel::Sender<Hash160SearchResult>,
     xpart_manager: Option<Arc<XPartManager>>,
     http_client: Option<Arc<crate::http_client::HttpClient>>,
@@ -163,7 +168,7 @@ fn run_one_gpu(
         let mut handle = match KeyhuntHandle::init(device_id) {
             Ok(h) => h,
             Err(e) => {
-                log::error!("[{}] keyhunt_init failed: {}", device_id, e);
+                log::error!("{} keyhunt_init failed: {}", gpu_tag(device_id), e);
                 return;
             }
         };
@@ -172,19 +177,20 @@ fn run_one_gpu(
         let grid = config.grid_size();
         let block = config.block_size();
         if handle.set_params(pts, comp, grid, block).is_err() {
-            log::error!("[{}] set_params failed", device_id);
+            log::error!("{} set_params failed", gpu_tag(device_id));
             return;
         }
-        let target_vec: Vec<Hash160> = targets.iter().copied().collect();
-        if handle.set_targets(&target_vec).is_err() {
-            log::error!("[{}] set_targets failed", device_id);
+        if handle.set_targets(targets.as_slice()).is_err() {
+            log::error!("{} set_targets failed", gpu_tag(device_id));
             return;
         }
         if handle.prepare().is_err() {
-            log::error!("[{}] prepare failed", device_id);
+            log::error!("{} prepare failed", gpu_tag(device_id));
             return;
         }
         let keys_per_iter = handle.keys_per_iteration();
+        log::info!("{} pointsPerThread={} grid={} block={} → keysPerIteration={}",
+            gpu_tag(device_id), pts, grid, block, keys_per_iter);
         // Как в C++: при 0 берём u32::MAX ключей (полное пространство Y для одного X), не u64::MAX
         let total_to_generate = if config.keys_number_to_generate() == 0 {
             u32::MAX as u64
@@ -193,8 +199,8 @@ fn run_one_gpu(
         };
         let total_iters = (total_to_generate / keys_per_iter as u64) as u32;
         let total_iters = if total_iters == 0 { 1 } else { total_iters };
-        log::info!("[{}] KeyHunter: total iterations: {}, keysPerIteration: {}",
-            device_id, total_iters, keys_per_iter);
+        log::info!("{} total iterations: {}, keysPerIteration: {}",
+            gpu_tag(device_id), total_iters, keys_per_iter);
 
         let mut period_keys: u64 = 0;
         let mut period_ms: u64 = 0;
@@ -206,8 +212,8 @@ fn run_one_gpu(
 
         if !config.specific_x_values().is_empty() {
             for (i, &private_x) in config.specific_x_values().iter().enumerate() {
-                log::info!("[{}] [{}/{}] Generating for privateXPart: {:#x}",
-                    device_id, i + 1, config.specific_x_values().len(), private_x);
+                log::info!("{} [{}/{}] next x part: {:#x}",
+                    gpu_tag(device_id), i + 1, config.specific_x_values().len(), private_x);
                 run_iterations_for_x(
                     &mut handle,
                     private_x,
@@ -215,7 +221,7 @@ fn run_one_gpu(
                     keys_per_iter,
                     &mut result_buf,
                     &result_tx,
-                    targets,
+                    targets.as_ref(),
                     &mut period_keys,
                     &mut period_ms,
                     &mut total_keys,
@@ -239,17 +245,18 @@ fn run_one_gpu(
                 match client.get_x_part_number() {
                     Ok(n) => n,
                     Err(e) => {
-                        log::error!("[{}] get_x_part_number failed: {}, exiting", device_id, e);
+                        log::error!("{} get_x_part_number failed: {}, exiting", gpu_tag(device_id), e);
                         return;
                     }
                 }
             } else {
-                log::error!("[{}] No server config and not force_private_x_part, exiting", device_id);
+                log::error!("{} No server config and not force_private_x_part, exiting", gpu_tag(device_id));
                 return;
             };
 
-            log::info!("[{}] Generating for privateXPart: {:#x}", device_id, private_x);
+            log::info!("{} next x part: {:#x}", gpu_tag(device_id), private_x);
 
+            let t_xpart = std::time::Instant::now();
             run_iterations_for_x(
                 &mut handle,
                 private_x,
@@ -257,7 +264,7 @@ fn run_one_gpu(
                 keys_per_iter,
                 &mut result_buf,
                 &result_tx,
-                targets,
+                targets.as_ref(),
                 &mut period_keys,
                 &mut period_ms,
                 &mut total_keys,
@@ -268,6 +275,9 @@ fn run_one_gpu(
                 status_callback.as_ref().map(|v| &**v),
                 xpart_manager.as_deref(),
             );
+            let elapsed_ms = t_xpart.elapsed().as_millis();
+            log::info!("{} x part {:#x} done in {} ms (iters={} keys_per_iter={})",
+                gpu_tag(device_id), private_x, elapsed_ms, total_iters, keys_per_iter);
 
             if config.force_private_x_part() {
                 break;
@@ -301,7 +311,7 @@ fn run_iterations_for_x(
     keys_per_iter: u32,
     result_buf: &mut [KeyhuntSearchResult],
     result_tx: &crossbeam_channel::Sender<Hash160SearchResult>,
-    targets: &HashSet<Hash160>,
+    targets: &Hash160Targets,
     period_keys: &mut u64,
     period_ms: &mut u64,
     total_keys: &mut u64,
@@ -316,28 +326,31 @@ fn run_iterations_for_x(
     if handle.pregenerate_keys(private_x, 0).is_err() { return None; }
     if handle.launch_kernel().is_err() { return None; }
 
+    let mut pregenerate_ms: u64 = 0;
+    let mut sync_ms: u64 = 0;
+    let mut cpu_check_ms: u64 = 0;
+    let mut launch_ms: u64 = 0;
+
     for iter in 0..total_iters {
         let t0 = Instant::now();
 
-        // Determine the NEXT (xpart, iter) to pre-generate while the current kernel runs.
-        // At the last iteration of this xpart, try to peek at the next xpart from the
-        // pre-fetch queue — this eliminates any GPU idle gap between xpart transitions.
         let (next_x, next_iter) = if iter + 1 < total_iters {
             (private_x, iter + 1)
         } else {
-            // Last iteration: try to get next xpart without blocking.
             let nx = xpart_manager
                 .and_then(|xm| xm.try_get_next_x_part())
-                .unwrap_or(private_x);  // fallback: re-use same xpart (caller will break if needed)
+                .unwrap_or(private_x);
             (nx, 0u32)
         };
 
-        // While the current kernel runs, pre-generate keys for the next iteration / xpart.
-        // mInitStream and mGeneratorStream are independent → true concurrency on the GPU.
         if handle.pregenerate_keys(next_x, next_iter).is_err() { return None; }
+        pregenerate_ms += t0.elapsed().as_millis() as u64;
 
-        // Sync the kernel that was launched in the PREVIOUS loop step, then read results.
+        let t_sync = Instant::now();
         let n = handle.sync_and_get_results(result_buf, iter, private_x);
+        sync_ms += t_sync.elapsed().as_millis() as u64;
+
+        let t_cpu = Instant::now();
         for i in 0..n as usize {
             let r = &result_buf[i];
             let digest_be = crate::hash160::Hash160([
@@ -352,20 +365,29 @@ fn run_iterations_for_x(
                 let _ = result_tx.try_send(out);
             }
         }
+        cpu_check_ms += t_cpu.elapsed().as_millis() as u64;
 
-        // Launch the kernel for the pre-generated keys (sync keygen first internally,
-        // then swap buffers and launch).  The kernel starts immediately after.
+        let t_launch = Instant::now();
         if handle.launch_kernel().is_err() { return None; }
+        launch_ms += t_launch.elapsed().as_millis() as u64;
 
-        let elapsed = t0.elapsed().as_millis() as u64;
+        // Микросекунды: при малом points_per_thread итерация < 1 ms, as_millis()=0 → скорость считалась неверно.
+        let elapsed_us = t0.elapsed().as_micros() as u64;
         *total_keys += keys_per_iter as u64;
-        *total_ms += elapsed;
+        *total_ms += elapsed_us;
         *period_keys += keys_per_iter as u64;
-        *period_ms += elapsed;
+        *period_ms += elapsed_us;
 
-        if *period_ms >= status_period_ms {
-            let secs = *period_ms as f64 / 1000.0;
-            let cur_mkeys = (*period_keys as f64 / secs) / 1e6;
+        // total_ms/period_ms здесь в микросекундах. Порог в мс → умножаем на 1000.
+        let send_status = *period_ms >= status_period_ms * 1000 && *total_ms > 0;
+        if send_status {
+            let period_secs = (*period_ms as f64 / 1_000_000.0).max(0.000_001);
+            let cur_mkeys = (*period_keys as f64 / period_secs) / 1e6;
+            let cur_mkeys = if cur_mkeys > 100_000.0 {
+                (*total_keys as f64 / 1e6) / (*total_ms as f64 / 1_000_000.0)
+            } else {
+                cur_mkeys
+            };
             if *min_mkeys == 0.0 || cur_mkeys < *min_mkeys {
                 *min_mkeys = cur_mkeys;
             }
@@ -373,9 +395,9 @@ fn run_iterations_for_x(
                 cb(StatusInfo {
                     data_per_second: cur_mkeys,
                     min_data_per_second: *min_mkeys,
-                    seconds: secs,
+                    seconds: *total_ms as f64 / 1_000_000.0,
                     total_keys_since_start: *total_keys,
-                    total_time_ms: *total_ms,
+                    total_time_ms: *total_ms / 1000,
                     device: device_id,
                     device_name: format!("GPU {}", device_id),
                     free_device_memory: 0,
@@ -389,8 +411,13 @@ fn run_iterations_for_x(
         }
     }
 
+    // total_ms в этом блоке — микросекунды (см. выше).
+
+    // pregen = накладные расходы на запуск keygen (≈ launch overhead × iters); для multi-GPU снижать кол-во итераций (больше points_per_thread).
+    log::info!("{} x part {:#x} timing: pregen {} ms  sync {} ms  cpu {} ms  launch {} ms  (iters={})",
+        gpu_tag(device_id), private_x, pregenerate_ms, sync_ms, cpu_check_ms, launch_ms, total_iters);
+
     // The last kernel launched in the loop is still running.
-    // Sync it and read its results before returning.
     let n = handle.sync_and_get_results(result_buf, total_iters - 1, private_x);
     for i in 0..n as usize {
         let r = &result_buf[i];

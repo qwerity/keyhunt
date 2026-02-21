@@ -10,6 +10,7 @@ use std::time::Duration;
 pub struct HttpClient {
     base_url: String,
     auth_header: String,
+    machine_id: String,
     client: Client,
 }
 
@@ -23,10 +24,21 @@ impl HttpClient {
             .timeout(Duration::from_secs(timeout))
             .build()
             .expect("reqwest client");
+        let machine_id = config.machine_id.as_deref().unwrap_or("").to_string();
         HttpClient {
             base_url,
             auth_header: config.authorisation_header.clone(),
+            machine_id,
             client,
+        }
+    }
+
+    fn auth_request(&self, req: reqwest::blocking::RequestBuilder) -> reqwest::blocking::RequestBuilder {
+        let r = req.header("Authorization", &self.auth_header);
+        if self.machine_id.is_empty() {
+            r
+        } else {
+            r.header("X-Machine-Id", &self.machine_id)
         }
     }
 
@@ -42,10 +54,7 @@ impl HttpClient {
     /// GET /status
     pub fn host_alive(&self) -> bool {
         let url = format!("{}/status", self.base_url);
-        let res = self.client
-            .get(&url)
-            .header("Authorization", &self.auth_header)
-            .send();
+        let res = self.auth_request(self.client.get(&url)).send();
         match res {
             Ok(r) => r.status().is_success(),
             Err(_) => false,
@@ -55,10 +64,7 @@ impl HttpClient {
     /// GET /get_number?count=1 -> {"numbers": [N]}
     pub fn get_x_part_number(&self) -> Result<u32, Error> {
         let url = format!("{}/get_number?count=1", self.base_url);
-        let res = self.client
-            .get(&url)
-            .header("Authorization", &self.auth_header)
-            .send()
+        let res = self.auth_request(self.client.get(&url)).send()
             .map_err(|e| Error::Http(e.to_string()))?;
         if !res.status().is_success() {
             return Err(Error::Http(format!("get_number status {}", res.status())));
@@ -84,9 +90,7 @@ impl HttpClient {
         }
         let body = serde_json::json!({ "nums": numbers });
         let url = format!("{}/mark_done", self.base_url);
-        let res = self.client
-            .post(&url)
-            .header("Authorization", &self.auth_header)
+        let res = self.auth_request(self.client.post(&url))
             .header("Content-Type", "application/json")
             .json(&body)
             .send();
@@ -111,9 +115,7 @@ impl HttpClient {
     pub fn set_x_part_found(&self, x: u32, y: u32) -> bool {
         let body = serde_json::json!({ "x": x, "y": y });
         let url = format!("{}/set_found", self.base_url);
-        let res = self.client
-            .post(&url)
-            .header("Authorization", &self.auth_header)
+        let res = self.auth_request(self.client.post(&url))
             .header("Content-Type", "application/json")
             .json(&body)
             .send();

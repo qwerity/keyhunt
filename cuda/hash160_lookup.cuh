@@ -2,8 +2,9 @@
 
 #include "defines.cuh"
 
-#include <unordered_set>
+#include <cstddef>
 #include <memory>
+#include <unordered_set>
 
 __device__ bool checkHash(const uint32_t hash[5]);
 __device__ bool checkHash(const hash160& hash);
@@ -21,6 +22,13 @@ public:
     Hash160Lookup& operator=(Hash160Lookup&& rhs) noexcept;
 
     void setTargets(const std::unordered_set<hash160> &hash160Targets) const;
+
+    /// Set targets from contiguous array (no internal copy; use from C API / Rust to avoid duplicate storage).
+    void setTargets(const hash160* targets, size_t count) const;
+
+    /// Set targets from callback (zero temp allocation; getter(user_data, index, out) fills *out).
+    using Hash160Getter = void (*)(const void* user_data, size_t index, hash160* out);
+    void setTargets(size_t count, const void* user_data, Hash160Getter getter) const;
 
 private:
     struct Impl;

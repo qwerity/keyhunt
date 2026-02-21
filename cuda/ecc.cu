@@ -29,6 +29,15 @@ extern __device__ const secp256k1_ge_storage* d_gTable_ptr;
 extern __constant__ const uint64_t* d_gTableX_4limb_ptr;
 extern __constant__ const uint64_t* d_gTableY_4limb_ptr;
 
+/** Async keygen: same logic as Thrust transform, no host sync. Use in pregenerateKeysAsync. */
+__global__ void privateKeysForXKernel(uint32_t xPart, uint32_t yPartIncrementBy, uint256_t* __restrict__ out, uint32_t n)
+{
+    uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    PrivateKeyForXWithRandomYFunctor f(xPart, yPartIncrementBy);
+    out[i] = f(i);
+}
+
 struct ECC::Impl
 {
     cudaStream_t mGeneratorStream{};
@@ -124,9 +133,9 @@ struct ECC::Impl
             const int optimalGridSize = deviceProp.multiProcessorCount * numBlocksPerSM;
             mGridSize = static_cast<uint32_t>(std::max(minGridSizeFused, optimalGridSize));
 
-            fprintf(stdout, "[GPU %d] %s, SMs: %d, Blocks/SM: %d, regs/thread: %d, occupancy: %d%% (%d/%d warps/SM), grid: %u, block: %u\n",
+            fprintf(stdout, "[GPU %d] %s | SMs %d Blocks/SM %d | grid %u block %u | occupancy %d%%\n",
                     deviceId, deviceProp.name, deviceProp.multiProcessorCount, numBlocksPerSM,
-                    attr.numRegs, occupancyPct, activeWarpsPerSM, maxWarpsPerSM, mGridSize, mBlockSize);
+                    mGridSize, mBlockSize, occupancyPct);
         }
 
         mKeysNumberPerIteration = mGridSize * mBlockSize * mPointsPerThread;
@@ -218,17 +227,17 @@ struct ECC::Impl
 
     // Pipeline step 1: write private keys into the STAGING (next) buffer, async.
     // Returns immediately; mInitStream runs concurrently with mGeneratorStream.
+    // Explicit kernel launch (no Thrust) to avoid any implicit stream sync in Thrust backend.
     void pregenerateKeysAsync(const uint32_t privateXPart, const uint32_t iteration)
     {
         const uint32_t keysNumberPerIteration = getKeysNumberPerIteration();
         const uint32_t increment = iteration * keysNumberPerIteration;
         const int nextBuf = 1 - mCurBuf;
 
-        thrust::transform(thrust::cuda::par.on(mInitStream),
-                          thrust::counting_iterator<uint32_t>(0u),
-                          thrust::counting_iterator<uint32_t>(keysNumberPerIteration),
-                          d_privateKeys[nextBuf].begin(),
-                          PrivateKeyForXWithRandomYFunctor(privateXPart, increment));
+        uint256_t* ptr = thrust::raw_pointer_cast(d_privateKeys[nextBuf].data());
+        const uint32_t block = 256u;
+        const uint32_t grid = (keysNumberPerIteration + block - 1u) / block;
+        privateKeysForXKernel<<<grid, block, 0, mInitStream>>>(privateXPart, increment, ptr, keysNumberPerIteration);
         // No sync — caller is responsible for synchronizing mInitStream before launchKernelAsync.
     }
 

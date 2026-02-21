@@ -25,14 +25,32 @@ fn detect_cuda_from_nvcc() -> Result<String, std::env::VarError> {
 }
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=KEYHUNT_CUDA_LIB_DIR");
+    println!("cargo:rerun-if-env-changed=KEYHUNT_UTIL_LIB_DIR");
     if std::env::var("CARGO_FEATURE_CUDA").is_ok() {
-        let lib_dir = std::env::var("KEYHUNT_CUDA_LIB_DIR").unwrap_or_else(|_| "../build/cuda".into());
-        println!("cargo:rustc-link-search=native={}", lib_dir);
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let lib_dir_raw = std::env::var("KEYHUNT_CUDA_LIB_DIR").unwrap_or_else(|_| "../build/cuda".into());
+        // Абсолютный путь — как есть; относительный — относительно корня крейта (rust/)
+        let lib_dir = if std::path::Path::new(&lib_dir_raw).is_absolute() {
+            std::path::PathBuf::from(lib_dir_raw)
+        } else {
+            std::path::Path::new(&manifest_dir).join(&lib_dir_raw)
+        };
+        let lib_dir = lib_dir.canonicalize().unwrap_or_else(|_| lib_dir.clone());
+        let lib_dir_str = lib_dir.display().to_string();
+        // Re-run when CUDA libs change so we pick .so vs .a correctly (e.g. after building keyhunt_cuda_capi).
+        if std::path::Path::new(&lib_dir_str).exists() {
+            println!("cargo:rerun-if-changed={}", lib_dir_str);
+        }
+        println!("cargo:rustc-link-search=native={}", lib_dir_str);
         // На случай если CMake кладёт .a в build/ а не build/cuda/
         if let Ok(root) = std::env::var("KEYHUNT_CUDA_LIB_DIR") {
             if root.ends_with("/cuda") {
                 if let Some(parent) = std::path::Path::new(&root).parent() {
-                    println!("cargo:rustc-link-search=native={}", parent.display());
+                    let parent_abs = std::path::Path::new(&manifest_dir).join(parent);
+                    if parent_abs.exists() {
+                        println!("cargo:rustc-link-search=native={}", parent_abs.canonicalize().unwrap_or(parent_abs).display());
+                    }
                 }
             }
         }
@@ -72,18 +90,27 @@ fn main() {
             }
         }
 
-        // Порядок: зависимости первыми. ecc_cuda — целиком (--whole-archive), иначе линкер не подтянет secp256k1::* из своих .o
-        // Передаём libecc_cuda.a явно между --whole-archive и --no-whole-archive (Cargo иначе ставит флаги не рядом с .a)
+        // ecc_cuda: предпочтительно .so (device link делается nvcc при сборке .so), иначе .a с --whole-archive
         println!("cargo:rustc-link-lib=static=cudart_static");
         #[cfg(target_os = "linux")]
         {
-            let ecc_path = std::path::Path::new(&lib_dir).join("libecc_cuda.a");
-            if let Ok(canon) = ecc_path.canonicalize() {
+            let ecc_so = lib_dir.join("libecc_cuda.so");
+            let ecc_a = lib_dir.join("libecc_cuda.a");
+            if ecc_so.exists() {
+                // Динамическая линковка: символы __fatbinwrap_* / __cudaRegisterLinkedBinary_* уже в .so
+                println!("cargo:rustc-link-search=native={}", lib_dir.display());
+                // rpath: искать libecc_cuda.so рядом с бинарником ($ORIGIN) — чтобы на удалённой машине не задавать LD_LIBRARY_PATH
+                println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+                println!("cargo:rustc-link-lib=dylib=ecc_cuda");
+            } else if let Ok(canon) = ecc_a.canonicalize() {
                 println!("cargo:rustc-link-arg=-Wl,--whole-archive");
                 println!("cargo:rustc-link-arg=-Wl,{}", canon.display());
                 println!("cargo:rustc-link-arg=-Wl,--no-whole-archive");
             } else {
-                println!("cargo:rustc-link-lib=static=ecc_cuda");
+                panic!(
+                    "CUDA: не найден libecc_cuda.so или libecc_cuda.a в {}. Соберите CUDA: ./scripts/build_rust_with_cuda.sh или cmake -B build && cmake --build build --target keyhunt_cuda_capi",
+                    lib_dir.display()
+                );
             }
         }
         #[cfg(not(target_os = "linux"))]

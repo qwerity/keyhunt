@@ -128,7 +128,6 @@ cmake --build build --config=Release -j 14 --target cuda-keyhunt-pvk
 ## Конфиг и запуск
 
 Рядом с бинарником должен лежать `config.json`. Пример: `example.config.json`. Ключи: `hash160_targets` (список файлов с целями), `server` (url, port, authorisationHeader), `pointsPerThread`, `blockSize`, `gridSize`, `forcePrivateXPart`, `specificXValues` и др.
-
 ---
 
 ## Дополнительно

@@ -14,8 +14,8 @@ ARCH="${1:-86}"
 
 echo "=== 1/2 CMake (CUDA + util) ==="
 cmake -B build -DCMAKE_CUDA_ARCHITECTURES="$ARCH"
-cmake --build build --target keyhunt_cuda_capi -j "$(nproc 2>/dev/null || echo 4)"
-cmake --build build --target util -j "$(nproc 2>/dev/null || echo 4)"
+# Build both CUDA lib (libecc_cuda.so + keyhunt_cuda_capi) and util so Rust linker finds them
+cmake --build build --target keyhunt_cuda_capi util -j "$(nproc 2>/dev/null || echo 4)"
 
 echo "=== 2/2 Rust (cuda, release) ==="
 export KEYHUNT_CUDA_LIB_DIR="$PWD/build/cuda"
@@ -46,4 +46,7 @@ if ! cargo build --release --manifest-path rust/Cargo.toml --features cuda --bin
   exit 1
 fi
 
+# Чтобы ./keyhunt-pvk из rust/target/release/ находил libecc_cuda.so (rpath $ORIGIN)
+cp -f build/cuda/libecc_cuda.so rust/target/release/ 2>/dev/null || true
 echo "OK: rust/target/release/keyhunt-pvk"
+echo "    Запуск из корня: ./rust/target/release/keyhunt-pvk   или из release: cd rust/target/release && ./keyhunt-pvk"

@@ -10,8 +10,9 @@ use std::path::Path;
 
 use memmap2::Mmap;
 
-/// 20-byte hash as 5 x u32 (matches CUDA hash160).
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+/// 20-byte hash as 5 x u32 (matches CUDA hash160). repr(C) for FFI with keyhunt C API.
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Hash160(pub [u32; 5]);
 
 const HASH160_SIZE: usize = 20;
@@ -170,11 +171,68 @@ pub fn write_hash160_binary(path: &Path, hashes: &HashSet<Hash160>) -> Result<()
 }
 
 // ---------------------------------------------------------------------------
-// Dispatcher
+// Vec (для C API / bloom) + HashSet для O(1) проверки на CPU (памяти хватает).
 // ---------------------------------------------------------------------------
 
-/// Load all targets from list of paths. `.bin` = binary, else hex.
-pub fn read_hash160_targets(paths: &[String]) -> Result<HashSet<Hash160>, crate::Error> {
+/// Цели: отсортированный Vec (для C API) + HashSet для быстрого contains().
+#[derive(Clone)]
+pub struct Hash160Targets {
+    /// Отсортированный список для keyhunt_set_targets (C API / bloom).
+    inner: Vec<Hash160>,
+    /// O(1) проверка при разборе результатов с GPU (без бинарного поиска по 63M).
+    set: HashSet<Hash160>,
+}
+
+impl Hash160Targets {
+    #[inline]
+    pub fn contains(&self, h: &Hash160) -> bool {
+        self.set.contains(h)
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Срез для передачи в C API (bloom / set_targets).
+    pub fn as_slice(&self) -> &[Hash160] {
+        &self.inner
+    }
+}
+
+fn load_into_sorted_vec(paths: &[String]) -> Result<Vec<Hash160>, crate::Error> {
+    let mut vec = Vec::new();
+    for path in paths {
+        let path = Path::new(path);
+        if path.extension().map(|e| e == "bin").unwrap_or(false) {
+            let set = read_hash160_binary(path)?;
+            vec.extend(set);
+        } else {
+            let set = read_hash160_hex(path)?;
+            vec.extend(set);
+        }
+    }
+    vec.sort_unstable();
+    vec.dedup();
+    Ok(vec)
+}
+
+/// Загрузка целей: отсортированный Vec (для C API) + HashSet для O(1) contains().
+pub fn read_hash160_targets(paths: &[String]) -> Result<Hash160Targets, crate::Error> {
+    let inner = load_into_sorted_vec(paths)?;
+    let set: HashSet<Hash160> = inner.iter().copied().collect();
+    Ok(Hash160Targets { inner, set })
+}
+
+// ---------------------------------------------------------------------------
+// Legacy: HashSet-based loading (for tools like convert_hash160_to_binary)
+// ---------------------------------------------------------------------------
+
+/// Load all targets from list of paths into a HashSet. `.bin` = binary, else hex.
+pub fn read_hash160_targets_set(paths: &[String]) -> Result<HashSet<Hash160>, crate::Error> {
     let mut targets = HashSet::new();
     for path in paths {
         let path = Path::new(path);

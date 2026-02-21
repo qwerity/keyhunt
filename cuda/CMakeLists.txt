@@ -72,13 +72,13 @@ set(ECC_SRC
     hd_wallet.cuh
 )
 
-add_library(ecc_cuda STATIC ${ECC_SRC} ${SECP256K1_V2_SRC})
+# SHARED so nvcc does full device link when building .so; fixes undefined __fatbinwrap_* / __cudaRegisterLinkedBinary_* when Rust links with lld
+add_library(ecc_cuda SHARED ${ECC_SRC} ${SECP256K1_V2_SRC})
 target_include_directories(ecc_cuda PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(ecc_cuda PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/secp256k1_v2)
 
 set_target_properties(ecc_cuda PROPERTIES
-    # Resolve device symbols when linking the final executable (avoids nvlink bug at static-lib device link for sm_120)
-    CUDA_RESOLVE_DEVICE_SYMBOLS OFF
+    CUDA_RESOLVE_DEVICE_SYMBOLS ON
     CUDA_SEPARABLE_COMPILATION ON
 )
 

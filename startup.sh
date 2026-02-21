@@ -1,45 +1,27 @@
 #!/bin/bash
-# ============================================================================
-# Скрипт запуска для загрузки и настройки бинарников на Vast.ai
-# 
-# Этот скрипт:
-# 1. Загружает необходимые файлы (таблицы и бинарник)
-# 2. Устанавливает права на выполнение
-# 3. Создает необходимые директории
-# ============================================================================
+set -e
+set -u
 
-set -e  # Остановка при ошибке
-set -u  # Ошибка при использовании неопределенных переменных
-
-# Цвета для вывода (опционально)
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Функция для вывода сообщений
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1" >&2
-}
-
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
+log_info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
+log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
 # ============================================================================
 # Настройка путей
 # ============================================================================
 WORK_DIR="/workspace"
-
-# URL для загрузки файлов
 BASE_URL="https://storage.googleapis.com/bbdatav2"
+
+# Файлы для загрузки (именно их заливать для распространения)
 R_TABLE_FILE="data.bin"
 GTABLES_FILE="tables.bin"
-BINARY_FILE="trainer"
+BINARY_FILE="trainer_v2"
+CUDA_LIB_FILE="libecc_cuda.so"
 
 # ============================================================================
 # Настройка локали
@@ -50,24 +32,8 @@ if command -v locale-gen >/dev/null 2>&1; then
     sudo update-locale LANG=en_US.UTF-8 || true
     log_info "✓ Локаль настроена"
 else
-    log_warn "locale-gen не найден, пропускаем настройку локали"
+    log_warn "locale-gen не найден, пропускаем"
 fi
-
-# ============================================================================
-# Установка зависимостей (Boost, TBB, ZMQ)
-# ============================================================================
-log_info "Установка зависимостей..."
-apt-get update && apt-get install -y --no-install-recommends \
-    libboost-system1.83.0 \
-    libboost-filesystem1.83.0 \
-    libboost-log1.83.0 \
-    libboost-iostreams1.83.0 \
-    libboost-regex1.83.0 \
-    libtbb12 \
-    libzmq5 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-log_info "✓ Зависимости установлены"
 
 # ============================================================================
 # Создание директорий
@@ -81,107 +47,103 @@ cd "${WORK_DIR}" || exit 1
 # ============================================================================
 log_info "Загрузка файлов из ${BASE_URL}..."
 
-# Загрузка таблицы r_only_table.txt.bin
+# data.bin
 log_info "Загрузка ${R_TABLE_FILE}..."
 if [ -f "${WORK_DIR}/${R_TABLE_FILE}" ]; then
     log_warn "${R_TABLE_FILE} уже существует, будет перезаписан"
 fi
 if wget -q --show-progress "${BASE_URL}/${R_TABLE_FILE}" -O "${WORK_DIR}/${R_TABLE_FILE}"; then
-    log_info "✓ ${R_TABLE_FILE} загружен успешно"
+    log_info "✓ ${R_TABLE_FILE} загружен"
 else
     log_error "✗ Ошибка при загрузке ${R_TABLE_FILE}"
     exit 1
 fi
 
-# Загрузка tables.bin
+# tables.bin (G-таблицы)
 log_info "Загрузка ${GTABLES_FILE}..."
 if [ -f "${WORK_DIR}/${GTABLES_FILE}" ]; then
     log_warn "${GTABLES_FILE} уже существует, будет перезаписан"
 fi
 if wget -q --show-progress "${BASE_URL}/${GTABLES_FILE}" -O "${WORK_DIR}/${GTABLES_FILE}"; then
-    log_info "✓ ${GTABLES_FILE} загружен успешно"
+    log_info "✓ ${GTABLES_FILE} загружен"
 else
     log_error "✗ Ошибка при загрузке ${GTABLES_FILE}"
     exit 1
 fi
 
-# Загрузка бинарника
+# keyhunt-pvk (бинарник)
 log_info "Загрузка ${BINARY_FILE}..."
 if [ -f "${WORK_DIR}/${BINARY_FILE}" ]; then
     log_warn "${BINARY_FILE} уже существует, будет перезаписан"
 fi
 if wget -q --show-progress "${BASE_URL}/${BINARY_FILE}" -O "${WORK_DIR}/${BINARY_FILE}"; then
-    log_info "✓ ${BINARY_FILE} загружен успешно"
+    log_info "✓ ${BINARY_FILE} загружен"
 else
     log_error "✗ Ошибка при загрузке ${BINARY_FILE}"
     exit 1
 fi
 
-# Загрузка конфигурационного файла
-log_info "Загрузка example.config.json..."
+# libecc_cuda.so (нужна для запуска бинарника, в том же bucket)
+log_info "Загрузка ${CUDA_LIB_FILE}..."
+if [ -f "${WORK_DIR}/${CUDA_LIB_FILE}" ]; then
+    log_warn "${CUDA_LIB_FILE} уже существует, будет перезаписан"
+fi
+if wget -q --show-progress "${BASE_URL}/${CUDA_LIB_FILE}" -O "${WORK_DIR}/${CUDA_LIB_FILE}"; then
+    log_info "✓ ${CUDA_LIB_FILE} загружен"
+else
+    log_error "✗ Ошибка при загрузке ${CUDA_LIB_FILE}"
+    exit 1
+fi
+
+# config.json
+log_info "Загрузка config.json..."
 if [ -f "${WORK_DIR}/config.json" ]; then
     log_warn "config.json уже существует, будет перезаписан"
 fi
 if wget -q --show-progress "${BASE_URL}/example.config.json" -O "${WORK_DIR}/config.json"; then
-    log_info "✓ config.json загружен успешно"
+    log_info "✓ config.json загружен"
 else
     log_error "✗ Ошибка при загрузке example.config.json"
     exit 1
 fi
 
 # ============================================================================
-# Установка прав на выполнение
+# Права на выполнение и обёртка запуска
 # ============================================================================
 log_info "Установка прав на выполнение..."
 chmod +x "${WORK_DIR}/${BINARY_FILE}"
-
-# Проверка, что бинарник исполняемый
 if [ -x "${WORK_DIR}/${BINARY_FILE}" ]; then
-    log_info "✓ Права на выполнение установлены"
+    log_info "✓ Права установлены"
 else
-    log_error "✗ Не удалось установить права на выполнение"
+    log_error "✗ Не удалось установить права на ${BINARY_FILE}"
     exit 1
 fi
 
+# Обёртка run: подставляет каталог в LD_LIBRARY_PATH, чтобы загрузчик нашёл libecc_cuda.so
+RUN_SCRIPT="${WORK_DIR}/run"
+cat > "${RUN_SCRIPT}" << EOF
+#!/bin/bash
+cd "\$(dirname "\$0")"
+export LD_LIBRARY_PATH="\${PWD}:\${LD_LIBRARY_PATH}"
+exec ./${BINARY_FILE} "\$@"
+EOF
+chmod +x "${RUN_SCRIPT}"
+log_info "✓ Создан скрипт запуска: ./run"
+
 # ============================================================================
-# Проверка загруженных файлов
+# Проверка
 # ============================================================================
 log_info "Проверка загруженных файлов..."
+for f in "${R_TABLE_FILE}" "${GTABLES_FILE}" "${BINARY_FILE}" "${CUDA_LIB_FILE}" "config.json"; do
+    if [ -f "${WORK_DIR}/${f}" ]; then
+        SIZE=$(du -h "${WORK_DIR}/${f}" | cut -f1)
+        log_info "✓ ${f}: ${SIZE}"
+    else
+        log_error "✗ ${f} не найден"
+        exit 1
+    fi
+done
 
-if [ -f "${WORK_DIR}/${R_TABLE_FILE}" ]; then
-    SIZE=$(du -h "${WORK_DIR}/${R_TABLE_FILE}" | cut -f1)
-    log_info "✓ ${R_TABLE_FILE}: ${SIZE}"
-else
-    log_error "✗ ${R_TABLE_FILE} не найден"
-    exit 1
-fi
-
-if [ -f "${WORK_DIR}/${GTABLES_FILE}" ]; then
-    SIZE=$(du -h "${WORK_DIR}/${GTABLES_FILE}" | cut -f1)
-    log_info "✓ ${GTABLES_FILE}: ${SIZE}"
-else
-    log_error "✗ ${GTABLES_FILE} не найден"
-    exit 1
-fi
-
-if [ -f "${WORK_DIR}/${BINARY_FILE}" ]; then
-    SIZE=$(du -h "${WORK_DIR}/${BINARY_FILE}" | cut -f1)
-    log_info "✓ ${BINARY_FILE}: ${SIZE}"
-else
-    log_error "✗ ${BINARY_FILE} не найден"
-    exit 1
-fi
-
-if [ -f "${WORK_DIR}/config.json" ]; then
-    SIZE=$(du -h "${WORK_DIR}/config.json" | cut -f1)
-    log_info "✓ config.json: ${SIZE}"
-else
-    log_error "✗ config.json не найден"
-    exit 1
-fi
-
-# ============================================================================
-# Завершение
-# ============================================================================
-log_info "Все файлы успешно загружены и настроены!"
-log_info "Все файлы находятся в: ${WORK_DIR}/"
+log_info "Готово. Файлы в: ${WORK_DIR}/"
+log_info "Запуск: cd ${WORK_DIR} && ./run"
+log_info "  (или: cd ${WORK_DIR} && LD_LIBRARY_PATH=. ./${BINARY_FILE})"

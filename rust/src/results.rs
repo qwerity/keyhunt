@@ -33,7 +33,7 @@ fn format_result(r: &Hash160SearchResult) -> String {
         .collect::<String>();
     let comp = if r.compressed { "compressed" } else { "uncompressed" };
     format!(
-        "[{}][({:>10}, {:>10}) | {:<12}] private: {}, hash160: {}",
+        "[GPU {}] ({:>10}, {:>10}) | {:<12} | private: {} hash160: {}",
         r.cuda_device_id,
         r.private_x_part,
         r.private_y_part,
@@ -150,7 +150,7 @@ pub fn run_results_processor(
                 && config.specific_x_values().is_empty();
             if use_server {
                 if !http_client.set_x_part_found(r.private_x_part, r.private_y_part) {
-                    log::error!("set_found failed for ({}, {}), exiting", r.private_x_part, r.private_y_part);
+                    log::error!("[GPU {}] set_found failed for ({}, {}), exiting", r.cuda_device_id, r.private_x_part, r.private_y_part);
                     std::process::exit(1);
                 }
             }

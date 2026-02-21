@@ -46,6 +46,38 @@ namespace
         cudaCheckError(cudaMemcpyToSymbol(d_UseBloomFilter, &useBloomFilter, sizeof(bool)));
     }
 
+    void setTargetConstantMemory(const hash160* ptr, size_t count)
+    {
+        for (size_t i = 0; i < count; ++i)
+        {
+            uint32_t h[5];
+            SWAP32_HASH160(ptr[i].h, h);
+            cudaCheckError(cudaMemcpyToSymbol(d_TargetHash, h, sizeof(uint32_t) * 5, i * sizeof(uint32_t) * 5));
+        }
+        const uint32_t count32 = static_cast<uint32_t>(count);
+        cudaCheckError(cudaMemcpyToSymbol(d_NumTargetHashes, &count32, sizeof(uint32_t)));
+        constexpr uint32_t useBloomFilter{0};
+        cudaCheckError(cudaMemcpyToSymbol(d_UseBloomFilter, &useBloomFilter, sizeof(bool)));
+    }
+
+    using Hash160GetterFn = void (*)(const void*, size_t, hash160*);
+
+    void setTargetConstantMemoryFromGetter(size_t count, const void* user_data, Hash160GetterFn getter)
+    {
+        hash160 h;
+        for (size_t i = 0; i < count; ++i)
+        {
+            getter(user_data, i, &h);
+            uint32_t swapped[5];
+            SWAP32_HASH160(h.h, swapped);
+            cudaCheckError(cudaMemcpyToSymbol(d_TargetHash, swapped, sizeof(uint32_t) * 5, i * sizeof(uint32_t) * 5));
+        }
+        const uint32_t count32 = static_cast<uint32_t>(count);
+        cudaCheckError(cudaMemcpyToSymbol(d_NumTargetHashes, &count32, sizeof(uint32_t)));
+        constexpr uint32_t useBloomFilter{0};
+        cudaCheckError(cudaMemcpyToSymbol(d_UseBloomFilter, &useBloomFilter, sizeof(bool)));
+    }
+
     /**
      * Returns the optimal bloom filter size in bits given the probability of false-positives and the number of hash functions
     */
@@ -91,6 +123,38 @@ namespace
             }
         }
     }
+
+    void initializeBloomFilter(const hash160* ptr, size_t count, thrust::host_vector<uint32_t>& filter, const uint32_t mask)
+    {
+        for (size_t i = 0; i < count; ++i)
+        {
+            uint32_t h[5];
+            SWAP32_HASH160(ptr[i].h, h);
+            for (const uint32_t j : h)
+            {
+                const uint32_t idx = j & mask;
+                filter[idx / 32] |= (0x01 << (idx % 32));
+            }
+        }
+    }
+
+    void initializeBloomFilter64(const hash160* ptr, size_t count, thrust::host_vector<uint32_t>& filter, const uint64_t mask)
+    {
+        for (size_t i = 0; i < count; ++i)
+        {
+            uint64_t idx[5];
+            uint32_t hash[5];
+            SWAP32_HASH160(ptr[i].h, hash);
+            idx[0] = (static_cast<uint64_t>(hash[0]) << 32 | hash[1]) & mask;
+            idx[1] = (static_cast<uint64_t>(hash[2]) << 32 | hash[3]) & mask;
+            idx[2] = (static_cast<uint64_t>(hash[0] ^ hash[1]) << 32 | (hash[1] ^ hash[2])) & mask;
+            idx[3] = (static_cast<uint64_t>(hash[2] ^ hash[3]) << 32 | (hash[3] ^ hash[4])) & mask;
+            idx[4] = (static_cast<uint64_t>(hash[0] ^ hash[3]) << 32 | (hash[1] ^ hash[3])) & mask;
+            for (const uint64_t& k : idx)
+                filter[k / 32] |= (0x01 << (k % 32));
+        }
+    }
+
 }
 
 struct Hash160Lookup::Impl
@@ -141,6 +205,37 @@ struct Hash160Lookup::Impl
         cudaCheckError(cudaMemcpyToSymbol(d_BloomFilterPtr, &d_bloomFilterRawPtr, sizeof(uint32_t *)));
     }
 
+    void setTargetBloomFilter(const hash160* ptr, size_t count)
+    {
+        constexpr double requiredProbability{1.0e-12};
+        const uint32_t bloomFilterBits = getOptimalBloomFilterBits(requiredProbability, count);
+        const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
+        const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
+        const uint64_t bloomFilterMask = (1ULL << bloomFilterBits) - 1;
+        fprintf(stderr, "Allocating bloom filter (%d bits): %.02fMb\n", bloomFilterBits, static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
+
+        thrust::host_vector<uint32_t> filter(bloomFilterSizeWords);
+        thrust::fill(filter.begin(), filter.end(), 0);
+
+        const uint32_t useBloomFilter = bloomFilterBits <= 32 ? 1 : 2;
+        cudaCheckError(cudaMemcpyToSymbol(d_UseBloomFilter, &useBloomFilter, sizeof(uint32_t)));
+
+        if (useBloomFilter == 2)
+        {
+            initializeBloomFilter64(ptr, count, filter, bloomFilterMask);
+            cudaCheckError(cudaMemcpyToSymbol(d_BloomFilterMask64, &bloomFilterMask, sizeof(uint64_t)));
+        }
+        else
+        {
+            initializeBloomFilter(ptr, count, filter, static_cast<uint32_t>(bloomFilterMask));
+            cudaCheckError(cudaMemcpyToSymbol(d_BloomFilterMask, &bloomFilterMask, sizeof(uint32_t)));
+        }
+
+        d_bloomFilter = filter;
+        const auto* d_bloomFilterRawPtr = thrust::raw_pointer_cast(d_bloomFilter.data());
+        cudaCheckError(cudaMemcpyToSymbol(d_BloomFilterPtr, &d_bloomFilterRawPtr, sizeof(uint32_t *)));
+    }
+
     /**
     * Copies the target hashes to either constant memory, or the bloom filter depending on how many targets there are
     */
@@ -170,6 +265,94 @@ struct Hash160Lookup::Impl
             setTargetBloomFilter(hash160Targets);
         }
     }
+
+    void setTargets(const hash160* ptr, size_t count)
+    {
+        thrust::release(d_bloomFilter);
+        constexpr uint32_t bloomFilterThreshold = 100;
+        if (count <= maxTargetsConstantMem)
+        {
+            setTargetConstantMemory(ptr, count);
+        }
+        else if (count <= bloomFilterThreshold)
+        {
+            setTargetBloomFilter(ptr, count);
+        }
+        else
+        {
+            setTargetBloomFilter(ptr, count);
+        }
+    }
+
+    void setTargets(size_t count, const void* user_data, Hash160GetterFn getter)
+    {
+        thrust::release(d_bloomFilter);
+        constexpr uint32_t bloomFilterThreshold = 100;
+        if (count <= maxTargetsConstantMem)
+        {
+            setTargetConstantMemoryFromGetter(count, user_data, getter);
+        }
+        else
+        {
+            setTargetBloomFilterFromGetter(count, user_data, getter);
+        }
+    }
+
+    void setTargetBloomFilterFromGetter(size_t count, const void* user_data, Hash160GetterFn getter)
+    {
+        constexpr double requiredProbability{1.0e-12};
+        const uint32_t bloomFilterBits = getOptimalBloomFilterBits(requiredProbability, count);
+        const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
+        const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
+        const uint64_t bloomFilterMask = (1ULL << bloomFilterBits) - 1;
+        fprintf(stderr, "Allocating bloom filter (%d bits): %.02fMb\n", bloomFilterBits, static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
+
+        thrust::host_vector<uint32_t> filter(bloomFilterSizeWords);
+        thrust::fill(filter.begin(), filter.end(), 0);
+
+        const uint32_t useBloomFilter = bloomFilterBits <= 32 ? 1 : 2;
+        cudaCheckError(cudaMemcpyToSymbol(d_UseBloomFilter, &useBloomFilter, sizeof(uint32_t)));
+
+        hash160 h;
+        if (useBloomFilter == 2)
+        {
+            cudaCheckError(cudaMemcpyToSymbol(d_BloomFilterMask64, &bloomFilterMask, sizeof(uint64_t)));
+            for (size_t i = 0; i < count; ++i)
+            {
+                getter(user_data, i, &h);
+                uint32_t hash[5];
+                SWAP32_HASH160(h.h, hash);
+                uint64_t idx[5];
+                idx[0] = (static_cast<uint64_t>(hash[0]) << 32 | hash[1]) & bloomFilterMask;
+                idx[1] = (static_cast<uint64_t>(hash[2]) << 32 | hash[3]) & bloomFilterMask;
+                idx[2] = (static_cast<uint64_t>(hash[0] ^ hash[1]) << 32 | (hash[1] ^ hash[2])) & bloomFilterMask;
+                idx[3] = (static_cast<uint64_t>(hash[2] ^ hash[3]) << 32 | (hash[3] ^ hash[4])) & bloomFilterMask;
+                idx[4] = (static_cast<uint64_t>(hash[0] ^ hash[3]) << 32 | (hash[1] ^ hash[3])) & bloomFilterMask;
+                for (const uint64_t& k : idx)
+                    filter[k / 32] |= (0x01 << (k % 32));
+            }
+        }
+        else
+        {
+            cudaCheckError(cudaMemcpyToSymbol(d_BloomFilterMask, &bloomFilterMask, sizeof(uint32_t)));
+            const uint32_t mask32 = static_cast<uint32_t>(bloomFilterMask);
+            for (size_t i = 0; i < count; ++i)
+            {
+                getter(user_data, i, &h);
+                uint32_t hash[5];
+                SWAP32_HASH160(h.h, hash);
+                for (const uint32_t j : hash)
+                {
+                    const uint32_t idx = j & mask32;
+                    filter[idx / 32] |= (0x01 << (idx % 32));
+                }
+            }
+        }
+
+        d_bloomFilter = filter;
+        const auto* d_bloomFilterRawPtr = thrust::raw_pointer_cast(d_bloomFilter.data());
+        cudaCheckError(cudaMemcpyToSymbol(d_BloomFilterPtr, &d_bloomFilterRawPtr, sizeof(uint32_t *)));
+    }
 };
 
 Hash160Lookup::Hash160Lookup() : mImpl(std::make_unique<Impl>()) {}
@@ -184,6 +367,16 @@ Hash160Lookup& Hash160Lookup::operator=(Hash160Lookup &&rhs) noexcept = default;
 void Hash160Lookup::setTargets(const std::unordered_set<hash160>& hash160Targets) const
 {
     mImpl->setTargets(hash160Targets);
+}
+
+void Hash160Lookup::setTargets(const hash160* targets, size_t count) const
+{
+    mImpl->setTargets(targets, count);
+}
+
+void Hash160Lookup::setTargets(size_t count, const void* user_data, Hash160Getter getter) const
+{
+    mImpl->setTargets(count, user_data, getter);
 }
 
 __device__ bool checkBloomFilter(const uint32_t hash[5])

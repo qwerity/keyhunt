@@ -9,7 +9,6 @@
 
 #include <cstdio>
 #include <cstring>
-#include <unordered_set>
 #include <memory>
 #include <vector>
 
@@ -32,7 +31,6 @@ struct KeyhuntContext
     std::unique_ptr<ECC> ecc;
     Hash160Lookup hash160_lookup;
     CudaAtomicList result_list;
-    std::unordered_set<hash160> targets;
     uint32_t keys_per_iteration{0};
 
     explicit KeyhuntContext(int dev_id) : device_id(dev_id), ecc(std::make_unique<ECC>()) {}
@@ -73,16 +71,19 @@ int keyhunt_set_params(KeyhuntHandle h, uint32_t points_per_thread, uint32_t com
     }
 }
 
+static void get_hash160_at(const void* user_data, size_t index, hash160* out)
+{
+    const auto* arr = static_cast<const KeyhuntHash160*>(user_data);
+    *out = to_hash160(&arr[index]);
+}
+
 int keyhunt_set_targets(KeyhuntHandle h, const KeyhuntHash160* targets, size_t count)
 {
     if (!h) { KEYHUNT_SET_ERR("keyhunt_set_targets: null handle"); return -1; }
     if (!targets && count > 0) { KEYHUNT_SET_ERR("keyhunt_set_targets: null targets"); return -1; }
     auto* ctx = static_cast<KeyhuntContext*>(h);
     try {
-        ctx->targets.clear();
-        for (size_t i = 0; i < count; ++i)
-            ctx->targets.insert(to_hash160(&targets[i]));
-        ctx->hash160_lookup.setTargets(ctx->targets);
+        ctx->hash160_lookup.setTargets(count, targets, get_hash160_at);
         return 0;
     } catch (const std::exception& e) {
         KEYHUNT_SET_ERR_FMT("keyhunt_set_targets: %s", e.what());

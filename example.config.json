@@ -2,16 +2,17 @@
   "hash160_targets": [
     "./data.bin"
   ],
-  "statusCallbackPeriodMs": 5000,
-  "blockSize": 256,
-  "pointsPerThread": 8,
+  "statusCallbackPeriodMs": 1000,
+  "pointsPerThread": 1024,
   "keysNumberToGenerate": 0,
   "forcePrivateXPart": false,
-  "privateXPart": 2,
-  "publicKeyCompressionTypeToCheck": 2,
-  "server" : {
+  "privateXPart": 1,
+  "randomXPartQueue": false,
+  "server": {
     "url": "72.56.102.163",
-    "port": 3602,
+    "port": "3602",
     "authorisationHeader": "worker_bit"
-  }
+  },
+  "specificXValues": []
 }
+

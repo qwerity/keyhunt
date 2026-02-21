@@ -98,9 +98,15 @@ impl KeyhuntHandle {
         Ok(())
     }
 
+    /// Pass slice directly; C API uses callback, no internal copy of the array.
     pub fn set_targets(&self, targets: &[Hash160]) -> Result<(), crate::Error> {
-        let raw: Vec<KeyhuntHash160> = targets.iter().map(|h| KeyhuntHash160 { h: h.to_words() }).collect();
-        let r = unsafe { keyhunt_set_targets(self.ptr, raw.as_ptr(), raw.len()) };
+        let r = unsafe {
+            keyhunt_set_targets(
+                self.ptr,
+                targets.as_ptr() as *const KeyhuntHash160,
+                targets.len(),
+            )
+        };
         if r != 0 {
             let msg = unsafe { CStr::from_ptr(keyhunt_last_error()).to_string_lossy().into_owned() };
             return Err(crate::Error::Cuda(msg));

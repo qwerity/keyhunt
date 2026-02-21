@@ -20,7 +20,6 @@ fn deserialize_port<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    use serde::de::Error;
     #[derive(serde::Deserialize)]
     #[serde(untagged)]
     enum Port {
@@ -105,6 +104,40 @@ fn default_public_key_compression() -> u32 {
 }
 
 
+/// Resolve effective machine_id: env CONTAINER → VAST_CONTAINERLABEL → config → hostname → fallback.
+fn resolve_machine_id(server: &ServerConfig) -> String {
+    if let Ok(s) = std::env::var("CONTAINER") {
+        if !s.is_empty() {
+            log::info!("Machine ID from CONTAINER environment variable: {}", s);
+            return s;
+        }
+    }
+    if let Ok(s) = std::env::var("VAST_CONTAINERLABEL") {
+        if !s.is_empty() {
+            log::info!("Machine ID from VAST_CONTAINERLABEL environment variable: {}", s);
+            return s;
+        }
+    }
+    if let Some(ref s) = server.machine_id {
+        if !s.is_empty() {
+            return s.clone();
+        }
+    }
+    if let Ok(host) = std::env::var("HOSTNAME") {
+        if !host.is_empty() {
+            log::info!("Machine ID not specified in config, using hostname: {}", host);
+            return host;
+        }
+    }
+    use std::hash::{Hash, Hasher};
+    let seed = format!("{}{}", server.url, server.port);
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    seed.hash(&mut hasher);
+    let fallback = format!("machine-{:x}", hasher.finish());
+    log::info!("Machine ID not specified in config, using auto-generated: {}", fallback);
+    fallback
+}
+
 impl Config {
     pub fn load(path: &std::path::Path) -> Result<Self, crate::Error> {
         let data = std::fs::read_to_string(path).map_err(|e| crate::Error::Config(e.to_string()))?;
@@ -115,6 +148,10 @@ impl Config {
         if c.public_key_compression_type_to_check > 2 {
             c.public_key_compression_type_to_check = DEFAULT_PUBLIC_KEY_COMPRESSION;
         }
+        if let Some(ref mut server) = c.server {
+            let resolved = resolve_machine_id(&*server);
+            server.machine_id = Some(resolved);
+        }
         Ok(c)
     }
 
@@ -123,12 +160,15 @@ impl Config {
         self.hash160_targets.as_deref().unwrap_or(&EMPTY)
     }
 
+    /// Не больше 15 с, иначе gpu_speed.txt может не обновляться (из-за конфига с огромным периодом).
     pub fn status_callback_period_ms(&self) -> u32 {
-        if self.status_callback_period_ms == 0 {
+        const MAX_MS: u32 = 15_000;
+        let ms = if self.status_callback_period_ms == 0 {
             DEFAULT_STATUS_CALLBACK_MS
         } else {
             self.status_callback_period_ms
-        }
+        };
+        ms.min(MAX_MS)
     }
 
     pub fn points_per_thread(&self) -> u32 {
