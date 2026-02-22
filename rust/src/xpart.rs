@@ -102,13 +102,19 @@ impl XPartManager {
 
     /// Blocking: wait until a new x part is available.
     pub fn get_next_x_part(&self) -> u32 {
-        self.get_rx.recv().unwrap_or(0)
+        let x = self.get_rx.recv().unwrap_or(0);
+        log::debug!("XPartManager::get_next_x_part: x={:#x} queue_remaining={}", x, self.get_rx.len());
+        x
     }
 
     /// Non-blocking: return `Some(x)` if a pre-fetched x part is ready, else `None`.
     /// Used to pre-generate keys for the next xpart while the current kernel runs.
     pub fn try_get_next_x_part(&self) -> Option<u32> {
-        self.get_rx.try_recv().ok()
+        let x = self.get_rx.try_recv().ok();
+        if let Some(v) = x {
+            log::debug!("XPartManager::try_get_next_x_part: x={:#x} queue_remaining={}", v, self.get_rx.len());
+        }
+        x
     }
 
     pub fn mark_x_part_done_async(&self, x: u32) {

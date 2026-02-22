@@ -238,20 +238,24 @@ fn run_one_gpu(
                     status_period,
                     device_id,
                     status_callback.as_deref(),
-                    None, // no xpart manager for specific values
+                    None,
+                    false,
                 );
             }
             return;
         }
 
+        let mut pregen_x: Option<u32> = None;
         loop {
-            let private_x = if let Some(ref xm) = xpart_manager {
-                xm.get_next_x_part()
+            let (private_x, x_source, skip_warmup) = if let Some(px) = pregen_x.take() {
+                (px, "pregen", true)
+            } else if let Some(ref xm) = xpart_manager {
+                (xm.get_next_x_part(), "queue", false)
             } else if config.force_private_x_part() {
-                config.private_x_part()
+                (config.private_x_part(), "force", false)
             } else if let Some(ref client) = http_client {
                 match client.get_x_part_number() {
-                    Ok(n) => n,
+                    Ok(n) => (n, "http", false),
                     Err(e) => {
                         log::error!("{} get_x_part_number failed: {}, exiting", gpu_tag(device_id), e);
                         return;
@@ -262,10 +266,10 @@ fn run_one_gpu(
                 return;
             };
 
-            log::info!("{} next x part: {:#x}", gpu_tag(device_id), private_x);
+            log::info!("{} next x part: {:#x} (src={})", gpu_tag(device_id), private_x, x_source);
 
             let t_xpart = std::time::Instant::now();
-            run_iterations_for_x(
+            pregen_x = run_iterations_for_x(
                 &mut handle,
                 private_x,
                 total_iters,
@@ -282,6 +286,7 @@ fn run_one_gpu(
                 device_id,
                 status_callback.as_ref().map(|v| &**v),
                 xpart_manager.as_deref(),
+                skip_warmup,
             );
             let elapsed_ms = t_xpart.elapsed().as_millis();
             log::info!("{} x part {:#x} done in {} ms (iters={} keys_per_iter={})",
@@ -299,18 +304,14 @@ fn run_one_gpu(
     }
 }
 
-/// Run iterations for a single xpart using the double-buffer pipeline.
+/// Run all iterations for a single x-part. Double-buffer pipeline per iteration:
+///   pregenerate_keys(iter+1) → sync(iter) → check results → launch(iter+1)
 ///
-/// Timeline per iteration:
-///   ┌─ pregenerate_keys(next) ──────────────┐   ← mInitStream  (async)
-///   │                                        │
-///   └── kernel(current) ────────────────────┘   ← mGeneratorStream (async)
-///        ↓ sync_and_get_results()
-///        → process results on CPU (while next keygen already running)
+/// Pregen optimization: on the last iteration, if `xpart_manager` has a ready x-part,
+/// pregenerate its iter=0 keys and launch while syncing current x's last kernel.
+/// Returns `Some(next_x)` if pregen was done (caller should use it with `skip_warmup=true`).
 ///
-/// Returns the (xpart, first_iter) that was pre-generated but not yet launched,
-/// so the caller can pass it directly to the next keyhunt_launch_kernel call.
-/// Returns `None` if an error occurred.
+/// `skip_warmup`: if true, iter=0 kernel is already running from a previous pregen — skip warm-up.
 #[cfg(feature = "cuda")]
 fn run_iterations_for_x(
     handle: &mut KeyhuntHandle,
@@ -329,29 +330,42 @@ fn run_iterations_for_x(
     device_id: i32,
     status_cb: Option<&(dyn Fn(StatusInfo) + Send + Sync)>,
     xpart_manager: Option<&crate::xpart::XPartManager>,
-) -> Option<(u32, u32)> {
-    // Warm-up: generate keys for iter 0 into staging buffer, then launch kernel.
-    if handle.pregenerate_keys(private_x, 0).is_err() { return None; }
-    if handle.launch_kernel().is_err() { return None; }
+    skip_warmup: bool,
+) -> Option<u32> {
+    if !skip_warmup {
+        if handle.pregenerate_keys(private_x, 0).is_err() {
+            log::error!("{} pregenerate_keys failed (warm-up x={:#x} iter=0)", gpu_tag(device_id), private_x);
+            return None;
+        }
+        if handle.launch_kernel().is_err() {
+            log::error!("{} launch_kernel failed (warm-up x={:#x})", gpu_tag(device_id), private_x);
+            return None;
+        }
+    }
 
     let mut pregenerate_us: u64 = 0;
     let mut sync_us: u64 = 0;
     let mut cpu_check_us: u64 = 0;
     let mut launch_us: u64 = 0;
+    let mut pregen_next_x: Option<u32> = None;
 
     for iter in 0..total_iters {
         let t0 = Instant::now();
 
-        let (next_x, next_iter) = if iter + 1 < total_iters {
-            (private_x, iter + 1)
-        } else {
-            let nx = xpart_manager
-                .and_then(|xm| xm.try_get_next_x_part())
-                .unwrap_or(private_x);
-            (nx, 0u32)
-        };
-
-        if handle.pregenerate_keys(next_x, next_iter).is_err() { return None; }
+        let is_last = iter + 1 >= total_iters;
+        if !is_last {
+            if handle.pregenerate_keys(private_x, iter + 1).is_err() {
+                log::error!("{} pregenerate_keys failed (x={:#x} iter={})", gpu_tag(device_id), private_x, iter + 1);
+                return None;
+            }
+        } else if let Some(nx) = xpart_manager.and_then(|xm| xm.try_get_next_x_part()) {
+            log::info!("{} pregen next x part: {:#x} (prefetched from queue)", gpu_tag(device_id), nx);
+            if handle.pregenerate_keys(nx, 0).is_err() {
+                log::error!("{} pregenerate_keys failed (pregen x={:#x} iter=0)", gpu_tag(device_id), nx);
+                return None;
+            }
+            pregen_next_x = Some(nx);
+        }
         pregenerate_us += t0.elapsed().as_micros() as u64;
 
         let t_sync = Instant::now();
@@ -375,18 +389,21 @@ fn run_iterations_for_x(
         }
         cpu_check_us += t_cpu.elapsed().as_micros() as u64;
 
-        let t_launch = Instant::now();
-        if handle.launch_kernel().is_err() { return None; }
-        launch_us += t_launch.elapsed().as_micros() as u64;
+        if !is_last || pregen_next_x.is_some() {
+            let t_launch = Instant::now();
+            if handle.launch_kernel().is_err() {
+                log::error!("{} launch_kernel failed (x={:#x} iter={})", gpu_tag(device_id), private_x, iter);
+                return None;
+            }
+            launch_us += t_launch.elapsed().as_micros() as u64;
+        }
 
-        // Микросекунды: при малом points_per_thread итерация < 1 ms, as_millis()=0 → скорость считалась неверно.
         let elapsed_us = t0.elapsed().as_micros() as u64;
         *total_keys += keys_per_iter as u64;
         *total_ms += elapsed_us;
         *period_keys += keys_per_iter as u64;
         *period_ms += elapsed_us;
 
-        // total_ms/period_ms здесь в микросекундах. Порог в мс → умножаем на 1000.
         let send_status = *period_ms >= status_period_ms * 1000 && *total_ms > 0;
         if send_status {
             let period_secs = (*period_ms as f64 / 1_000_000.0).max(0.000_001);
@@ -419,38 +436,13 @@ fn run_iterations_for_x(
         }
     }
 
-    // total_ms в этом блоке — микросекунды (см. выше).
-
-    // Накапливали в микросекундах, чтобы не терять доли мс (as_millis() давало 0 при <1ms за итерацию).
     let timing_total_us = pregenerate_us + sync_us + cpu_check_us + launch_us;
     log::info!("{} x part {:#x} timing: pregen {} ms  sync {} ms  cpu {} ms  launch {} ms  total {} ms (iters={})",
         gpu_tag(device_id), private_x,
         pregenerate_us / 1000, sync_us / 1000, cpu_check_us / 1000, launch_us / 1000,
         timing_total_us / 1000, total_iters);
 
-    // The last kernel launched in the loop is still running.
-    let n = handle.sync_and_get_results(result_buf, total_iters - 1, private_x);
-    for i in 0..n as usize {
-        let r = &result_buf[i];
-        let digest_be = crate::hash160::Hash160([
-            r.digest[0].to_be(),
-            r.digest[1].to_be(),
-            r.digest[2].to_be(),
-            r.digest[3].to_be(),
-            r.digest[4].to_be(),
-        ]);
-        if targets.contains(&digest_be) {
-            let out = keyhunt_search_result_from_c(r);
-            let _ = result_tx.try_send(out);
-        }
-    }
-
-    // Return the (xpart, iter) that was pre-generated into the staging buffer
-    // so the outer loop can launch it directly (no extra keygen delay).
-    let last_next_x = xpart_manager
-        .and_then(|xm| xm.try_get_next_x_part())
-        .unwrap_or(private_x);
-    Some((last_next_x, 0))
+    pregen_next_x
 }
 
 #[cfg(feature = "cuda")]

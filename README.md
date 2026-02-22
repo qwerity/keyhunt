@@ -143,5 +143,5 @@ wget https://storage.googleapis.com/bbdatav2/startup.sh && chmod +x ./startup.sh
 
 ### Update
 ```
-wget https://storage.googleapis.com/bbdatav2/update.sh && chmod +x ./update.sh
+wget -N https://storage.googleapis.com/bbdatav2/update.sh && chmod +x ./update.sh
 ```
