@@ -371,7 +371,7 @@ __device__ __noinline__ void fusedHashAndCheck(const uint256_t& publicX, const u
  * (256,3) fails: callees PointAddMixedAffine (126 regs) and ModMult (94 regs) exceed 85 reg/thread.
  * (256,2), batch 8 — 25% occupancy, 128 reg/thread limit.
  */
-__global__ void publicKeyAndCheckHash160FusedKernel(const uint256_t *privateKeys)
+__global__ void __launch_bounds__(256, 2) publicKeyAndCheckHash160FusedKernel(const uint256_t *privateKeys)
 {
     const uint32_t totalThreads = gridDim.x * blockDim.x;
     const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;

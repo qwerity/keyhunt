@@ -348,6 +348,8 @@ fn run_iterations_for_x(
     let mut cpu_check_us: u64 = 0;
     let mut launch_us: u64 = 0;
     let mut pregen_next_x: Option<u32> = None;
+    let mut bloom_candidates: u64 = 0;
+    let mut bloom_true_positives: u64 = 0;
 
     for iter in 0..total_iters {
         let t0 = Instant::now();
@@ -373,6 +375,7 @@ fn run_iterations_for_x(
         sync_us += t_sync.elapsed().as_micros() as u64;
 
         let t_cpu = Instant::now();
+        bloom_candidates += n as u64;
         for i in 0..n as usize {
             let r = &result_buf[i];
             let digest_be = crate::hash160::Hash160([
@@ -383,6 +386,7 @@ fn run_iterations_for_x(
                 r.digest[4].to_be(),
             ]);
             if targets.contains(&digest_be) {
+                bloom_true_positives += 1;
                 let out = keyhunt_search_result_from_c(r);
                 let _ = result_tx.try_send(out);
             }
@@ -437,10 +441,15 @@ fn run_iterations_for_x(
     }
 
     let timing_total_us = pregenerate_us + sync_us + cpu_check_us + launch_us;
+    let bloom_false_positives = bloom_candidates.saturating_sub(bloom_true_positives);
     log::info!("{} x part {:#x} timing: pregen {} ms  sync {} ms  cpu {} ms  launch {} ms  total {} ms (iters={})",
         gpu_tag(device_id), private_x,
         pregenerate_us / 1000, sync_us / 1000, cpu_check_us / 1000, launch_us / 1000,
         timing_total_us / 1000, total_iters);
+    if bloom_candidates > 0 {
+        log::info!("{} x part {:#x} bloom: candidates={} true_positives={} false_positives={}",
+            gpu_tag(device_id), private_x, bloom_candidates, bloom_true_positives, bloom_false_positives);
+    }
 
     pregen_next_x
 }
