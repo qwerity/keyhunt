@@ -297,7 +297,7 @@ __device__ __forceinline__ void ec4limb_to_uint256(const uint64_t limb[4], uint2
 
 // 4-limb point multiplication: GTable 16 chunks, mixed Jacobian-Affine.
 // Warp divergence: "if (privChunks[chunk] > 0)" — different threads do 1..16 iterations.
-__device__ __noinline__ void ec4limb_PointMultiJacobianFast(
+__device__ __forceinline__ void ec4limb_PointMultiJacobianFast(
     uint64_t* qx, uint64_t* qy, uint64_t* qz,
     const uint16_t* privChunks,
     const uint64_t* gTableX, const uint64_t* gTableY)

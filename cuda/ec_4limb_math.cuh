@@ -115,7 +115,7 @@ __device__ __forceinline__ void ec4limb_ModDouble256(uint64_t *r, const uint64_t
 // ---------------------------------------------------------------------------------
 // Modular Multiplication (256-bit)
 // ---------------------------------------------------------------------------------
-__device__ __noinline__ void ec4limb_ModMult(uint64_t *r, const uint64_t *a, const uint64_t *b)
+__device__ void ec4limb_ModMult(uint64_t *r, const uint64_t *a, const uint64_t *b)
 {
     uint64_t r512[8];
     uint64_t t[EC4LIMB_NBBLOCK];
@@ -135,7 +135,7 @@ __device__ __noinline__ void ec4limb_ModMult(uint64_t *r, const uint64_t *a, con
 // ---------------------------------------------------------------------------------
 // Modular Squaring (256-bit)
 // ---------------------------------------------------------------------------------
-__device__ __noinline__ void ec4limb_ModSqr(uint64_t *rp, const uint64_t *up)
+__device__ void ec4limb_ModSqr(uint64_t *rp, const uint64_t *up)
 {
     uint64_t r512[8];
     uint64_t u10, u11, r0, r1, r3, r4, t1, t2;
@@ -371,7 +371,7 @@ __device__ void ec4limb_BatchModInv(uint64_t Z[][4], int count)
 // ---------------------------------------------------------------------------------
 // Point Add Mixed Jacobian-Affine (8M+3S)
 // ---------------------------------------------------------------------------------
-__device__ __noinline__ void ec4limb_PointAddMixedAffine(
+__device__ void ec4limb_PointAddMixedAffine(
     uint64_t *X1, uint64_t *Y1, uint64_t *Z1,
     const uint64_t *x2, const uint64_t *y2)
 {
