@@ -96,19 +96,30 @@ impl HttpClient {
             .send();
         let res = match res {
             Ok(r) => r,
-            Err(_) => return false,
+            Err(e) => {
+                log::error!("mark_done HTTP request failed (batch size {}): {}", numbers.len(), e);
+                return false;
+            }
         };
         if res.status() == StatusCode::ACCEPTED || res.status() == StatusCode::REQUEST_TIMEOUT {
             return true;
         }
         if !res.status().is_success() {
+            log::error!("mark_done returned status {} (batch size {})", res.status(), numbers.len());
             return false;
         }
         let json: Value = match res.json() {
             Ok(j) => j,
-            Err(_) => return false,
+            Err(e) => {
+                log::error!("mark_done response parse failed (batch size {}): {}", numbers.len(), e);
+                return false;
+            }
         };
-        json.get("success").and_then(|v| v.as_bool()).unwrap_or(false)
+        let ok = json.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+        if !ok {
+            log::error!("mark_done server returned success=false (batch size {})", numbers.len());
+        }
+        ok
     }
 
     /// POST /set_found body {"x": N, "y": M}
@@ -121,15 +132,26 @@ impl HttpClient {
             .send();
         let res = match res {
             Ok(r) => r,
-            Err(_) => return false,
+            Err(e) => {
+                log::error!("set_found HTTP request failed (x={:#x}, y={:#x}): {}", x, y, e);
+                return false;
+            }
         };
         if res.status() != StatusCode::OK {
+            log::error!("set_found returned status {} (x={:#x}, y={:#x})", res.status(), x, y);
             return false;
         }
         let json: Value = match res.json() {
             Ok(j) => j,
-            Err(_) => return false,
+            Err(e) => {
+                log::error!("set_found response parse failed (x={:#x}, y={:#x}): {}", x, y, e);
+                return false;
+            }
         };
-        json.get("success").and_then(|v| v.as_bool()).unwrap_or(false)
+        let ok = json.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+        if !ok {
+            log::error!("set_found server returned success=false (x={:#x}, y={:#x})", x, y);
+        }
+        ok
     }
 }

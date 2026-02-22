@@ -112,7 +112,9 @@ impl XPartManager {
     }
 
     pub fn mark_x_part_done_async(&self, x: u32) {
-        let _ = self.mark_tx.try_send(x);
+        if self.mark_tx.try_send(x).is_err() {
+            log::warn!("mark_x_part_done_async: channel full, dropping x={:#x}", x);
+        }
     }
 
     pub fn stop(&self) {
@@ -210,7 +212,9 @@ fn mark_done_worker(client: std::sync::Arc<HttpClient>, rx: Receiver<u32>, stop:
                         Err(_) => break,
                     }
                 }
-                let _ = client.mark_x_part_done_batch(&batch);
+                if !client.mark_x_part_done_batch(&batch) {
+                    log::warn!("mark_done_worker: batch of {} x-parts failed", batch.len());
+                }
             }
             Err(_) => {}
         }
@@ -224,6 +228,8 @@ fn mark_done_worker(client: std::sync::Arc<HttpClient>, rx: Receiver<u32>, stop:
                 Err(_) => break,
             }
         }
-        let _ = client.mark_x_part_done_batch(&batch);
+        if !client.mark_x_part_done_batch(&batch) {
+            log::warn!("mark_done_worker: final batch of {} x-parts failed", batch.len());
+        }
     }
 }

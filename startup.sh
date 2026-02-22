@@ -17,9 +17,40 @@ log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 WORK_DIR="/workspace"
 BASE_URL="https://storage.googleapis.com/bbdatav2"
 
-# Первый аргумент — опциональный суффикс для CUDA-библиотеки
-#   89      → libecc_cuda_89.so
-#   12_89   → libecc_cuda_12_89.so
+# ============================================================================
+# Определение мажорной версии CUDA (12 или 13)
+# Приоритет: аргумент --cuda=NN > переменная CUDA_VER > автодетект через nvcc
+# ============================================================================
+detect_cuda_major() {
+    if command -v nvcc >/dev/null 2>&1; then
+        nvcc --version 2>/dev/null | grep -oP 'release \K[0-9]+' | head -1
+    elif [ -f /usr/local/cuda/version.txt ]; then
+        grep -oP 'CUDA Version \K[0-9]+' /usr/local/cuda/version.txt | head -1
+    fi
+}
+
+CUDA_VER=""
+# Разбираем --cuda=NN если передан первым аргументом
+if [[ -n "${1:-}" && "$1" =~ ^--cuda=([0-9]+)$ ]]; then
+    CUDA_VER="${BASH_REMATCH[1]}"
+    shift
+fi
+# Переменная окружения
+if [[ -z "${CUDA_VER}" && -n "${CUDA_VER_ENV:-}" ]]; then
+    CUDA_VER="${CUDA_VER_ENV}"
+fi
+# Автодетект
+if [[ -z "${CUDA_VER}" ]]; then
+    CUDA_VER="$(detect_cuda_major || true)"
+fi
+if [[ -z "${CUDA_VER}" ]]; then
+    log_error "Не удалось определить версию CUDA. Укажите: --cuda=12 или --cuda=13"
+    exit 1
+fi
+log_info "CUDA major version: ${CUDA_VER}"
+
+# Опциональный суффикс для CUDA-библиотеки (SM-архитектура)
+#   89 → libecc_cuda_12_89.so
 CUDA_SUFFIX=""
 if [[ -n "${1:-}" && "$1" =~ ^[0-9]+(_[0-9]+)?$ ]]; then
     CUDA_SUFFIX="_$1"
@@ -29,12 +60,13 @@ fi
 # Файлы для загрузки (именно их заливать для распространения)
 R_TABLE_FILE="data.bin"
 GTABLES_FILE="tables.bin"
-BINARY_FILE="trainer_v2"
-CUDA_LIB_FILE="libecc_cuda${CUDA_SUFFIX}.so"
+BINARY_REMOTE="trainer_v2_${CUDA_VER}"
+BINARY_LOCAL="trainer_v2"
+CUDA_LIB_REMOTE="libecc_cuda_${CUDA_VER}${CUDA_SUFFIX}.so"
+CUDA_LIB_LOCAL="libecc_cuda.so"
 
-if [[ -n "${CUDA_SUFFIX}" ]]; then
-    log_info "Вариант CUDA-библиотеки: ${CUDA_LIB_FILE} (суффикс из аргумента)"
-fi
+log_info "Бинарник: ${BINARY_REMOTE} -> ${BINARY_LOCAL}"
+log_info "CUDA-библиотека: ${CUDA_LIB_REMOTE} -> ${CUDA_LIB_LOCAL}"
 
 # ============================================================================
 # Настройка локали
@@ -85,34 +117,32 @@ else
 fi
 
 # keyhunt-pvk (бинарник)
-log_info "Загрузка ${BINARY_FILE}..."
-if [ -f "${WORK_DIR}/${BINARY_FILE}" ]; then
-    log_warn "${BINARY_FILE} уже существует, будет перезаписан"
+log_info "Загрузка ${BINARY_REMOTE}..."
+if [ -f "${WORK_DIR}/${BINARY_REMOTE}" ]; then
+    log_warn "${BINARY_REMOTE} уже существует, будет перезаписан"
 fi
-if wget -q --show-progress "${BASE_URL}/${BINARY_FILE}" -O "${WORK_DIR}/${BINARY_FILE}"; then
-    log_info "✓ ${BINARY_FILE} загружен"
+if wget -q --show-progress "${BASE_URL}/${BINARY_REMOTE}" -O "${WORK_DIR}/${BINARY_REMOTE}"; then
+    log_info "✓ ${BINARY_REMOTE} загружен"
 else
-    log_error "✗ Ошибка при загрузке ${BINARY_FILE}"
+    log_error "✗ Ошибка при загрузке ${BINARY_REMOTE}"
     exit 1
 fi
+ln -sf "${BINARY_REMOTE}" "${WORK_DIR}/${BINARY_LOCAL}"
+log_info "✓ Симлинк ${BINARY_LOCAL} -> ${BINARY_REMOTE}"
 
 # libecc_cuda.so (нужна для запуска бинарника, в том же bucket)
-log_info "Загрузка ${CUDA_LIB_FILE}..."
-if [ -f "${WORK_DIR}/${CUDA_LIB_FILE}" ]; then
-    log_warn "${CUDA_LIB_FILE} уже существует, будет перезаписан"
+log_info "Загрузка ${CUDA_LIB_REMOTE}..."
+if [ -f "${WORK_DIR}/${CUDA_LIB_REMOTE}" ]; then
+    log_warn "${CUDA_LIB_REMOTE} уже существует, будет перезаписан"
 fi
-if wget -q --show-progress "${BASE_URL}/${CUDA_LIB_FILE}" -O "${WORK_DIR}/${CUDA_LIB_FILE}"; then
-    log_info "✓ ${CUDA_LIB_FILE} загружен"
+if wget -q --show-progress "${BASE_URL}/${CUDA_LIB_REMOTE}" -O "${WORK_DIR}/${CUDA_LIB_REMOTE}"; then
+    log_info "✓ ${CUDA_LIB_REMOTE} загружен"
 else
-    log_error "✗ Ошибка при загрузке ${CUDA_LIB_FILE}"
+    log_error "✗ Ошибка при загрузке ${CUDA_LIB_REMOTE}"
     exit 1
 fi
-
-# Если загружена библиотека с суффиксом (например libecc_cuda_89.so), создаём симлинк libecc_cuda.so для загрузчика
-if [[ -n "${CUDA_SUFFIX}" ]]; then
-    ln -sf "${CUDA_LIB_FILE}" "${WORK_DIR}/libecc_cuda.so"
-    log_info "✓ Создан симлинк libecc_cuda.so -> ${CUDA_LIB_FILE}"
-fi
+ln -sf "${CUDA_LIB_REMOTE}" "${WORK_DIR}/${CUDA_LIB_LOCAL}"
+log_info "✓ Симлинк ${CUDA_LIB_LOCAL} -> ${CUDA_LIB_REMOTE}"
 
 # config.json
 log_info "Загрузка config.json..."
@@ -130,11 +160,11 @@ fi
 # Права на выполнение и обёртка запуска
 # ============================================================================
 log_info "Установка прав на выполнение..."
-chmod +x "${WORK_DIR}/${BINARY_FILE}"
-if [ -x "${WORK_DIR}/${BINARY_FILE}" ]; then
+chmod +x "${WORK_DIR}/${BINARY_REMOTE}"
+if [ -x "${WORK_DIR}/${BINARY_REMOTE}" ]; then
     log_info "✓ Права установлены"
 else
-    log_error "✗ Не удалось установить права на ${BINARY_FILE}"
+    log_error "✗ Не удалось установить права на ${BINARY_REMOTE}"
     exit 1
 fi
 
@@ -144,7 +174,7 @@ cat > "${RUN_SCRIPT}" << EOF
 #!/bin/bash
 cd "\$(dirname "\$0")"
 export LD_LIBRARY_PATH="\${PWD}:\${LD_LIBRARY_PATH}"
-exec ./${BINARY_FILE} "\$@"
+exec ./${BINARY_LOCAL} "\$@"
 EOF
 chmod +x "${RUN_SCRIPT}"
 log_info "✓ Создан скрипт запуска: ./run"
@@ -153,7 +183,7 @@ log_info "✓ Создан скрипт запуска: ./run"
 # Проверка
 # ============================================================================
 log_info "Проверка загруженных файлов..."
-for f in "${R_TABLE_FILE}" "${GTABLES_FILE}" "${BINARY_FILE}" "${CUDA_LIB_FILE}" "config.json"; do
+for f in "${R_TABLE_FILE}" "${GTABLES_FILE}" "${BINARY_REMOTE}" "${CUDA_LIB_REMOTE}" "config.json"; do
     if [ -f "${WORK_DIR}/${f}" ]; then
         SIZE=$(du -h "${WORK_DIR}/${f}" | cut -f1)
         log_info "✓ ${f}: ${SIZE}"
@@ -165,4 +195,4 @@ done
 
 log_info "Готово. Файлы в: ${WORK_DIR}/"
 log_info "Запуск: cd ${WORK_DIR} && ./run"
-log_info "  (или: cd ${WORK_DIR} && LD_LIBRARY_PATH=. ./${BINARY_FILE})"
+log_info "  (или: cd ${WORK_DIR} && LD_LIBRARY_PATH=. ./${BINARY_LOCAL})"

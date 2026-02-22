@@ -150,8 +150,8 @@ pub fn run_results_processor(
                 && config.specific_x_values().is_empty();
             if use_server {
                 if !http_client.set_x_part_found(r.private_x_part, r.private_y_part) {
-                    log::error!("[GPU {}] set_found failed for ({}, {}), exiting", r.cuda_device_id, r.private_x_part, r.private_y_part);
-                    std::process::exit(1);
+                    log::error!("[GPU {}] set_found FAILED for (x={:#x}, y={:#x}), result line: {}", r.cuda_device_id, r.private_x_part, r.private_y_part, line);
+                    panic!("[GPU {}] set_found failed for (x={:#x}, y={:#x}) — cannot lose found key", r.cuda_device_id, r.private_x_part, r.private_y_part);
                 }
             }
             if !write_encrypted("results.enc", &line) {
