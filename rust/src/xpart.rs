@@ -202,7 +202,7 @@ fn fetcher_worker(
         }
         if sent > 0 {
             let new_len = get_tx.len();
-            log::info!("xpart fetcher: queued {} new x-parts (first={:#x} last={:#x}) queue_before={} queue_after={} target={}", sent, first, last, queue_len, new_len, target_queue);
+            log::debug!("xpart fetcher: queued {} new x-parts (first={:#x} last={:#x}) queue_before={} queue_after={} target={}", sent, first, last, queue_len, new_len, target_queue);
             thread::sleep(Duration::from_millis(100));
         } else {
             thread::sleep(Duration::from_millis(FETCHER_SLEEP_MS));

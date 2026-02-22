@@ -453,7 +453,7 @@ fn run_iterations_for_x(
         pregenerate_us / 1000, sync_us / 1000, cpu_check_us / 1000, launch_us / 1000,
         timing_total_us / 1000, total_iters);
     if bloom_candidates > 0 {
-        log::info!("{} x part {:#x} bloom: candidates={} true_positives={} false_positives={}",
+        log::debug!("{} x part {:#x} bloom: candidates={} true_positives={} false_positives={}",
             gpu_tag(device_id), private_x, bloom_candidates, bloom_true_positives, bloom_false_positives);
     }
 
