@@ -3,50 +3,108 @@
 # Запускать из корня проекта. Требует CUDA Toolkit.
 #
 # Использование:
-#   ./scripts/build_rust_with_cuda.sh      # arch 86
-#   ./scripts/build_rust_with_cuda.sh 75    # arch 75
-#   ./scripts/build_rust_with_cuda.sh all   # все архитектуры
+#   ./scripts/build_rust_with_cuda.sh [cuda_ver] [arch]
+#
+# Примеры:
+#   ./scripts/build_rust_with_cuda.sh              # CUDA auto, arch 86
+#   ./scripts/build_rust_with_cuda.sh 12 86        # CUDA 12, arch 86  (RTX 30xx)
+#   ./scripts/build_rust_with_cuda.sh 13 89        # CUDA 13, arch 89  (RTX 40xx)
+#   ./scripts/build_rust_with_cuda.sh 13 120       # CUDA 13, arch 120 (RTX 50xx)
+#   ./scripts/build_rust_with_cuda.sh auto 75      # auto-detect CUDA, arch 75
 
 set -e
 cd "$(dirname "$0")/.."
 
-ARCH="${1:-86}"
+CUDA_VER="${1:-auto}"
+ARCH="${2:-86}"
 
-echo "=== 1/2 CMake (CUDA + util) ==="
-cmake -B build -DCMAKE_CUDA_ARCHITECTURES="$ARCH"
-# Build both CUDA lib (libecc_cuda.so + keyhunt_cuda_capi) and util so Rust linker finds them
-cmake --build build --target keyhunt_cuda_capi util -j "$(nproc 2>/dev/null || echo 4)"
+###############################################################################
+# Resolve CUDA toolkit path
+###############################################################################
+resolve_cuda_path() {
+  local ver="$1"
+
+  if [[ "$ver" == "auto" ]]; then
+    # Prefer CUDA_PATH/CUDA_HOME if already set
+    for p in "$CUDA_PATH" "$CUDA_HOME"; do
+      [[ -n "$p" && -x "$p/bin/nvcc" ]] && echo "$p" && return
+    done
+    # Fall back to nvcc in PATH
+    local nvcc
+    nvcc=$(command -v nvcc 2>/dev/null) || true
+    if [[ -n "$nvcc" ]]; then
+      local real
+      real=$(realpath "$nvcc" 2>/dev/null || readlink -f "$nvcc" 2>/dev/null || echo "$nvcc")
+      echo "$(cd "$(dirname "$(dirname "$real")")" && pwd)"
+      return
+    fi
+    echo >&2 "ERROR: nvcc not found. Set CUDA_PATH or pass CUDA version (12/13)."
+    exit 1
+  fi
+
+  # Explicit version: search /usr/local/cuda-<ver>*
+  local best=""
+  for d in /usr/local/cuda-${ver} /usr/local/cuda-${ver}.*/; do
+    [[ -x "${d}/bin/nvcc" || -x "${d%/}/bin/nvcc" ]] && best="${d%/}"
+  done
+  [[ -n "$best" ]] && echo "$best" && return
+
+  # Try /opt/cuda-<ver>
+  for d in /opt/cuda-${ver} /opt/cuda-${ver}.*/; do
+    [[ -x "${d}/bin/nvcc" || -x "${d%/}/bin/nvcc" ]] && best="${d%/}"
+  done
+  [[ -n "$best" ]] && echo "$best" && return
+
+  echo >&2 "ERROR: CUDA $ver not found. Install it or check paths."
+  echo >&2 "  Expected: /usr/local/cuda-${ver}* or /opt/cuda-${ver}*"
+  exit 1
+}
+
+CUDA_ROOT=$(resolve_cuda_path "$CUDA_VER")
+NVCC_BIN="$CUDA_ROOT/bin/nvcc"
+DETECTED_VER=$("$NVCC_BIN" --version 2>/dev/null | grep -oP 'release \K[0-9]+\.[0-9]+' || echo "?")
+
+echo "========================================"
+echo "  CUDA:  $CUDA_ROOT  (nvcc $DETECTED_VER)"
+echo "  ARCH:  $ARCH"
+echo "========================================"
+
+###############################################################################
+# Each CUDA major version gets its own build dir to avoid cmake re-configure
+###############################################################################
+CUDA_MAJOR="${DETECTED_VER%%.*}"
+BUILD_DIR="build-cuda${CUDA_MAJOR}"
+
+echo "=== 1/2 CMake (CUDA + util)  [${BUILD_DIR}] ==="
+cmake -B "$BUILD_DIR" \
+  -DCMAKE_CUDA_COMPILER="$NVCC_BIN" \
+  -DCMAKE_CUDA_ARCHITECTURES="$ARCH"
+
+cmake --build "$BUILD_DIR" --target keyhunt_cuda_capi util -j "$(nproc 2>/dev/null || echo 4)"
 
 echo "=== 2/2 Rust (cuda, release) ==="
-export KEYHUNT_CUDA_LIB_DIR="$PWD/build/cuda"
+export KEYHUNT_CUDA_LIB_DIR="$PWD/$BUILD_DIR/cuda"
 export KEYHUNT_PROJECT_ROOT="$PWD"
-# Чтобы линкер нашёл libcudart_static.a, задаём CUDA_PATH по nvcc (если ещё не задан)
-if [ -z "${CUDA_PATH:-}" ] && [ -z "${CUDA_HOME:-}" ]; then
-  NVCC=$(which nvcc 2>/dev/null)
-  if [ -n "$NVCC" ]; then
-    REAL=$(realpath "$NVCC" 2>/dev/null || readlink -f "$NVCC" 2>/dev/null || echo "$NVCC")
-    export CUDA_PATH="$(cd "$(dirname "$(dirname "$REAL")")" 2>/dev/null && pwd)"
-    [ -n "$CUDA_PATH" ] && echo "CUDA_PATH=$CUDA_PATH"
-  fi
-fi
+export CUDA_PATH="$CUDA_ROOT"
+
 # -L для cudart_static
+RUSTFLAGS="${RUSTFLAGS:-}"
 for _d in \
-  "$CUDA_PATH/targets/x86_64-linux/lib" "$CUDA_PATH/lib64" "$CUDA_PATH/lib" \
-  "$CUDA_HOME/targets/x86_64-linux/lib" "$CUDA_HOME/lib64" "$CUDA_HOME/lib" \
-  /usr/local/cuda/targets/x86_64-linux/lib /usr/local/cuda/lib64 \
-  /usr/local/cuda-13.1/targets/x86_64-linux/lib /opt/cuda/lib64; do
-  [ -n "$_d" ] && [ -f "${_d}/libcudart_static.a" ] && export RUSTFLAGS="${RUSTFLAGS:-} -L $_d" && echo "RUSTFLAGS -L $_d" && break
+  "$CUDA_ROOT/targets/x86_64-linux/lib" "$CUDA_ROOT/lib64" "$CUDA_ROOT/lib"; do
+  [[ -f "${_d}/libcudart_static.a" ]] && RUSTFLAGS="$RUSTFLAGS -L $_d" && echo "RUSTFLAGS -L $_d" && break
 done
-# -L для wallycore и secp256k1 (util)
-[ -d "$PWD/external/wallycore/lib" ] && export RUSTFLAGS="${RUSTFLAGS:-} -L $PWD/external/wallycore/lib"
-[ -d /usr/lib/x86_64-linux-gnu ] && export RUSTFLAGS="${RUSTFLAGS:-} -L /usr/lib/x86_64-linux-gnu"
+# -L для wallycore и secp256k1
+[[ -d "$PWD/external/wallycore/lib" ]] && RUSTFLAGS="$RUSTFLAGS -L $PWD/external/wallycore/lib"
+[[ -d /usr/lib/x86_64-linux-gnu ]]    && RUSTFLAGS="$RUSTFLAGS -L /usr/lib/x86_64-linux-gnu"
+export RUSTFLAGS
+
 if ! cargo build --release --manifest-path rust/Cargo.toml --features cuda --bin keyhunt-pvk 2>&1 | tee /tmp/keyhunt_rust_build.log; then
   echo "--- последние 40 строк (ошибка линковки) ---"
   tail -40 /tmp/keyhunt_rust_build.log
   exit 1
 fi
 
-# Чтобы ./keyhunt-pvk из rust/target/release/ находил libecc_cuda.so (rpath $ORIGIN)
-cp -f build/cuda/libecc_cuda.so rust/target/release/ 2>/dev/null || true
-echo "OK: rust/target/release/keyhunt-pvk"
-echo "    Запуск из корня: ./rust/target/release/keyhunt-pvk   или из release: cd rust/target/release && ./keyhunt-pvk"
+cp -f "$BUILD_DIR/cuda/libecc_cuda.so" rust/target/release/ 2>/dev/null || true
+echo ""
+echo "OK: rust/target/release/keyhunt-pvk  (CUDA $DETECTED_VER, arch $ARCH)"
+echo "    Запуск: ./rust/target/release/keyhunt-pvk"

@@ -2,6 +2,7 @@
 .idea/
 
 build/
+build-cuda*/
 out/
 # только корневая bin/ (C++ бинарники), rust/src/bin/ — исходники утилит, трекаем
 /bin/

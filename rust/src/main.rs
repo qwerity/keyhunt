@@ -29,7 +29,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::new().default_filter_or("info"))
         .format(|buf, record| {
             use std::io::Write;
-            writeln!(buf, "{:5} {}", record.level(), record.args())
+            let now = std::time::SystemTime::now();
+            let d = now.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+            let secs = d.as_secs();
+            let ms = d.subsec_millis();
+            let (h, m, s) = ((secs / 3600) % 24, (secs / 60) % 60, secs % 60);
+            writeln!(buf, "{:02}:{:02}:{:02}.{:03} {:5} {}", h, m, s, ms, record.level(), record.args())
         })
         .init();
 

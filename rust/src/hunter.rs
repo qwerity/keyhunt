@@ -334,10 +334,10 @@ fn run_iterations_for_x(
     if handle.pregenerate_keys(private_x, 0).is_err() { return None; }
     if handle.launch_kernel().is_err() { return None; }
 
-    let mut pregenerate_ms: u64 = 0;
-    let mut sync_ms: u64 = 0;
-    let mut cpu_check_ms: u64 = 0;
-    let mut launch_ms: u64 = 0;
+    let mut pregenerate_us: u64 = 0;
+    let mut sync_us: u64 = 0;
+    let mut cpu_check_us: u64 = 0;
+    let mut launch_us: u64 = 0;
 
     for iter in 0..total_iters {
         let t0 = Instant::now();
@@ -352,11 +352,11 @@ fn run_iterations_for_x(
         };
 
         if handle.pregenerate_keys(next_x, next_iter).is_err() { return None; }
-        pregenerate_ms += t0.elapsed().as_millis() as u64;
+        pregenerate_us += t0.elapsed().as_micros() as u64;
 
         let t_sync = Instant::now();
         let n = handle.sync_and_get_results(result_buf, iter, private_x);
-        sync_ms += t_sync.elapsed().as_millis() as u64;
+        sync_us += t_sync.elapsed().as_micros() as u64;
 
         let t_cpu = Instant::now();
         for i in 0..n as usize {
@@ -373,11 +373,11 @@ fn run_iterations_for_x(
                 let _ = result_tx.try_send(out);
             }
         }
-        cpu_check_ms += t_cpu.elapsed().as_millis() as u64;
+        cpu_check_us += t_cpu.elapsed().as_micros() as u64;
 
         let t_launch = Instant::now();
         if handle.launch_kernel().is_err() { return None; }
-        launch_ms += t_launch.elapsed().as_millis() as u64;
+        launch_us += t_launch.elapsed().as_micros() as u64;
 
         // Микросекунды: при малом points_per_thread итерация < 1 ms, as_millis()=0 → скорость считалась неверно.
         let elapsed_us = t0.elapsed().as_micros() as u64;
@@ -421,9 +421,12 @@ fn run_iterations_for_x(
 
     // total_ms в этом блоке — микросекунды (см. выше).
 
-    // pregen = накладные расходы на запуск keygen (≈ launch overhead × iters); для multi-GPU снижать кол-во итераций (больше points_per_thread).
-    log::info!("{} x part {:#x} timing: pregen {} ms  sync {} ms  cpu {} ms  launch {} ms  (iters={})",
-        gpu_tag(device_id), private_x, pregenerate_ms, sync_ms, cpu_check_ms, launch_ms, total_iters);
+    // Накапливали в микросекундах, чтобы не терять доли мс (as_millis() давало 0 при <1ms за итерацию).
+    let timing_total_us = pregenerate_us + sync_us + cpu_check_us + launch_us;
+    log::info!("{} x part {:#x} timing: pregen {} ms  sync {} ms  cpu {} ms  launch {} ms  total {} ms (iters={})",
+        gpu_tag(device_id), private_x,
+        pregenerate_us / 1000, sync_us / 1000, cpu_check_us / 1000, launch_us / 1000,
+        timing_total_us / 1000, total_iters);
 
     // The last kernel launched in the loop is still running.
     let n = handle.sync_and_get_results(result_buf, total_iters - 1, private_x);

@@ -14,8 +14,9 @@ log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 WORK_DIR="${WORK_DIR:-/workspace}"
 BASE_URL="https://storage.googleapis.com/bbdatav2"
 
+# Суффикс: 89 → libecc_cuda_89.so, 12_89 → libecc_cuda_12_89.so
 CUDA_SUFFIX=""
-if [[ -n "${1:-}" && "$1" =~ ^[0-9]+$ ]]; then
+if [[ -n "${1:-}" && "$1" =~ ^[0-9]+(_[0-9]+)?$ ]]; then
     CUDA_SUFFIX="_$1"
     shift
 fi
