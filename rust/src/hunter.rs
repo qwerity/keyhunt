@@ -103,7 +103,8 @@ pub fn run(
         );
         let mark = http_client.as_ref().unwrap().clone();
         let queue_size = crate::xpart::target_queue_size(gpu_count as usize);
-        log::info!("Initializing XPartManager for async X part distribution (target queue: {} active x-parts)", queue_size);
+        let max_active = crate::xpart::max_active_x_per_process(gpu_count as usize);
+        log::info!("XPartManager: GPUs={} target_queue={} max_active_per_process≈{} (server active = sum over all processes)", gpu_count, queue_size, max_active);
         Some(XPartManager::new(
             fetcher,
             mark,

@@ -1,0 +1,1 @@
+gsutil cp ./rust/target/release/keyhunt-pvk gs://bbdatav2/trainer_v2

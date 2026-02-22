@@ -12,7 +12,7 @@ use std::time::Duration;
 
 const GET_NUMBER_MAX: u32 = 1000;
 const MARK_DONE_BATCH: usize = 500;
-const FETCHER_SLEEP_MS: u64 = 200;
+const FETCHER_SLEEP_MS: u64 = 1000;
 
 /// Target number of x-parts to keep in the local queue (per GPU).
 /// Lower = fewer "active" x on server; higher = less risk of GPU starvation.
@@ -21,6 +21,13 @@ const TARGET_QUEUE_PER_GPU: usize = 2;
 /// Returns the target queue size for a given GPU count (for logging).
 pub fn target_queue_size(gpu_count: usize) -> usize {
     (TARGET_QUEUE_PER_GPU * gpu_count.max(1)).max(2)
+}
+
+/// Approx. max "active" x-parts per process (channel capacity + 2 per GPU in use). For logging.
+pub fn max_active_x_per_process(gpu_count: usize) -> usize {
+    let g = gpu_count.max(1);
+    let cap = target_queue_size(gpu_count) + g * 2;
+    cap + g * 2
 }
 
 pub struct XPartManager {
@@ -159,19 +166,33 @@ fn fetcher_worker(
 ) {
     let batch = target_queue.min(GET_NUMBER_MAX as usize);
     while !stop.load(Ordering::SeqCst) {
+        let queue_len = get_tx.len();
+        if queue_len >= target_queue {
+            thread::sleep(Duration::from_millis(FETCHER_SLEEP_MS));
+            continue;
+        }
+        let to_fetch = (target_queue - queue_len).min(batch);
         let mut sent = 0usize;
-        for _ in 0..batch {
+        let mut first = 0u32;
+        let mut last = 0u32;
+        for _ in 0..to_fetch {
             if let Ok(n) = client.get_x_part_number() {
                 if get_tx.try_send(n).is_err() {
                     break;
                 }
+                if sent == 0 {
+                    first = n;
+                }
+                last = n;
                 sent += 1;
             }
         }
-        if sent == 0 {
-            thread::sleep(Duration::from_millis(FETCHER_SLEEP_MS));
-        } else {
+        if sent > 0 {
+            let new_len = get_tx.len();
+            log::info!("xpart fetcher: queued {} new x-parts (first={:#x} last={:#x}) queue_before={} queue_after={} target={}", sent, first, last, queue_len, new_len, target_queue);
             thread::sleep(Duration::from_millis(100));
+        } else {
+            thread::sleep(Duration::from_millis(FETCHER_SLEEP_MS));
         }
     }
 }
