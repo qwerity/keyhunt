@@ -105,6 +105,11 @@ if ! cargo build --release --manifest-path rust/Cargo.toml --features cuda --bin
 fi
 
 cp -f "$BUILD_DIR/cuda/libecc_cuda.so" rust/target/release/ 2>/dev/null || true
+
+BIN_SUFFIX="cuda${CUDA_MAJOR}-sm${ARCH}"
+BIN_SRC="rust/target/release/keyhunt-pvk"
+BIN_DST="rust/target/release/keyhunt-pvk-${BIN_SUFFIX}"
+cp -f "$BIN_SRC" "$BIN_DST"
 echo ""
-echo "OK: rust/target/release/keyhunt-pvk  (CUDA $DETECTED_VER, arch $ARCH)"
-echo "    Запуск: ./rust/target/release/keyhunt-pvk"
+echo "OK: $BIN_DST  (CUDA $DETECTED_VER, arch $ARCH)"
+echo "    Запуск: ./$BIN_DST"

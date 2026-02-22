@@ -6,6 +6,7 @@ build-cuda*/
 out/
 # только корневая bin/ (C++ бинарники), rust/src/bin/ — исходники утилит, трекаем
 /bin/
+/versions/
 cmake-build-*/
 
 /CMakeSettings.json
