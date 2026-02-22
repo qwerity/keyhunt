@@ -6,9 +6,7 @@ use crossbeam_channel::Receiver;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use std::sync::atomic::AtomicBool;
 use std::thread;
-use std::time::Duration;
 
 /// One found key result (matches C API KeyhuntSearchResult).
 #[derive(Clone, Debug)]
@@ -136,13 +134,12 @@ pub fn run_results_processor(
     rx: Receiver<Hash160SearchResult>,
     config: std::sync::Arc<Config>,
     http_client: std::sync::Arc<HttpClient>,
-    stop: std::sync::Arc<AtomicBool>,
-) {
+) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        while !stop.load(std::sync::atomic::Ordering::SeqCst) {
-            let r = match rx.recv_timeout(Duration::from_millis(500)) {
+        loop {
+            let r = match rx.recv() {
                 Ok(res) => res,
-                Err(_) => continue,
+                Err(_) => break,
             };
             let line = format_result(&r);
             let use_server = !config.dev_mode()
@@ -158,6 +155,6 @@ pub fn run_results_processor(
                 let _ = append_plain("results.txt", &line);
             }
         }
-        log::info!("ResultsProcessor: done");
-    });
+        log::info!("ResultsProcessor: channel closed, all results processed");
+    })
 }

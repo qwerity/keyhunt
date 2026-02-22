@@ -7,6 +7,7 @@
 use crate::http_client::HttpClient;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -33,7 +34,7 @@ pub fn max_active_x_per_process(gpu_count: usize) -> usize {
 pub struct XPartManager {
     get_rx: Receiver<u32>,
     mark_tx: Sender<u32>,
-    stop: AtomicBool,
+    stop: Arc<AtomicBool>,
     fetcher_handle: Option<thread::JoinHandle<()>>,
     mark_handle: Option<thread::JoinHandle<()>>,
 }
@@ -51,18 +52,15 @@ impl XPartManager {
         let (get_tx, get_rx) = bounded::<u32>(cap);
         let (mark_tx, mark_rx) = bounded::<u32>(1024);
 
-        let stop_fetcher = AtomicBool::new(false);
+        let stop = Arc::new(AtomicBool::new(false));
+
+        let stop_fetcher = Arc::clone(&stop);
         let fetcher_tx = get_tx.clone();
         let fetcher_handle = thread::spawn(move || {
-            fetcher_worker(
-                fetcher_client,
-                fetcher_tx,
-                target_queue,
-                &stop_fetcher,
-            );
+            fetcher_worker(fetcher_client, fetcher_tx, target_queue, &stop_fetcher);
         });
 
-        let stop_mark = AtomicBool::new(false);
+        let stop_mark = Arc::clone(&stop);
         let mark_handle = thread::spawn(move || {
             mark_done_worker(mark_client, mark_rx, &stop_mark);
         });
@@ -70,7 +68,7 @@ impl XPartManager {
         XPartManager {
             get_rx,
             mark_tx,
-            stop: AtomicBool::new(false),
+            stop,
             fetcher_handle: Some(fetcher_handle),
             mark_handle: Some(mark_handle),
         }
@@ -94,7 +92,7 @@ impl XPartManager {
         XPartManager {
             get_rx,
             mark_tx,
-            stop: AtomicBool::new(false),
+            stop: Arc::new(AtomicBool::new(false)),
             fetcher_handle: Some(fetcher_handle),
             mark_handle: None,
         }
@@ -184,15 +182,22 @@ fn fetcher_worker(
         let mut first = 0u32;
         let mut last = 0u32;
         for _ in 0..to_fetch {
-            if let Ok(n) = client.get_x_part_number() {
-                if get_tx.try_send(n).is_err() {
+            match client.get_x_part_number() {
+                Ok(n) => {
+                    if get_tx.try_send(n).is_err() {
+                        break;
+                    }
+                    if sent == 0 {
+                        first = n;
+                    }
+                    last = n;
+                    sent += 1;
+                }
+                Err(e) => {
+                    log::error!("xpart fetcher: get_x_part_number failed: {}", e);
+                    thread::sleep(Duration::from_millis(FETCHER_SLEEP_MS));
                     break;
                 }
-                if sent == 0 {
-                    first = n;
-                }
-                last = n;
-                sent += 1;
             }
         }
         if sent > 0 {

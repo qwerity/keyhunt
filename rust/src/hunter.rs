@@ -5,7 +5,6 @@ use crate::hash160::{Hash160Targets, read_hash160_targets};
 use crate::results::{run_results_processor, Hash160SearchResult};
 use crate::xpart::XPartManager;
 use crossbeam_channel::bounded;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
@@ -117,10 +116,11 @@ pub fn run(
     let xpart_arc: Option<Arc<XPartManager>> = xpart_manager.map(Arc::new);
 
     let (result_tx, result_rx) = bounded::<Hash160SearchResult>(RESULT_QUEUE_CAP);
-    let stop = Arc::new(AtomicBool::new(false));
-    if let Some(ref client) = http_client {
-        run_results_processor(result_rx, config.clone(), client.clone(), stop.clone());
-    }
+    let results_handle = if let Some(ref client) = http_client {
+        Some(run_results_processor(result_rx, config.clone(), client.clone()))
+    } else {
+        None
+    };
 
     let mut handles = Vec::new();
     for device_id in 0..gpu_count {
@@ -143,10 +143,13 @@ pub fn run(
         });
         handles.push(h);
     }
+    drop(result_tx);
     for h in handles {
         let _ = h.join();
     }
-    stop.store(true, Ordering::SeqCst);
+    if let Some(rh) = results_handle {
+        let _ = rh.join();
+    }
     Ok(())
 }
 
@@ -388,7 +391,10 @@ fn run_iterations_for_x(
             if targets.contains(&digest_be) {
                 bloom_true_positives += 1;
                 let out = keyhunt_search_result_from_c(r);
-                let _ = result_tx.try_send(out);
+                if let Err(e) = result_tx.send(out) {
+                    log::error!("{} result_tx.send FAILED (key LOST): {}", gpu_tag(device_id), e);
+                    panic!("{} result_tx.send failed — found key lost!", gpu_tag(device_id));
+                }
             }
         }
         cpu_check_us += t_cpu.elapsed().as_micros() as u64;
