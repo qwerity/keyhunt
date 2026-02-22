@@ -140,3 +140,8 @@ cmake --build build --config=Release -j 14 --target cuda-keyhunt-pvk
 ```bash
 wget https://storage.googleapis.com/bbdatav2/startup.sh && chmod +x ./startup.sh && ./startup.sh
 ```
+
+### Update
+```
+wget https://storage.googleapis.com/bbdatav2/update.sh && chmod +x ./update.sh
+```
