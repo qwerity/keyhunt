@@ -115,7 +115,7 @@ __device__ __forceinline__ void ec4limb_ModDouble256(uint64_t *r, const uint64_t
 // ---------------------------------------------------------------------------------
 // Modular Multiplication (256-bit)
 // ---------------------------------------------------------------------------------
-__device__ void ec4limb_ModMult(uint64_t *r, const uint64_t *a, const uint64_t *b)
+__device__ __noinline__ void ec4limb_ModMult(uint64_t *r, const uint64_t *a, const uint64_t *b)
 {
     uint64_t r512[8];
     uint64_t t[EC4LIMB_NBBLOCK];
@@ -135,7 +135,7 @@ __device__ void ec4limb_ModMult(uint64_t *r, const uint64_t *a, const uint64_t *
 // ---------------------------------------------------------------------------------
 // Modular Squaring (256-bit)
 // ---------------------------------------------------------------------------------
-__device__ void ec4limb_ModSqr(uint64_t *rp, const uint64_t *up)
+__device__ __noinline__ void ec4limb_ModSqr(uint64_t *rp, const uint64_t *up)
 {
     uint64_t r512[8];
     uint64_t u10, u11, r0, r1, r3, r4, t1, t2;
@@ -339,6 +339,7 @@ __device__ __noinline__ void ec4limb_ModInv(uint64_t *R)
     EC4LIMB_Load(R, r);
 }
 
+template<int MAX_COUNT>
 __device__ void ec4limb_BatchModInv(uint64_t Z[][4], int count)
 {
     if (count <= 0) return;
@@ -349,7 +350,7 @@ __device__ void ec4limb_BatchModInv(uint64_t Z[][4], int count)
         EC4LIMB_Store256(Z[0], tmp);
         return;
     }
-    uint64_t products[EC4LIMB_MAX_BATCH_SIZE][4], acc[4];
+    uint64_t products[MAX_COUNT][4], acc[4];
     EC4LIMB_Load256(acc, Z[0]); EC4LIMB_Store256(products[0], acc);
     for (int i = 1; i < count; i++) {
         ec4limb_ModMult(acc, acc, Z[i]);
@@ -370,7 +371,7 @@ __device__ void ec4limb_BatchModInv(uint64_t Z[][4], int count)
 // ---------------------------------------------------------------------------------
 // Point Add Mixed Jacobian-Affine (8M+3S)
 // ---------------------------------------------------------------------------------
-__device__ void ec4limb_PointAddMixedAffine(
+__device__ __noinline__ void ec4limb_PointAddMixedAffine(
     uint64_t *X1, uint64_t *Y1, uint64_t *Z1,
     const uint64_t *x2, const uint64_t *y2)
 {
@@ -416,11 +417,12 @@ __device__ void ec4limb_JacobianToAffine(uint64_t *X, uint64_t *Y, uint64_t *Z)
     Z[0] = 1; Z[1] = Z[2] = Z[3] = 0;
 }
 
+template<int MAX_COUNT>
 __device__ void ec4limb_BatchJacobianToAffine(uint64_t X[][4], uint64_t Y[][4], uint64_t Z[][4], int count)
 {
     if (count <= 0) return;
     if (count == 1) { ec4limb_JacobianToAffine(X[0], Y[0], Z[0]); return; }
-    ec4limb_BatchModInv(Z, count);
+    ec4limb_BatchModInv<MAX_COUNT>(Z, count);
     for (int i = 0; i < count; i++) {
         uint64_t ZInv2[4], ZInv3[4];
         ec4limb_ModSqr(ZInv2, Z[i]);

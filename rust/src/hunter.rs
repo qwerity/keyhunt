@@ -199,8 +199,14 @@ fn run_one_gpu(
         } else {
             config.keys_number_to_generate() as u64
         };
-        let total_iters = (total_to_generate / keys_per_iter as u64) as u32;
-        let total_iters = if total_iters == 0 { 1 } else { total_iters };
+        // Ceiling division: чтобы покрыть ровно 2^32 ключей, итераций должно быть ceil(2^32 / keys_per_iter)
+        let keys_per_iter_u64 = keys_per_iter as u64;
+        let total_iters = if keys_per_iter_u64 == 0 {
+            1u32
+        } else {
+            ((total_to_generate + keys_per_iter_u64 - 1) / keys_per_iter_u64) as u32
+        };
+        let total_iters = total_iters.max(1);
         log::info!("{} total iterations: {}, keysPerIteration: {}",
             gpu_tag(device_id), total_iters, keys_per_iter);
 

@@ -297,7 +297,7 @@ __device__ __forceinline__ void ec4limb_to_uint256(const uint64_t limb[4], uint2
 
 // 4-limb point multiplication: GTable 16 chunks, mixed Jacobian-Affine.
 // Warp divergence: "if (privChunks[chunk] > 0)" — different threads do 1..16 iterations.
-__device__ __forceinline__ void ec4limb_PointMultiJacobianFast(
+__device__ __noinline__ void ec4limb_PointMultiJacobianFast(
     uint64_t* qx, uint64_t* qy, uint64_t* qz,
     const uint16_t* privChunks,
     const uint64_t* gTableX, const uint64_t* gTableY)
@@ -368,7 +368,8 @@ __device__ __noinline__ void fusedHashAndCheck(const uint256_t& publicX, const u
 /**
  * Fused kernel (4-limb): public key via 4-limb GTable + hash + check in one pass.
  * (256,4)+batch4 даёт 66% occupancy, но скорость падает ~3x — больше итераций, меньше эффективность батча.
- * Оставляем (256,2), batch 8 — быстрее на практике.
+ * (256,3) fails: callees PointAddMixedAffine (126 regs) and ModMult (94 regs) exceed 85 reg/thread.
+ * (256,2), batch 8 — 25% occupancy, 128 reg/thread limit.
  */
 __global__ __launch_bounds__(256, 2) void publicKeyAndCheckHash160FusedKernel(const uint256_t *privateKeys)
 {
@@ -408,7 +409,7 @@ __global__ __launch_bounds__(256, 2) void publicKeyAndCheckHash160FusedKernel(co
                 chunks, gTableX, gTableY);
         }
 
-        ec4limb_BatchJacobianToAffine(batchQx, batchQy, batchQz, static_cast<int>(batchSize));
+        ec4limb_BatchJacobianToAffine<8>(batchQx, batchQy, batchQz, static_cast<int>(batchSize));
 
         for (uint32_t i = 0; i < batchSize; ++i)
         {
