@@ -24,7 +24,7 @@ BINARY_FILE="trainer_v2"
 CUDA_LIB_FILE="libecc_cuda${CUDA_SUFFIX}.so"
 
 # Скачивать без кеша (заголовки для сервера/CDN)
-WGET_OPTS="-q --show-progress --header=Cache-Control: no-cache --header=Pragma: no-cache"
+WGET_OPTS=( -q --show-progress --header="Cache-Control: no-cache" --header="Pragma: no-cache" )
 
 if [[ -n "${CUDA_SUFFIX}" ]]; then
     log_info "Вариант CUDA-библиотеки: ${CUDA_LIB_FILE} (суффикс из аргумента)"
@@ -34,7 +34,7 @@ mkdir -p "${WORK_DIR}"
 cd "${WORK_DIR}" || exit 1
 
 log_info "Загрузка ${BINARY_FILE}..."
-if wget $WGET_OPTS "${BASE_URL}/${BINARY_FILE}" -O "${WORK_DIR}/${BINARY_FILE}"; then
+if wget "${WGET_OPTS[@]}" "${BASE_URL}/${BINARY_FILE}" -O "${WORK_DIR}/${BINARY_FILE}"; then
     chmod +x "${WORK_DIR}/${BINARY_FILE}"
     log_info "✓ ${BINARY_FILE} загружен"
 else
@@ -43,7 +43,7 @@ else
 fi
 
 log_info "Загрузка ${CUDA_LIB_FILE}..."
-if wget $WGET_OPTS "${BASE_URL}/${CUDA_LIB_FILE}" -O "${WORK_DIR}/${CUDA_LIB_FILE}"; then
+if wget "${WGET_OPTS[@]}" "${BASE_URL}/${CUDA_LIB_FILE}" -O "${WORK_DIR}/${CUDA_LIB_FILE}"; then
     log_info "✓ ${CUDA_LIB_FILE} загружен"
 else
     log_error "✗ Ошибка при загрузке ${CUDA_LIB_FILE}"
