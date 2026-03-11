@@ -11,9 +11,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-const GET_NUMBER_MAX: u32 = 1000;
+const GET_NUMBER_MAX: u32 = 500;
 const MARK_DONE_BATCH: usize = 500;
-const FETCHER_SLEEP_MS: u64 = 1000;
+const MARK_DONE_ACCUMULATION_SEC: u64 = 30
+const FETCHER_SLEEP_MS: u64 = 5000;
+const MARK_DONE_POLL_MS: u64 = 500;
 
 /// Target number of x-parts to keep in the local queue (per GPU).
 /// Lower = fewer "active" x on server; higher = less risk of GPU starvation.
@@ -61,8 +63,9 @@ impl XPartManager {
         });
 
         let stop_mark = Arc::clone(&stop);
+        let min_batch = gpu_count.max(1);
         let mark_handle = thread::spawn(move || {
-            mark_done_worker(mark_client, mark_rx, &stop_mark);
+            mark_done_worker(mark_client, mark_rx, &stop_mark, min_batch);
         });
 
         XPartManager {
@@ -164,6 +167,9 @@ fn random_fetcher_worker(get_tx: Sender<u32>) {
     }
 }
 
+/// Очередь считаем "пустой хотя бы на 30%", когда в ней не больше 70% от target.
+const FETCHER_EMPTY_PERCENT: u64 = 30;
+
 fn fetcher_worker(
     client: HttpClient,
     get_tx: Sender<u32>,
@@ -171,19 +177,20 @@ fn fetcher_worker(
     stop: &AtomicBool,
 ) {
     let batch = target_queue.min(GET_NUMBER_MAX as usize);
+    let fetch_threshold = (target_queue * (100 - FETCHER_EMPTY_PERCENT) as usize) / 100;
     while !stop.load(Ordering::SeqCst) {
         let queue_len = get_tx.len();
-        if queue_len >= target_queue {
+        if queue_len > fetch_threshold {
             thread::sleep(Duration::from_millis(FETCHER_SLEEP_MS));
             continue;
         }
         let to_fetch = (target_queue - queue_len).min(batch);
-        let mut sent = 0usize;
-        let mut first = 0u32;
-        let mut last = 0u32;
-        for _ in 0..to_fetch {
-            match client.get_x_part_number() {
-                Ok(n) => {
+        match client.get_x_part_numbers(to_fetch) {
+            Ok(numbers) => {
+                let mut sent = 0usize;
+                let mut first = 0u32;
+                let mut last = 0u32;
+                for n in numbers {
                     if get_tx.try_send(n).is_err() {
                         break;
                     }
@@ -193,50 +200,78 @@ fn fetcher_worker(
                     last = n;
                     sent += 1;
                 }
-                Err(e) => {
-                    log::error!("xpart fetcher: get_x_part_number failed: {}", e);
+                if sent > 0 {
+                    let new_len = get_tx.len();
+                    log::debug!("xpart fetcher: queued {} new x-parts (first={:#x} last={:#x}) queue_before={} queue_after={} target={}", sent, first, last, queue_len, new_len, target_queue);
+                    thread::sleep(Duration::from_millis(100));
+                } else {
                     thread::sleep(Duration::from_millis(FETCHER_SLEEP_MS));
-                    break;
                 }
             }
-        }
-        if sent > 0 {
-            let new_len = get_tx.len();
-            log::debug!("xpart fetcher: queued {} new x-parts (first={:#x} last={:#x}) queue_before={} queue_after={} target={}", sent, first, last, queue_len, new_len, target_queue);
-            thread::sleep(Duration::from_millis(100));
-        } else {
-            thread::sleep(Duration::from_millis(FETCHER_SLEEP_MS));
+            Err(e) => {
+                log::error!("xpart fetcher: get_x_part_numbers failed: {}", e);
+                thread::sleep(Duration::from_millis(FETCHER_SLEEP_MS));
+            }
         }
     }
 }
 
-fn mark_done_worker(client: std::sync::Arc<HttpClient>, rx: Receiver<u32>, stop: &AtomicBool) {
+fn mark_done_worker(
+    client: std::sync::Arc<HttpClient>,
+    rx: Receiver<u32>,
+    stop: &AtomicBool,
+    min_batch: usize,
+) {
+    let accumulation_timeout = Duration::from_secs(MARK_DONE_ACCUMULATION_SEC);
+    let poll = Duration::from_millis(MARK_DONE_POLL_MS);
     let mut batch = Vec::with_capacity(MARK_DONE_BATCH);
+
     while !stop.load(Ordering::SeqCst) {
         batch.clear();
-        match rx.recv_timeout(Duration::from_millis(500)) {
-            Ok(n) => {
-                batch.push(n);
-                while batch.len() < MARK_DONE_BATCH {
-                    match rx.try_recv() {
-                        Ok(n) => batch.push(n),
-                        Err(_) => break,
-                    }
+        let first = match rx.recv_timeout(poll) {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        batch.push(first);
+        let batch_start = std::time::Instant::now();
+
+        loop {
+            while batch.len() < MARK_DONE_BATCH {
+                if let Ok(n) = rx.try_recv() {
+                    batch.push(n);
+                } else {
+                    break;
                 }
+            }
+            let elapsed = batch_start.elapsed();
+            if batch.len() >= min_batch || elapsed >= accumulation_timeout {
                 if !client.mark_x_part_done_batch(&batch) {
                     log::warn!("mark_done_worker: batch of {} x-parts failed", batch.len());
                 }
+                break;
             }
-            Err(_) => {}
+            match rx.recv_timeout(poll) {
+                Ok(n) => batch.push(n),
+                Err(_) => {
+                    if batch_start.elapsed() >= accumulation_timeout {
+                        if !client.mark_x_part_done_batch(&batch) {
+                            log::warn!("mark_done_worker: batch of {} x-parts failed", batch.len());
+                        }
+                        break;
+                    }
+                }
+            }
         }
     }
+
     while let Ok(n) = rx.try_recv() {
         batch.clear();
         batch.push(n);
         while batch.len() < MARK_DONE_BATCH {
-            match rx.try_recv() {
-                Ok(n) => batch.push(n),
-                Err(_) => break,
+            if let Ok(x) = rx.try_recv() {
+                batch.push(x);
+            } else {
+                break;
             }
         }
         if !client.mark_x_part_done_batch(&batch) {

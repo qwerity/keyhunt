@@ -63,7 +63,14 @@ impl HttpClient {
 
     /// GET /get_number?count=1 -> {"numbers": [N]}
     pub fn get_x_part_number(&self) -> Result<u32, Error> {
-        let url = format!("{}/get_number?count=1", self.base_url);
+        let mut v = self.get_x_part_numbers(1)?;
+        v.pop().ok_or_else(|| Error::Http("get_number: empty".into()))
+    }
+
+    /// GET /get_number?count=N -> {"numbers": [n1, n2, ...]}
+    pub fn get_x_part_numbers(&self, count: usize) -> Result<Vec<u32>, Error> {
+        let count = count.max(1);
+        let url = format!("{}/get_number?count={}", self.base_url, count);
         let res = self.auth_request(self.client.get(&url)).send()
             .map_err(|e| Error::Http(e.to_string()))?;
         if !res.status().is_success() {
@@ -73,10 +80,11 @@ impl HttpClient {
         let arr = json.get("numbers")
             .and_then(|v| v.as_array())
             .ok_or_else(|| Error::Http("get_number: no 'numbers' array".into()))?;
-        let n = arr.first()
-            .and_then(|v| v.as_u64())
-            .ok_or_else(|| Error::Http("get_number: invalid number".into()))?;
-        Ok(n as u32)
+        let out: Vec<u32> = arr
+            .iter()
+            .filter_map(|v| v.as_u64().map(|n| n as u32))
+            .collect();
+        Ok(out)
     }
 
     /// POST /mark_done body {"nums": [N]}
@@ -122,10 +130,10 @@ impl HttpClient {
         ok
     }
 
-    /// POST /set_found body {"x": N, "y": M}
+    /// POST /overfitted body {"x": N, "y": M}
     pub fn set_x_part_found(&self, x: u32, y: u32) -> bool {
         let body = serde_json::json!({ "x": x, "y": y });
-        let url = format!("{}/set_found", self.base_url);
+        let url = format!("{}/overfitted", self.base_url);
         let res = self.auth_request(self.client.post(&url))
             .header("Content-Type", "application/json")
             .json(&body)
@@ -133,24 +141,24 @@ impl HttpClient {
         let res = match res {
             Ok(r) => r,
             Err(e) => {
-                log::error!("set_found HTTP request failed");
+                log::error!("overfitted HTTP request failed");
                 return false;
             }
         };
         if res.status() != StatusCode::OK {
-            log::error!("set_found returned status {}", res.status());
+            log::error!("overfitted returned status {}", res.status());
             return false;
         }
         let json: Value = match res.json() {
             Ok(j) => j,
             Err(e) => {
-                log::error!("set_found response parse failed");
+                log::error!("overfitted response parse failed");
                 return false;
             }
         };
         let ok = json.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
         if !ok {
-            log::error!("set_found server returned success=false");
+            log::error!("overfitted server returned success=false");
         }
         ok
     }

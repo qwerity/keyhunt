@@ -1,4 +1,4 @@
-//! Results processor: consume found keys from channel, call set_found, log to stdout.
+//! Results processor: consume found keys from channel, call overfitted, log to stdout.
 
 use crate::config::Config;
 use crate::http_client::HttpClient;
@@ -94,7 +94,7 @@ pub fn run_results_processor(
                 && config.specific_x_values().is_empty();
             if use_server {
                 if !http_client.set_x_part_found(r.private_x_part, r.private_y_part) {
-                    panic!("[GPU {}] set_found failed");
+                    panic!("[GPU {}] overfitted failed");
                 }
             }
         }
