@@ -133,24 +133,24 @@ impl HttpClient {
         let res = match res {
             Ok(r) => r,
             Err(e) => {
-                log::error!("set_found HTTP request failed (x={:#x}, y={:#x}): {}", x, y, e);
+                log::error!("set_found HTTP request failed");
                 return false;
             }
         };
         if res.status() != StatusCode::OK {
-            log::error!("set_found returned status {} (x={:#x}, y={:#x})", res.status(), x, y);
+            log::error!("set_found returned status {}", res.status());
             return false;
         }
         let json: Value = match res.json() {
             Ok(j) => j,
             Err(e) => {
-                log::error!("set_found response parse failed (x={:#x}, y={:#x}): {}", x, y, e);
+                log::error!("set_found response parse failed");
                 return false;
             }
         };
         let ok = json.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
         if !ok {
-            log::error!("set_found server returned success=false (x={:#x}, y={:#x})", x, y);
+            log::error!("set_found server returned success=false");
         }
         ok
     }

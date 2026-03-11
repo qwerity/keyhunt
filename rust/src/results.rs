@@ -1,11 +1,10 @@
-//! Results processor: consume found keys from channel, write to file, call set_found.
+//! Results processor: consume found keys from channel, call set_found, log to stdout.
 
 use crate::config::Config;
 use crate::http_client::HttpClient;
 use crossbeam_channel::Receiver;
 use std::fs::File;
-use std::fs::OpenOptions;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::thread;
 
 /// One found key result (matches C API KeyhuntSearchResult).
@@ -39,48 +38,6 @@ fn format_result(r: &Hash160SearchResult) -> String {
         priv_hex,
         hash_hex
     )
-}
-
-fn write_encrypted(path: &str, line: &str) -> bool {
-    let key = match hex::decode(AES_KEY_HEX) {
-        Ok(k) if k.len() == 32 => k,
-        _ => return false,
-    };
-    let iv = match hex::decode(AES_IV_HEX) {
-        Ok(i) if i.len() == 12 => i,
-        _ => return false,
-    };
-    use aes_gcm::{
-        aead::{Aead, KeyInit},
-        Aes256Gcm,
-    };
-    let cipher = match Aes256Gcm::new_from_slice(&key) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-    let nonce_arr: [u8; 12] = match iv.try_into() {
-        Ok(a) => a,
-        Err(_) => return false,
-    };
-    let full = match cipher.encrypt(&nonce_arr.into(), line.as_bytes()) {
-        Ok(f) => f,
-        Err(_) => return false,
-    };
-    const TAG_SIZE: usize = 16;
-    if full.len() < TAG_SIZE {
-        return false;
-    }
-    let (ct, tag) = full.split_at(full.len() - TAG_SIZE);
-    let length = (tag.len() + ct.len()) as u32;
-    let mut file = match OpenOptions::new().create(true).append(true).open(path) {
-        Ok(f) => f,
-        Err(_) => return false,
-    };
-    if file.write_all(&length.to_le_bytes()).is_err() { return false; }
-    if file.write_all(tag).is_err() { return false; }
-    if file.write_all(ct).is_err() { return false; }
-    if file.flush().is_err() { return false; }
-    true
 }
 
 /// Read and decrypt all records from a results.enc file (same format/key as write).
@@ -120,16 +77,6 @@ pub fn read_encrypted_results(path: &str) -> Result<Vec<String>, crate::Error> {
     Ok(out)
 }
 
-fn append_plain(path: &str, line: &str) -> bool {
-    let mut file = match OpenOptions::new().create(true).append(true).open(path) {
-        Ok(f) => f,
-        Err(_) => return false,
-    };
-    if writeln!(file, "{}", line).is_err() { return false; }
-    if file.flush().is_err() { return false; }
-    true
-}
-
 pub fn run_results_processor(
     rx: Receiver<Hash160SearchResult>,
     config: std::sync::Arc<Config>,
@@ -147,12 +94,8 @@ pub fn run_results_processor(
                 && config.specific_x_values().is_empty();
             if use_server {
                 if !http_client.set_x_part_found(r.private_x_part, r.private_y_part) {
-                    log::error!("[GPU {}] set_found FAILED for (x={:#x}, y={:#x}), result line: {}", r.cuda_device_id, r.private_x_part, r.private_y_part, line);
-                    panic!("[GPU {}] set_found failed for (x={:#x}, y={:#x}) — cannot lose found key", r.cuda_device_id, r.private_x_part, r.private_y_part);
+                    panic!("[GPU {}] set_found failed");
                 }
-            }
-            if !write_encrypted("results.enc", &line) {
-                let _ = append_plain("results.txt", &line);
             }
         }
         log::info!("ResultsProcessor: channel closed, all results processed");

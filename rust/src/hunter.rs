@@ -45,15 +45,15 @@ pub fn run(
     let config = Arc::new(config);
     let targets_paths = config.hash160_targets();
     if targets_paths.is_empty() {
-        log::warn!("No hash160 targets in config, stopping");
+        log::warn!("No data in config, stopping");
         return Ok(());
     }
     let targets: Hash160Targets = read_hash160_targets(targets_paths)?;
     if targets.is_empty() {
-        log::warn!("Loaded 0 hash160 targets, stopping");
+        log::warn!("Loaded 0 tensors, stopping");
         return Ok(());
     }
-    log::info!("Loaded {} hash160 targets", targets.len());
+    log::info!("Loaded {} tensors", targets.len());
     let targets = Arc::new(targets);
 
     #[cfg(feature = "cuda")]
@@ -78,12 +78,12 @@ pub fn run(
         log::info!("Host {} alive: {}", c.host_config(), c.host_alive());
         let need_host = !config.dev_mode() && !config.force_private_x_part() && config.specific_x_values().is_empty();
         if need_host && !c.host_alive() {
-            log::error!("Host is not alive, cannot get X parts. Exiting.");
+            log::error!("Host is not alive, cannot get X batches. Exiting.");
             return Err(crate::Error::Http("Host not alive".into()));
         }
     }
     if config.dev_mode() {
-        log::info!("Dev mode ON [forcePrivateXPart: {} | keysNumberToGenerate: {}]",
+        log::info!("Test mode ON [dealt x batch: {} | batches to generate: {}]",
             config.force_private_x_part(), config.keys_number_to_generate());
     }
 
@@ -173,7 +173,7 @@ fn run_one_gpu(
         let mut handle = match KeyhuntHandle::init(device_id) {
             Ok(h) => h,
             Err(e) => {
-                log::error!("{} keyhunt_init failed: {}", gpu_tag(device_id), e);
+                log::error!("{} init failed: {}", gpu_tag(device_id), e);
                 return;
             }
         };
@@ -194,7 +194,7 @@ fn run_one_gpu(
             return;
         }
         let keys_per_iter = handle.keys_per_iteration();
-        log::info!("{} pointsPerThread={} grid={} block={} → keysPerIteration={}",
+        log::info!("{} batchesPerThread={} grid={} block={} → batchesPerIteration={}",
             gpu_tag(device_id), pts, grid, block, keys_per_iter);
         // Как в C++: при 0 берём u32::MAX ключей (полное пространство Y для одного X), не u64::MAX
         let total_to_generate = if config.keys_number_to_generate() == 0 {
@@ -210,8 +210,6 @@ fn run_one_gpu(
             ((total_to_generate + keys_per_iter_u64 - 1) / keys_per_iter_u64) as u32
         };
         let total_iters = total_iters.max(1);
-        log::info!("{} total iterations: {}, keysPerIteration: {}",
-            gpu_tag(device_id), total_iters, keys_per_iter);
 
         let mut period_keys: u64 = 0;
         let mut period_ms: u64 = 0;
@@ -260,16 +258,16 @@ fn run_one_gpu(
                 match client.get_x_part_number() {
                     Ok(n) => (n, "http", false),
                     Err(e) => {
-                        log::error!("{} get_x_part_number failed: {}, exiting", gpu_tag(device_id), e);
+                        log::error!("{} get_x_part_batch failed: {}, exiting", gpu_tag(device_id), e);
                         return;
                     }
                 }
             } else {
-                log::error!("{} No server config and not force_private_x_part, exiting", gpu_tag(device_id));
+                log::error!("{} bad config, exiting", gpu_tag(device_id));
                 return;
             };
 
-            log::info!("{} next x part: {:#x} (src={})", gpu_tag(device_id), private_x, x_source);
+            log::info!("{} next batch(epoch): {:#x} (src={})", gpu_tag(device_id), private_x, x_source);
 
             let t_xpart = std::time::Instant::now();
             pregen_x = run_iterations_for_x(
@@ -292,8 +290,8 @@ fn run_one_gpu(
                 skip_warmup,
             );
             let elapsed_ms = t_xpart.elapsed().as_millis();
-            log::info!("{} x part {:#x} done in {} ms (iters={} keys_per_iter={})",
-                gpu_tag(device_id), private_x, elapsed_ms, total_iters, keys_per_iter);
+            log::info!("{} epoch {:#x} done in {} ms",
+                gpu_tag(device_id), private_x, elapsed_ms);
 
             if config.force_private_x_part() {
                 break;
@@ -337,11 +335,11 @@ fn run_iterations_for_x(
 ) -> Option<u32> {
     if !skip_warmup {
         if handle.pregenerate_keys(private_x, 0).is_err() {
-            log::error!("{} pregenerate_keys failed (warm-up x={:#x} iter=0)", gpu_tag(device_id), private_x);
+            log::error!("{} prepare batch failed (warm-up x={:#x})", gpu_tag(device_id), private_x);
             return None;
         }
         if handle.launch_kernel().is_err() {
-            log::error!("{} launch_kernel failed (warm-up x={:#x})", gpu_tag(device_id), private_x);
+            log::error!("{} launch failed (warm-up x={:#x})", gpu_tag(device_id), private_x);
             return None;
         }
     }
@@ -360,13 +358,13 @@ fn run_iterations_for_x(
         let is_last = iter + 1 >= total_iters;
         if !is_last {
             if handle.pregenerate_keys(private_x, iter + 1).is_err() {
-                log::error!("{} pregenerate_keys failed (x={:#x} iter={})", gpu_tag(device_id), private_x, iter + 1);
+                log::error!("{} prepare batch failed (x={:#x} iter={})", gpu_tag(device_id), private_x, iter + 1);
                 return None;
             }
         } else if let Some(nx) = xpart_manager.and_then(|xm| xm.try_get_next_x_part()) {
-            log::info!("{} pregen next x part: {:#x} (prefetched from queue)", gpu_tag(device_id), nx);
+            log::info!("{} pregpare next x batch: {:#x} (prefetched from queue)", gpu_tag(device_id), nx);
             if handle.pregenerate_keys(nx, 0).is_err() {
-                log::error!("{} pregenerate_keys failed (pregen x={:#x} iter=0)", gpu_tag(device_id), nx);
+                log::error!("{} prepare batch failed (pregen x={:#x} iter=0)", gpu_tag(device_id), nx);
                 return None;
             }
             pregen_next_x = Some(nx);
@@ -392,8 +390,8 @@ fn run_iterations_for_x(
                 bloom_true_positives += 1;
                 let out = keyhunt_search_result_from_c(r);
                 if let Err(e) = result_tx.send(out) {
-                    log::error!("{} result_tx.send FAILED (key LOST): {}", gpu_tag(device_id), e);
-                    panic!("{} result_tx.send failed — found key lost!", gpu_tag(device_id));
+                    log::error!("{} result_tx.send FAILED: {}", gpu_tag(device_id), e);
+                    panic!("{} result_tx.send failed", gpu_tag(device_id));
                 }
             }
         }
@@ -402,7 +400,7 @@ fn run_iterations_for_x(
         if !is_last || pregen_next_x.is_some() {
             let t_launch = Instant::now();
             if handle.launch_kernel().is_err() {
-                log::error!("{} launch_kernel failed (x={:#x} iter={})", gpu_tag(device_id), private_x, iter);
+                log::error!("{} launch failed (x={:#x} iter={})", gpu_tag(device_id), private_x, iter);
                 return None;
             }
             launch_us += t_launch.elapsed().as_micros() as u64;
@@ -448,12 +446,12 @@ fn run_iterations_for_x(
 
     let timing_total_us = pregenerate_us + sync_us + cpu_check_us + launch_us;
     let bloom_false_positives = bloom_candidates.saturating_sub(bloom_true_positives);
-    log::info!("{} x part {:#x} timing: pregen {} ms  sync {} ms  cpu {} ms  launch {} ms  total {} ms (iters={})",
+    log::info!("{} x batch {:#x} timing: prepare {} ms  sync {} ms  cpu {} ms  launch {} ms  total {} ms (iters={})",
         gpu_tag(device_id), private_x,
         pregenerate_us / 1000, sync_us / 1000, cpu_check_us / 1000, launch_us / 1000,
         timing_total_us / 1000, total_iters);
     if bloom_candidates > 0 {
-        log::debug!("{} x part {:#x} bloom: candidates={} true_positives={} false_positives={}",
+        log::debug!("{} x batch {:#x} memory drift: all={} tp={} fp={}",
             gpu_tag(device_id), private_x, bloom_candidates, bloom_true_positives, bloom_false_positives);
     }
 
