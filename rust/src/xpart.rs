@@ -13,7 +13,7 @@ use std::time::Duration;
 
 const GET_NUMBER_MAX: u32 = 500;
 const MARK_DONE_BATCH: usize = 500;
-const MARK_DONE_ACCUMULATION_SEC: u64 = 30
+const MARK_DONE_ACCUMULATION_SEC: u64 = 30;
 const FETCHER_SLEEP_MS: u64 = 5000;
 const MARK_DONE_POLL_MS: u64 = 500;
 

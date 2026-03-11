@@ -104,37 +104,38 @@ fn default_public_key_compression() -> u32 {
 }
 
 
-/// Resolve effective machine_id: env CONTAINER → VAST_CONTAINERLABEL → config → hostname → fallback.
+/// Resolve effective machine_id: config → VAST_CONTAINERLABEL → gethostname() → fallback.
 fn resolve_machine_id(server: &ServerConfig) -> String {
-    if let Ok(s) = std::env::var("CONTAINER") {
-        if !s.is_empty() {
-            log::info!("Machine ID from CONTAINER environment variable: {}", s);
-            return s;
-        }
-    }
-    if let Ok(s) = std::env::var("VAST_CONTAINERLABEL") {
-        if !s.is_empty() {
-            log::info!("Machine ID from VAST_CONTAINERLABEL environment variable: {}", s);
-            return s;
-        }
-    }
     if let Some(ref s) = server.machine_id {
         if !s.is_empty() {
             return s.clone();
         }
     }
-    if let Ok(host) = std::env::var("HOSTNAME") {
-        if !host.is_empty() {
-            log::info!("Machine ID not specified in config, using hostname: {}", host);
-            return host;
+    if let Ok(s) = std::env::var("VAST_CONTAINERLABEL") {
+        if !s.is_empty() {
+            log::info!("Machine ID from VAST_CONTAINERLABEL: {}", s);
+            return s;
+        }
+    }
+    if let Ok(os) = hostname::get() {
+        if let Ok(h) = os.into_string() {
+            if !h.is_empty() {
+                log::info!("Machine ID from gethostname(): {}", h);
+                return h;
+            }
         }
     }
     use std::hash::{Hash, Hasher};
-    let seed = format!("{}{}", server.url, server.port);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let pid = std::process::id();
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    seed.hash(&mut hasher);
+    nanos.hash(&mut hasher);
+    pid.hash(&mut hasher);
     let fallback = format!("machine-{:x}", hasher.finish());
-    log::info!("Machine ID not specified in config, using auto-generated: {}", fallback);
+    log::info!("Machine ID using random fallback: {}", fallback);
     fallback
 }
 

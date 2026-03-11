@@ -36,6 +36,9 @@ anyhow = "1.0"
 # Fast file I/O
 memmap2 = "0.9"
 
+# OS hostname (when HOSTNAME env not set, e.g. minimal containers)
+hostname = "0.4"
+
 # CUDA runtime (only for gpu_info binary)
 # One of cuda-version-from-build-system or cuda-11* / cuda-12* must be enabled when using gpu-info
 cudarc = { version = "0.13", optional = true, features = ["cuda-11080"] }
