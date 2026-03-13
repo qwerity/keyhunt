@@ -8,32 +8,35 @@
 #include <algorithm>
 
 /*################################################################################################################################################################################*/
-inline void cudaCheckErrorImpl(
-    const int errorCode,
-    const char* const file,
-    const int line,
-    const char* const function)
-{
-    if (errorCode == cudaSuccess)
-    {
-        return;
-    }
-
-    const auto errStr = cudaGetErrorString(static_cast<cudaError_t>(errorCode));
 #ifdef KEYHUNT_CUDA_VERBOSE
-    fprintf(stderr, "[%d] %s at {%s:%d} (%s)\n", errorCode, errStr, file, line, function);
+#define cudaCheckError(err) \
+    do \
+    { \
+        const auto cudaCheckErrorCode = (err); \
+        if (cudaCheckErrorCode != cudaSuccess) \
+        { \
+            const auto errStr = cudaGetErrorString(cudaCheckErrorCode); \
+            fprintf(stderr, "[%d] %s at {%s:%d} (%s)\n", (int)cudaCheckErrorCode, errStr, __FILE__, __LINE__, __func__); \
+            fflush(stderr); \
+            fflush(stdout); \
+            exit(13); \
+        } \
+    } while(0)
 #else
-    (void)file;
-    (void)line;
-    (void)function;
-    fprintf(stderr, "CUDA error: %s\n", errStr);
+#define cudaCheckError(err) \
+    do \
+    { \
+        const auto cudaCheckErrorCode = (err); \
+        if (cudaCheckErrorCode != cudaSuccess) \
+        { \
+            const auto errStr = cudaGetErrorString(cudaCheckErrorCode); \
+            fprintf(stderr, "CUDA error: %s\n", errStr); \
+            fflush(stderr); \
+            fflush(stdout); \
+            exit(13); \
+        } \
+    } while(0)
 #endif
-    fflush(stderr);
-    fflush(stdout);
-    exit(13);
-}
-
-#define cudaCheckError(err) cudaCheckErrorImpl(static_cast<int>(err), __FILE__, __LINE__, __func__)
 
 
 /*################################################################################################################################################################################*/
