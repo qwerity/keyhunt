@@ -4,8 +4,32 @@ use crate::config::ServerConfig;
 use crate::Error;
 use reqwest::blocking::Client;
 use reqwest::StatusCode;
+use reqwest::Url;
 use serde_json::Value;
 use std::time::Duration;
+
+fn build_base_url(config: &ServerConfig) -> String {
+    let raw_url = config.url.trim().trim_end_matches('/');
+    let candidate = if raw_url.starts_with("http://") || raw_url.starts_with("https://") {
+        raw_url.to_string()
+    } else {
+        format!("http://{}", raw_url)
+    };
+
+    let mut url = Url::parse(&candidate).expect("valid server url");
+    if !config.port.is_empty() {
+        let port = config.port.parse::<u16>().expect("valid server port");
+        url.set_port(Some(port)).expect("server url with host");
+    } else if url.port().is_none() {
+        let default_port = match url.scheme() {
+            "https" => 443,
+            _ => 80,
+        };
+        url.set_port(Some(default_port)).expect("server url with host");
+    }
+
+    url.to_string().trim_end_matches('/').to_string()
+}
 
 pub struct HttpClient {
     base_url: String,
@@ -16,8 +40,7 @@ pub struct HttpClient {
 
 impl HttpClient {
     pub fn new(config: &ServerConfig, connect_timeout_sec: Option<u64>, read_write_timeout_sec: Option<u64>) -> Self {
-        let port = if config.port.is_empty() { "80" } else { config.port.as_str() };
-        let base_url = format!("http://{}:{}", config.url, port);
+        let base_url = build_base_url(config);
         let timeout = read_write_timeout_sec.unwrap_or(45);
         let client = Client::builder()
             .connect_timeout(Duration::from_secs(connect_timeout_sec.unwrap_or(60)))
@@ -161,5 +184,46 @@ impl HttpClient {
             log::error!("overfitted server returned success=false");
         }
         ok
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_base_url;
+    use crate::config::ServerConfig;
+
+    fn server_config(url: &str, port: &str) -> ServerConfig {
+        ServerConfig {
+            url: url.to_string(),
+            port: port.to_string(),
+            authorisation_header: String::new(),
+            machine_id: None,
+        }
+    }
+
+    #[test]
+    fn defaults_to_http_for_plain_host() {
+        assert_eq!(build_base_url(&server_config("example.com", "")), "http://example.com");
+    }
+
+    #[test]
+    fn supports_https_urls() {
+        assert_eq!(build_base_url(&server_config("https://example.com", "")), "https://example.com");
+    }
+
+    #[test]
+    fn keeps_port_from_url_when_config_port_is_empty() {
+        assert_eq!(
+            build_base_url(&server_config("https://example.com:8443/", "")),
+            "https://example.com:8443"
+        );
+    }
+
+    #[test]
+    fn config_port_overrides_url_port() {
+        assert_eq!(
+            build_base_url(&server_config("https://example.com:8443", "9443")),
+            "https://example.com:9443"
+        );
     }
 }
