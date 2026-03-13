@@ -4,25 +4,36 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <algorithm>
 
 /*################################################################################################################################################################################*/
-#define cudaCheckError(err) \
-    do \
-    { \
-        if ((err) != cudaSuccess) \
-        { \
-            const auto errStr = cudaGetErrorString(err); \
-#ifdef KEYHUNT_CUDA_VERBOSE \
-            fprintf(stderr, "[%d] %s at {%s:%d} (%s)\n", (int)(err), errStr, __FILE__, __LINE__, __func__); \
-#else \
-            fprintf(stderr, "CUDA error: %s\n", errStr); \
-#endif \
-            fflush(stderr); \
-            fflush(stdout); \
-            exit(13); \
-        } \
-    } \
-    while(0)
+inline void cudaCheckErrorImpl(
+    const int errorCode,
+    const char* const file,
+    const int line,
+    const char* const function)
+{
+    if (errorCode == cudaSuccess)
+    {
+        return;
+    }
+
+    const auto errStr = cudaGetErrorString(static_cast<cudaError_t>(errorCode));
+#ifdef KEYHUNT_CUDA_VERBOSE
+    fprintf(stderr, "[%d] %s at {%s:%d} (%s)\n", errorCode, errStr, file, line, function);
+#else
+    (void)file;
+    (void)line;
+    (void)function;
+    fprintf(stderr, "CUDA error: %s\n", errStr);
+#endif
+    fflush(stderr);
+    fflush(stdout);
+    exit(13);
+}
+
+#define cudaCheckError(err) cudaCheckErrorImpl(static_cast<int>(err), __FILE__, __LINE__, __func__)
 
 
 /*################################################################################################################################################################################*/
