@@ -164,7 +164,7 @@ impl HttpClient {
         let res = match res {
             Ok(r) => r,
             Err(e) => {
-                log::error!("overfitted HTTP request failed");
+                log::error!("overfitted HTTP request failed: {}", e);
                 return false;
             }
         };
@@ -175,7 +175,7 @@ impl HttpClient {
         let json: Value = match res.json() {
             Ok(j) => j,
             Err(e) => {
-                log::error!("overfitted response parse failed");
+                log::error!("overfitted response parse failed: {}", e);
                 return false;
             }
         };

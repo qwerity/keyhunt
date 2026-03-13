@@ -89,6 +89,7 @@ pub fn run_results_processor(
                 Err(_) => break,
             };
             let line = format_result(&r);
+            println!("{}", line);
             let use_server = !config.dev_mode()
                 && !config.force_private_x_part()
                 && config.specific_x_values().is_empty();
