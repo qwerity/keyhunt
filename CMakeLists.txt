@@ -21,8 +21,12 @@ fetch_and_include_needed_libs()
 ####################################################################################################################################################################################
 option(BUILD_TESTS "Build test_bitcoin executable." OFF)
 option(KEYHUNT_DEBUG_LOGS "Enable verbose debug logging (Found, mark_done, trace, XPartManager)." OFF)
+option(KEYHUNT_CUDA_VERBOSE "Enable CUDA debug output (file:line, kernel timing, gTable/bloom messages)." OFF)
 if(KEYHUNT_DEBUG_LOGS)
     add_compile_definitions(KEYHUNT_DEBUG_LOGS)
+endif()
+if(KEYHUNT_CUDA_VERBOSE)
+    add_compile_definitions(KEYHUNT_CUDA_VERBOSE)
 endif()
 
 ####################################################################################################################################################################################

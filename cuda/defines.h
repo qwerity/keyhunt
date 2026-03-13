@@ -12,7 +12,11 @@
         if ((err) != cudaSuccess) \
         { \
             const auto errStr = cudaGetErrorString(err); \
+#ifdef KEYHUNT_CUDA_VERBOSE \
             fprintf(stderr, "[%d] %s at {%s:%d} (%s)\n", (int)(err), errStr, __FILE__, __LINE__, __func__); \
+#else \
+            fprintf(stderr, "CUDA error: %s\n", errStr); \
+#endif \
             fflush(stderr); \
             fflush(stdout); \
             exit(13); \

@@ -133,9 +133,11 @@ struct ECC::Impl
             const int optimalGridSize = deviceProp.multiProcessorCount * numBlocksPerSM;
             mGridSize = static_cast<uint32_t>(std::max(minGridSizeFused, optimalGridSize));
 
+#ifdef KEYHUNT_CUDA_VERBOSE
             fprintf(stdout, "[GPU %d] %s | SMs %d Blocks/SM %d | grid %u block %u | occupancy %d%%\n",
                     deviceId, deviceProp.name, deviceProp.multiProcessorCount, numBlocksPerSM,
                     mGridSize, mBlockSize, occupancyPct);
+#endif
         }
 
         mKeysNumberPerIteration = mGridSize * mBlockSize * mPointsPerThread;
@@ -256,7 +258,9 @@ struct ECC::Impl
         cudaError_t err = cudaGetLastError();
         if (err != cudaSuccess)
         {
+#ifdef KEYHUNT_CUDA_VERBOSE
             fprintf(stderr, "launchKernelAsync: CUDA error: %s\n", cudaGetErrorString(err));
+#endif
         }
         // No stream sync — caller calls syncKernel() when it needs results.
     }
@@ -267,7 +271,9 @@ struct ECC::Impl
         cudaError_t err = cudaStreamSynchronize(mGeneratorStream);
         if (err != cudaSuccess)
         {
+#ifdef KEYHUNT_CUDA_VERBOSE
             fprintf(stderr, "syncKernel: CUDA sync error: %s\n", cudaGetErrorString(err));
+#endif
             cudaCheckError(err);
         }
     }
@@ -328,8 +334,10 @@ struct ECC::Impl
         const size_t fileSize = file.tellg();
         if (fileSize != expectedFileSize)
         {
+#ifdef KEYHUNT_CUDA_VERBOSE
             fprintf(stderr, "Warning: gTable file size mismatch. Expected %zu bytes, got %zu bytes. Will regenerate.\n", 
                     expectedFileSize, fileSize);
+#endif
             file.close();
             return false;
         }
@@ -341,7 +349,9 @@ struct ECC::Impl
         
         if (!file.good() || file.gcount() != static_cast<std::streamsize>(expectedFileSize))
         {
+#ifdef KEYHUNT_CUDA_VERBOSE
             fprintf(stderr, "Warning: Failed to read gTable from file. Will regenerate.\n");
+#endif
             file.close();
             return false;
         }
@@ -351,7 +361,9 @@ struct ECC::Impl
         // Copy to device memory
         thrust::copy(h_gTable.begin(), h_gTable.end(), d_gTable.begin());
         uploadGTable4limb(h_gTable);
+#ifdef KEYHUNT_CUDA_VERBOSE
         fprintf(stdout, "Successfully loaded gTable from file: %s (%zu bytes)\n", filename.c_str(), fileSize);
+#endif
         return true;
     }
 
@@ -360,16 +372,19 @@ struct ECC::Impl
         constexpr uint32_t tableSize = ECMULT_GEN_PREC_N * ECMULT_GEN_PREC_G;
         std::vector<secp256k1_ge_storage> h_gTable(tableSize);
         
+#ifdef KEYHUNT_CUDA_VERBOSE
         fprintf(stdout, "Generating gTable (this may take a while)...\n");
-        
+#endif
         secp256k1::ecpoint basePoint = secp256k1::G();
         
         for (uint32_t chunk = 0; chunk < ECMULT_GEN_PREC_N; ++chunk)
         {
+#ifdef KEYHUNT_CUDA_VERBOSE
             if (chunk % 2 == 0)
             {
                 fprintf(stdout, "Generating chunk %u/%u\n", chunk, ECMULT_GEN_PREC_N);
             }
+#endif
             
             secp256k1::ecpoint chunkBasePoint = basePoint;
             
@@ -392,7 +407,9 @@ struct ECC::Impl
         
         thrust::copy(h_gTable.begin(), h_gTable.end(), d_gTable.begin());
         uploadGTable4limb(h_gTable);
+#ifdef KEYHUNT_CUDA_VERBOSE
         fprintf(stdout, "gTable generation completed!\n");
+#endif
     }
 
     // Upload gTable pointers to constant memory once (never changes after init).
@@ -457,12 +474,16 @@ struct ECC::Impl
         cudaError_t err = cudaGetLastError();
         if (err != cudaSuccess)
         {
+#ifdef KEYHUNT_CUDA_VERBOSE
             fprintf(stderr, "publicKeyAndCheckHash160FusedKernel: CUDA error: %s\n", cudaGetErrorString(err));
+#endif
         }
         cudaError_t syncErr = cudaStreamSynchronize(mGeneratorStream);
         if (syncErr != cudaSuccess)
         {
+#ifdef KEYHUNT_CUDA_VERBOSE
             fprintf(stderr, "calculatePublicKeysAndCheckHash160: CUDA sync error: %s\n", cudaGetErrorString(syncErr));
+#endif
             cudaCheckError(syncErr);
         }
     }

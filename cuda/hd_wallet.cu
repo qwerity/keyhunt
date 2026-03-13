@@ -116,7 +116,9 @@ struct CUHDWallet::Impl
         }
 
         maxDataPerIteration = mGridSize * mBlockSize;
+#ifdef KEYHUNT_CUDA_VERBOSE
         std::fprintf(stderr, "minGridSize: %d, recommendedBlockSize: %d, set blockSize: %u, gridSize: %u, mnemonicsPerIteration: %u\n", minGridSize, recommendedBlockSize, mBlockSize, mGridSize, maxDataPerIteration);
+#endif
     }
 
     void allocatePrivateAndPublicKeysDeviceMemory(const uint32_t derivationPathsNumber)

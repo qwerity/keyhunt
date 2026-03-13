@@ -176,7 +176,9 @@ cudaError_t cudaKernelSyncLaunch(const cudaStream_t& stream, LambdaFunc&& kernel
     cudaError_t err = cudaStreamSynchronize(stream);
     if (err != cudaSuccess)
     {
+#ifdef KEYHUNT_CUDA_VERBOSE
         fprintf(stderr, "%s: CUDA error: %s\n", origin, cudaGetErrorString(err));
+#endif
     }
 
     return err;
@@ -198,7 +200,9 @@ cudaError_t cudaKernelSyncLaunchWithTiming(const cudaStream_t& stream, LambdaFun
     // Calculate and print elapsed time
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, startEvent, stopEvent);
+#ifdef KEYHUNT_CUDA_VERBOSE
     fprintf(stderr, "%s: kernel took %f ms.\n", origin, milliseconds);
+#endif
 
     // Clean up events
     cudaEventDestroy(startEvent);

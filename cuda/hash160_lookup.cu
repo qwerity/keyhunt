@@ -176,7 +176,9 @@ struct Hash160Lookup::Impl
         const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
         const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
         const uint64_t bloomFilterMask = (1ULL << bloomFilterBits) - 1;
+#ifdef KEYHUNT_CUDA_VERBOSE
         fprintf(stderr, "Allocating bloom filter (%d bits): %.02fMb\n", bloomFilterBits, static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
+#endif
 
         thrust::host_vector<uint32_t> filter(bloomFilterSizeWords);
         thrust::fill(filter.begin(), filter.end(), 0);
@@ -212,7 +214,9 @@ struct Hash160Lookup::Impl
         const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
         const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
         const uint64_t bloomFilterMask = (1ULL << bloomFilterBits) - 1;
+#ifdef KEYHUNT_CUDA_VERBOSE
         fprintf(stderr, "Allocating bloom filter (%d bits): %.02fMb\n", bloomFilterBits, static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
+#endif
 
         thrust::host_vector<uint32_t> filter(bloomFilterSizeWords);
         thrust::fill(filter.begin(), filter.end(), 0);
@@ -305,7 +309,9 @@ struct Hash160Lookup::Impl
         const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
         const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
         const uint64_t bloomFilterMask = (1ULL << bloomFilterBits) - 1;
+#ifdef KEYHUNT_CUDA_VERBOSE
         fprintf(stderr, "Allocating bloom filter (%d bits): %.02fMb\n", bloomFilterBits, static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
+#endif
 
         thrust::host_vector<uint32_t> filter(bloomFilterSizeWords);
         thrust::fill(filter.begin(), filter.end(), 0);
