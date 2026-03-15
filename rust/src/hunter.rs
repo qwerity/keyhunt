@@ -7,13 +7,13 @@ use crate::xpart::XPartManager;
 use crossbeam_channel::bounded;
 use std::sync::Arc;
 use std::thread;
-use std::time::Instant;
 
 #[cfg(feature = "cuda")]
 use crate::cuda::{device_count, keyhunt_search_result_from_c, KeyhuntHandle, KeyhuntSearchResult};
+#[cfg(feature = "cuda")]
+use std::time::Instant;
 
 const RESULT_QUEUE_CAP: usize = 1024;
-const STATUS_LOG_INTERVAL_MS: u64 = 5000;
 
 #[inline]
 fn gpu_tag(device_id: i32) -> String {
@@ -38,10 +38,9 @@ pub type StatusCallback = Arc<dyn Fn(StatusInfo) + Send + Sync>;
 
 /// Run keyhunt: load config, targets, start results processor, spawn one thread per GPU.
 pub fn run(
-    config_path: &std::path::Path,
+    config: Config,
     status_callback: Option<Arc<dyn Fn(StatusInfo) + Send + Sync>>,
 ) -> Result<(), crate::Error> {
-    let config = Config::load(config_path)?;
     let config = Arc::new(config);
     let targets_paths = config.hash160_targets();
     if targets_paths.is_empty() {
