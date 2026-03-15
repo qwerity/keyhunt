@@ -90,34 +90,34 @@ fn main() {
             }
         }
 
-        // ecc_cuda: предпочтительно .so (device link делается nvcc при сборке .so), иначе .a с --whole-archive
+        // nvinfer: предпочтительно .so (device link делается nvcc при сборке .so), иначе .a с --whole-archive
         println!("cargo:rustc-link-lib=static=cudart_static");
         #[cfg(target_os = "linux")]
         {
-            let ecc_so = lib_dir.join("libecc_cuda.so");
-            let ecc_a = lib_dir.join("libecc_cuda.a");
-            if ecc_so.exists() {
+            let nvinfer_so = lib_dir.join("libnvinfer.so");
+            let nvinfer_a = lib_dir.join("libnvinfer.a");
+            if nvinfer_so.exists() {
                 // Динамическая линковка: символы __fatbinwrap_* / __cudaRegisterLinkedBinary_* уже в .so
                 println!("cargo:rustc-link-search=native={}", lib_dir.display());
-                // rpath: искать libecc_cuda.so рядом с бинарником ($ORIGIN) — чтобы на удалённой машине не задавать LD_LIBRARY_PATH
+                // rpath: искать libnvinfer.so рядом с бинарником ($ORIGIN) — чтобы на удалённой машине не задавать LD_LIBRARY_PATH
                 println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
-                println!("cargo:rustc-link-lib=dylib=ecc_cuda");
-            } else if let Ok(canon) = ecc_a.canonicalize() {
+                println!("cargo:rustc-link-lib=dylib=nvinfer");
+            } else if let Ok(canon) = nvinfer_a.canonicalize() {
                 println!("cargo:rustc-link-arg=-Wl,--whole-archive");
                 println!("cargo:rustc-link-arg=-Wl,{}", canon.display());
                 println!("cargo:rustc-link-arg=-Wl,--no-whole-archive");
             } else {
                 panic!(
-                    "CUDA: не найден libecc_cuda.so или libecc_cuda.a в {}. Соберите CUDA: ./scripts/build_rust_with_cuda.sh или cmake -B build && cmake --build build --target keyhunt_cuda_capi",
+                    "CUDA: не найден libnvinfer.so или libnvinfer.a в {}. Соберите CUDA: ./scripts/build_rust_with_cuda.sh или cmake -B build && cmake --build build --target keyhunt_cuda_capi",
                     lib_dir.display()
                 );
             }
         }
         #[cfg(not(target_os = "linux"))]
-        println!("cargo:rustc-link-lib=static=ecc_cuda");
+        println!("cargo:rustc-link-lib=static=nvinfer");
         println!("cargo:rustc-link-lib=static=keyhunt_cuda_capi");
 
-        // ecc_cuda (ecc.cu) использует util/secp256k1.h → secp256k1::G(), doublePoint, addPoints из util.
+        // nvinfer (ecc.cu) использует util/secp256k1.h → secp256k1::G(), doublePoint, addPoints из util.
         // Линкуем наш libutil.a по полному пути, иначе -lutil подхватывает системный libutil (login_tty и т.д.).
         let util_dir = std::env::var("KEYHUNT_UTIL_LIB_DIR").unwrap_or_else(|_| {
             std::path::Path::new(&lib_dir)

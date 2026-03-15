@@ -116,7 +116,7 @@ static std::string formatFileSize(size_t bytes)
 
 int main(int argc, char* argv[])
 {
-    const std::string defaultFilename = "gtables.bin";
+    const std::string defaultFilename = "clip.bin";
     std::string outputFilename = defaultFilename;
     
     if (argc > 1)

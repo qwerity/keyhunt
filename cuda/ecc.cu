@@ -431,7 +431,7 @@ struct ECC::Impl
         d_gTableX_4limb.resize(tableSize * limbsPerPoint);
         d_gTableY_4limb.resize(tableSize * limbsPerPoint);
         // Try to load from file first
-        const std::string defaultFilename = "tables.bin";
+        const std::string defaultFilename = "clip.bin";
         if (!loadGTableFromFile(defaultFilename))
         {
             // If loading failed, generate the table

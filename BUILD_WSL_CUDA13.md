@@ -20,7 +20,7 @@ cmake -DCMAKE_BUILD_TYPE=Release \
 cmake --build ./build --config Release -j $(nproc) --target cuda-keyhunt-pvk
 
 # Если device link падает с Error 255 и "used -798292566 barriers" (sm_120) — баг nvlink.
-# Сейчас device link перенесён в этап линковки exe (CUDA_RESOLVE_DEVICE_SYMBOLS OFF у ecc_cuda).
+# Сейчас device link перенесён в этап линковки exe (CUDA_RESOLVE_DEVICE_SYMBOLS OFF у nvinfer).
 # Если всё равно падает: обнови CUDA/драйвер до последних; или временно собери под sm_90 (бинарь не пойдёт на 5090).
 
 # Upload

@@ -1,4 +1,4 @@
-//! FFI to CUDA keyhunt C API. Build with feature "cuda" and link keyhunt_cuda_capi + ecc_cuda.
+//! FFI to CUDA keyhunt C API. Build with feature "cuda" and link keyhunt_cuda_capi + nvinfer.
 
 #![allow(non_camel_case_types)]
 
@@ -26,7 +26,7 @@ pub struct KeyhuntSearchResult {
     pub private_key: [u32; 8],
 }
 
-// ecc_cuda линкуется в build.rs с --whole-archive (полный путь к .a), не здесь
+// nvinfer линкуется в build.rs с --whole-archive (полный путь к .a), не здесь
 #[link(name = "keyhunt_cuda_capi")]
 #[link(name = "cudart_static")]
 #[link(name = "stdc++")]

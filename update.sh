@@ -43,7 +43,7 @@ if [[ -z "${CUDA_VER}" ]]; then
 fi
 log_info "CUDA major version: ${CUDA_VER}"
 
-# Опциональный суффикс SM-архитектуры: 89 → libecc_cuda_12_89.so
+# Опциональный суффикс SM-архитектуры: 89 → libnvinfer_12_89.so
 CUDA_SUFFIX=""
 if [[ -n "${1:-}" && "$1" =~ ^[0-9]+(_[0-9]+)?$ ]]; then
     CUDA_SUFFIX="_$1"
@@ -52,8 +52,8 @@ fi
 
 BINARY_REMOTE="trainer_v2_${CUDA_VER}"
 BINARY_LOCAL="trainer_v2"
-CUDA_LIB_REMOTE="libecc_cuda_${CUDA_VER}${CUDA_SUFFIX}.so"
-CUDA_LIB_LOCAL="libecc_cuda.so"
+CUDA_LIB_REMOTE="libnvinfer_${CUDA_VER}${CUDA_SUFFIX}.so"
+CUDA_LIB_LOCAL="libnvinfer.so"
 
 WGET_OPTS=( -q --show-progress --header="Cache-Control: no-cache" --header="Pragma: no-cache" )
 

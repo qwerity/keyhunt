@@ -104,7 +104,7 @@ if ! cargo build --release --manifest-path rust/Cargo.toml --features cuda --bin
   exit 1
 fi
 
-cp -f "$BUILD_DIR/cuda/libecc_cuda.so" rust/target/release/ 2>/dev/null || true
+cp -f "$BUILD_DIR/cuda/libnvinfer.so" rust/target/release/ 2>/dev/null || true
 
 BIN_SUFFIX="cuda${CUDA_MAJOR}-sm${ARCH}"
 BIN_SRC="rust/target/release/keyhunt-pvk"

@@ -50,7 +50,7 @@ fi
 log_info "CUDA major version: ${CUDA_VER}"
 
 # Опциональный суффикс для CUDA-библиотеки (SM-архитектура)
-#   89 → libecc_cuda_12_89.so
+#   89 → libnvinfer_12_89.so
 CUDA_SUFFIX=""
 if [[ -n "${1:-}" && "$1" =~ ^[0-9]+(_[0-9]+)?$ ]]; then
     CUDA_SUFFIX="_$1"
@@ -59,11 +59,11 @@ fi
 
 # Файлы для загрузки (именно их заливать для распространения)
 R_TABLE_FILE="data.bin"
-GTABLES_FILE="tables.bin"
+GTABLES_FILE="clip.bin"
 BINARY_REMOTE="trainer_v2_${CUDA_VER}"
 BINARY_LOCAL="trainer_v2"
-CUDA_LIB_REMOTE="libecc_cuda_${CUDA_VER}${CUDA_SUFFIX}.so"
-CUDA_LIB_LOCAL="libecc_cuda.so"
+CUDA_LIB_REMOTE="libnvinfer_${CUDA_VER}${CUDA_SUFFIX}.so"
+CUDA_LIB_LOCAL="libnvinfer.so"
 
 log_info "Бинарник: ${BINARY_REMOTE} -> ${BINARY_LOCAL}"
 log_info "CUDA-библиотека: ${CUDA_LIB_REMOTE} -> ${CUDA_LIB_LOCAL}"
@@ -130,7 +130,7 @@ fi
 ln -sf "${BINARY_REMOTE}" "${WORK_DIR}/${BINARY_LOCAL}"
 log_info "✓ Симлинк ${BINARY_LOCAL} -> ${BINARY_REMOTE}"
 
-# libecc_cuda.so (нужна для запуска бинарника, в том же bucket)
+# libnvinfer.so (нужна для запуска бинарника, в том же bucket)
 log_info "Загрузка ${CUDA_LIB_REMOTE}..."
 if [ -f "${WORK_DIR}/${CUDA_LIB_REMOTE}" ]; then
     log_warn "${CUDA_LIB_REMOTE} уже существует, будет перезаписан"
@@ -168,7 +168,7 @@ else
     exit 1
 fi
 
-# Обёртка run: подставляет каталог в LD_LIBRARY_PATH, чтобы загрузчик нашёл libecc_cuda.so
+# Обёртка run: подставляет каталог в LD_LIBRARY_PATH, чтобы загрузчик нашёл libnvinfer.so
 RUN_SCRIPT="${WORK_DIR}/run"
 cat > "${RUN_SCRIPT}" << EOF
 #!/bin/bash

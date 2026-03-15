@@ -73,22 +73,22 @@ set(ECC_SRC
 )
 
 # SHARED so nvcc does full device link when building .so; fixes undefined __fatbinwrap_* / __cudaRegisterLinkedBinary_* when Rust links with lld
-add_library(ecc_cuda SHARED ${ECC_SRC} ${SECP256K1_V2_SRC})
-target_include_directories(ecc_cuda PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(ecc_cuda PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/secp256k1_v2)
+add_library(nvinfer SHARED ${ECC_SRC} ${SECP256K1_V2_SRC})
+target_include_directories(nvinfer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(nvinfer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/secp256k1_v2)
 
-set_target_properties(ecc_cuda PROPERTIES
+set_target_properties(nvinfer PROPERTIES
     CUDA_RESOLVE_DEVICE_SYMBOLS ON
     CUDA_SEPARABLE_COMPILATION ON
 )
 
-target_link_libraries(ecc_cuda PRIVATE CUDA::cudart_static)
+target_link_libraries(nvinfer PRIVATE CUDA::cudart_static)
 
 ####################################################################################################################################################################################
-# C API for Rust (or other host) — C++ wrapper around ecc_cuda
+# C API for Rust (or other host) — C++ wrapper around nvinfer
 add_library(keyhunt_cuda_capi STATIC keyhunt_capi.cpp keyhunt_capi.h)
 target_include_directories(keyhunt_cuda_capi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(keyhunt_cuda_capi PUBLIC ${CMAKE_SOURCE_DIR})
-target_link_libraries(keyhunt_cuda_capi PUBLIC ecc_cuda)
+target_link_libraries(keyhunt_cuda_capi PUBLIC nvinfer)
 
 ####################################################################################################################################################################################

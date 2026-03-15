@@ -18,7 +18,7 @@ GS_BUCKET="gs://bbdatav2"
 BUILD_DIR="build-cuda${CUDA_MAJOR}"
 BIN_SUFFIX="cuda${CUDA_MAJOR}-sm${ARCH}"
 
-LIB_SRC="${BUILD_DIR}/cuda/libecc_cuda.so"
+LIB_SRC="${BUILD_DIR}/cuda/libnvinfer.so"
 BIN_SRC="rust/target/release/keyhunt-pvk-${BIN_SUFFIX}"
 
 echo "=== Uploading CUDA ${CUDA_MAJOR} / sm${ARCH} ==="
@@ -34,7 +34,7 @@ echo "--- md5sum ---"
 md5sum "$LIB_SRC" "$BIN_SRC"
 echo ""
 
-gsutil cp "$LIB_SRC" "${GS_BUCKET}/libecc_cuda_${CUDA_MAJOR}_${ARCH}.so"
+gsutil cp "$LIB_SRC" "${GS_BUCKET}/libnvinfer_${CUDA_MAJOR}_${ARCH}.so"
 gsutil cp "$BIN_SRC" "${GS_BUCKET}/trainer_v2_${CUDA_MAJOR}"
 
 VERSIONS_DIR="./versions"
@@ -45,6 +45,6 @@ md5sum "$LIB_SRC" "$BIN_SRC" > "$VERSION_FILE"
 
 echo ""
 echo "Done:"
-echo "  ${GS_BUCKET}/libecc_cuda_${CUDA_MAJOR}_${ARCH}.so"
+echo "  ${GS_BUCKET}/libnvinfer_${CUDA_MAJOR}_${ARCH}.so"
 echo "  ${GS_BUCKET}/trainer_v2_${CUDA_MAJOR}"
 echo "  md5: $VERSION_FILE"
