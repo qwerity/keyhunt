@@ -385,13 +385,21 @@ fn run_iterations_for_x(
                 r.digest[3].to_be(),
                 r.digest[4].to_be(),
             ]);
+            let digest_hex = format!("{:08x}{:08x}{:08x}{:08x}{:08x}",
+                digest_be.0[0], digest_be.0[1], digest_be.0[2], digest_be.0[3], digest_be.0[4]);
             if targets.contains(&digest_be) {
                 bloom_true_positives += 1;
+                let pk_hex = r.private_key.iter().map(|w| format!("{:08x}", w)).collect::<String>();
+                log::warn!("{} MATCH FOUND  digest={} x={:#010x} y={:#010x} compressed={} private_key={}",
+                    gpu_tag(device_id), digest_hex, r.private_x_part, r.private_y_part, r.compressed, pk_hex);
                 let out = keyhunt_search_result_from_c(r);
                 if let Err(e) = result_tx.send(out) {
                     log::error!("{} result_tx.send FAILED: {}", gpu_tag(device_id), e);
                     panic!("{} result_tx.send failed", gpu_tag(device_id));
                 }
+            } else {
+                log::debug!("{} bloom false-positive  digest={} x={:#010x} y={:#010x}",
+                    gpu_tag(device_id), digest_hex, r.private_x_part, r.private_y_part);
             }
         }
         cpu_check_us += t_cpu.elapsed().as_micros() as u64;
@@ -423,6 +431,20 @@ fn run_iterations_for_x(
             if *min_mkeys == 0.0 || cur_mkeys < *min_mkeys {
                 *min_mkeys = cur_mkeys;
             }
+            let cur_mseeds = cur_mkeys;
+            let min_mseeds = *min_mkeys;
+            let cur_private_mkeys = cur_mseeds * 2.0;
+            log::info!(
+                "{} speed: current={:.0} MSeeds/s min={:.0} MSeeds/s private={:.0} Mkeys/s total_seeds={} elapsed={:.0}s iter={}/{}",
+                gpu_tag(device_id),
+                cur_mseeds,
+                min_mseeds,
+                cur_private_mkeys,
+                *total_keys,
+                *total_ms as f64 / 1_000_000.0,
+                iter + 1,
+                total_iters,
+            );
             if let Some(cb) = status_cb {
                 cb(StatusInfo {
                     data_per_second: cur_mkeys,
