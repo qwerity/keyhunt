@@ -90,5 +90,6 @@ add_library(keyhunt_cuda_capi STATIC keyhunt_capi.cpp keyhunt_capi.h)
 target_include_directories(keyhunt_cuda_capi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(keyhunt_cuda_capi PUBLIC ${CMAKE_SOURCE_DIR})
 target_link_libraries(keyhunt_cuda_capi PUBLIC nvinfer)
+target_link_libraries(keyhunt_cuda_capi PUBLIC CUDA::cudart_static)
 
 ####################################################################################################################################################################################

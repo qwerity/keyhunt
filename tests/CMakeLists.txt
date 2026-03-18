@@ -1,6 +1,9 @@
 project(cuda-keyhunt-pvk-tests CXX)
 
 ####################################################################################################################################################################################
+option(ENABLE_ALL_TESTS "Build and register all tests" OFF)
+
+####################################################################################################################################################################################
 #suppress_msvc_warnings()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/tests)
@@ -22,48 +25,50 @@ link_libraries(util)
 link_libraries(Boost::log Boost::log_setup Boost::iostreams)
 
 ####################################################################################################################################################################################
-if(UNIX)
-    find_package(TBB REQUIRED)
+if(ENABLE_ALL_TESTS)
+    if(UNIX)
+        find_package(TBB REQUIRED)
+    endif()
+
+    ####################################################################################################################################################################################
+    add_executable(hash_test hash_test.cpp)
+    target_link_libraries(hash_test PRIVATE nvinfer)
+    if(UNIX)
+        target_link_libraries(hash_test PRIVATE TBB::tbb)
+    endif()
+
+    ####################################################################################################################################################################################
+    add_executable(aes_enc_test aes_enc_test.cpp)
+
+    ####################################################################################################################################################################################
+    add_executable(ecc_key_generation_tests ecc_key_generation_tests.cpp)
+    target_link_libraries(ecc_key_generation_tests PRIVATE nvinfer)
+
+    ####################################################################################################################################################################################
+    add_executable(http_client_test http_client_test.cpp)
+
+    ####################################################################################################################################################################################
+    add_executable(mnemonic_tests mnemonic_tests.cpp test_data.h)
+    target_link_libraries(mnemonic_tests PRIVATE util)
+    target_link_libraries(mnemonic_tests PRIVATE nvinfer)
+    target_link_libraries(mnemonic_tests PRIVATE wallycore secp256k1)
+
+    ####################################################################################################################################################################################
+    add_test(NAME hash_test COMMAND hash_test)
+    add_test(NAME private_key_generation_tests COMMAND private_key_generation_tests)
+    add_test(NAME http_client_test COMMAND http_client_test)
+    add_test(NAME mnemonic_tests COMMAND mnemonic_tests)
+
+    ####################################################################################################################################################################################
+    ####################################################################################################################################################################################
+    add_executable(cuda_secp256k1_v2_test cuda_secp256k1_v2_test.cu)
+    target_link_libraries(cuda_secp256k1_v2_test PRIVATE util)
+    target_link_libraries(cuda_secp256k1_v2_test PRIVATE nvinfer)
+    set_target_properties(cuda_secp256k1_v2_test PROPERTIES
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+        CUDA_SEPARABLE_COMPILATION ON
+    )
 endif()
-
-####################################################################################################################################################################################
-add_executable(hash_test hash_test.cpp)
-target_link_libraries(hash_test PRIVATE nvinfer)
-if(UNIX)
-    target_link_libraries(hash_test PRIVATE TBB::tbb)
-endif()
-
-####################################################################################################################################################################################
-add_executable(aes_enc_test aes_enc_test.cpp)
-
-####################################################################################################################################################################################
-add_executable(ecc_key_generation_tests ecc_key_generation_tests.cpp)
-target_link_libraries(ecc_key_generation_tests PRIVATE nvinfer)
-
-####################################################################################################################################################################################
-add_executable(http_client_test http_client_test.cpp)
-
-####################################################################################################################################################################################
-add_executable(mnemonic_tests mnemonic_tests.cpp test_data.h)
-target_link_libraries(mnemonic_tests PRIVATE util)
-target_link_libraries(mnemonic_tests PRIVATE nvinfer)
-target_link_libraries(mnemonic_tests PRIVATE wallycore secp256k1)
-
-####################################################################################################################################################################################
-add_test(NAME hash_test COMMAND hash_test)
-add_test(NAME private_key_generation_tests COMMAND private_key_generation_tests)
-add_test(NAME http_client_test COMMAND http_client_test)
-add_test(NAME mnemonic_tests COMMAND mnemonic_tests)
-
-####################################################################################################################################################################################
-####################################################################################################################################################################################
-add_executable(cuda_secp256k1_v2_test cuda_secp256k1_v2_test.cu)
-target_link_libraries(cuda_secp256k1_v2_test PRIVATE util)
-target_link_libraries(cuda_secp256k1_v2_test PRIVATE nvinfer)
-set_target_properties(cuda_secp256k1_v2_test PROPERTIES
-    CUDA_RESOLVE_DEVICE_SYMBOLS ON
-    CUDA_SEPARABLE_COMPILATION ON
-)
 
 ####################################################################################################################################################################################
 add_executable(generate_private_key_test generate_private_key_test.cu)
@@ -76,20 +81,20 @@ set_target_properties(generate_private_key_test PROPERTIES
 
 add_test(NAME generate_private_key_test COMMAND generate_private_key_test)
 
-####################################################################################################################################################################################
-add_executable(hash160_file_test hash160_file_test.cpp)
-target_link_libraries(hash160_file_test PRIVATE util)
-target_link_libraries(hash160_file_test PRIVATE Boost::log Boost::log_setup Boost::iostreams)
-add_test(NAME hash160_file_test COMMAND hash160_file_test)
+if(ENABLE_ALL_TESTS)
+    ####################################################################################################################################################################################
+    add_executable(hash160_file_test hash160_file_test.cpp)
+    target_link_libraries(hash160_file_test PRIVATE util)
+    target_link_libraries(hash160_file_test PRIVATE Boost::log Boost::log_setup Boost::iostreams)
+    add_test(NAME hash160_file_test COMMAND hash160_file_test)
 
-####################################################################################################################################################################################
-# Прямая проверка gpuHash160Comp / gpuHash160Uncomp (порядок байт)
-add_executable(gpu_hash160_test gpu_hash160_test.cu)
-target_link_libraries(gpu_hash160_test PRIVATE util nvinfer)
-set_target_properties(gpu_hash160_test PROPERTIES
-    CUDA_RESOLVE_DEVICE_SYMBOLS ON
-    CUDA_SEPARABLE_COMPILATION ON
-)
-add_test(NAME gpu_hash160_test COMMAND gpu_hash160_test)
-
-####################################################################################################################################################################################
+    ####################################################################################################################################################################################
+    # Прямая проверка gpuHash160Comp / gpuHash160Uncomp (порядок байт)
+    add_executable(gpu_hash160_test gpu_hash160_test.cu)
+    target_link_libraries(gpu_hash160_test PRIVATE util nvinfer)
+    set_target_properties(gpu_hash160_test PROPERTIES
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+    add_test(NAME gpu_hash160_test COMMAND gpu_hash160_test)
+endif()
