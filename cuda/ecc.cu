@@ -190,7 +190,7 @@ struct ECC::Impl
     {
         thrust::host_vector<uint256_t> thrust_x = d_publicKeysX;
         thrust::host_vector<uint256_t> thrust_y = d_publicKeysY;
-        
+
         h_publicKeysX.assign(thrust_x.begin(), thrust_x.end());
         h_publicKeysY.assign(thrust_y.begin(), thrust_y.end());
     }
@@ -323,30 +323,30 @@ struct ECC::Impl
     {
         constexpr uint32_t tableSize = ECMULT_GEN_PREC_N * ECMULT_GEN_PREC_G;
         constexpr size_t expectedFileSize = tableSize * sizeof(secp256k1_ge_storage);
-        
+
         std::ifstream file(filename, std::ios::binary | std::ios::ate);
         if (!file.is_open())
         {
             return false;
         }
-        
+
         // Check file size
         const size_t fileSize = file.tellg();
         if (fileSize != expectedFileSize)
         {
 #ifdef KEYHUNT_CUDA_VERBOSE
-            fprintf(stderr, "Warning: gTable file size mismatch. Expected %zu bytes, got %zu bytes. Will regenerate.\n", 
+            fprintf(stderr, "Warning: gTable file size mismatch. Expected %zu bytes, got %zu bytes. Will regenerate.\n",
                     expectedFileSize, fileSize);
 #endif
             file.close();
             return false;
         }
-        
+
         // Read the table
         file.seekg(0, std::ios::beg);
         std::vector<secp256k1_ge_storage> h_gTable(tableSize);
         file.read(reinterpret_cast<char*>(h_gTable.data()), expectedFileSize);
-        
+
         if (!file.good() || file.gcount() != static_cast<std::streamsize>(expectedFileSize))
         {
 #ifdef KEYHUNT_CUDA_VERBOSE
@@ -355,9 +355,9 @@ struct ECC::Impl
             file.close();
             return false;
         }
-        
+
         file.close();
-        
+
         // Copy to device memory
         thrust::copy(h_gTable.begin(), h_gTable.end(), d_gTable.begin());
         uploadGTable4limb(h_gTable);
@@ -371,12 +371,12 @@ struct ECC::Impl
     {
         constexpr uint32_t tableSize = ECMULT_GEN_PREC_N * ECMULT_GEN_PREC_G;
         std::vector<secp256k1_ge_storage> h_gTable(tableSize);
-        
+
 #ifdef KEYHUNT_CUDA_VERBOSE
         fprintf(stdout, "Generating gTable (this may take a while)...\n");
 #endif
         secp256k1::ecpoint basePoint = secp256k1::G();
-        
+
         for (uint32_t chunk = 0; chunk < ECMULT_GEN_PREC_N; ++chunk)
         {
 #ifdef KEYHUNT_CUDA_VERBOSE
@@ -385,26 +385,26 @@ struct ECC::Impl
                 fprintf(stdout, "Generating chunk %u/%u\n", chunk, ECMULT_GEN_PREC_N);
             }
 #endif
-            
+
             secp256k1::ecpoint chunkBasePoint = basePoint;
-            
+
             for (uint32_t i = 0; i < chunk * ECMULT_GEN_PREC_B; ++i)
             {
                 chunkBasePoint = secp256k1::doublePoint(chunkBasePoint);
             }
-            
+
             secp256k1::ecpoint currentPoint = chunkBasePoint;
             const uint32_t chunkOffset = chunk * ECMULT_GEN_PREC_G;
-            
+
             convertEcpointToGeStorage(currentPoint, h_gTable[chunkOffset + 0]);
-            
+
             for (uint32_t k = 2; k <= ECMULT_GEN_PREC_G; ++k)
             {
                 currentPoint = secp256k1::addPoints(currentPoint, chunkBasePoint);
                 convertEcpointToGeStorage(currentPoint, h_gTable[chunkOffset + (k - 1)]);
             }
         }
-        
+
         thrust::copy(h_gTable.begin(), h_gTable.end(), d_gTable.begin());
         uploadGTable4limb(h_gTable);
 #ifdef KEYHUNT_CUDA_VERBOSE

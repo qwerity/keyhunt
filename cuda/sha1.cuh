@@ -55,23 +55,23 @@ __device__ __forceinline__ void sha1Transform(uint32_t* h, const uint32_t* w)
     uint32_t c = h[2];
     uint32_t d = h[3];
     uint32_t e = h[4];
-    
+
     uint32_t w_ext[80];
-    
+
     // Copy first 16 words
     #pragma unroll
     for (int i = 0; i < 16; i++)
     {
         w_ext[i] = w[i];
     }
-    
+
     // Expand to 80 words
     #pragma unroll
     for (int i = 16; i < 80; i++)
     {
         w_ext[i] = rotl_sha1(w_ext[i-3] ^ w_ext[i-8] ^ w_ext[i-14] ^ w_ext[i-16], 1);
     }
-    
+
     // Main loop
     #pragma unroll
     for (int i = 0; i < 20; i++)
@@ -83,7 +83,7 @@ __device__ __forceinline__ void sha1Transform(uint32_t* h, const uint32_t* w)
         b = a;
         a = temp;
     }
-    
+
     #pragma unroll
     for (int i = 20; i < 40; i++)
     {
@@ -94,7 +94,7 @@ __device__ __forceinline__ void sha1Transform(uint32_t* h, const uint32_t* w)
         b = a;
         a = temp;
     }
-    
+
     #pragma unroll
     for (int i = 40; i < 60; i++)
     {
@@ -105,7 +105,7 @@ __device__ __forceinline__ void sha1Transform(uint32_t* h, const uint32_t* w)
         b = a;
         a = temp;
     }
-    
+
     #pragma unroll
     for (int i = 60; i < 80; i++)
     {
@@ -116,7 +116,7 @@ __device__ __forceinline__ void sha1Transform(uint32_t* h, const uint32_t* w)
         b = a;
         a = temp;
     }
-    
+
     // Add to hash
     h[0] += a;
     h[1] += b;
@@ -133,19 +133,19 @@ __device__ __forceinline__ void computeHash(uint32_t* arrW)
     // Use local variables for fast access (matching generate_d_cuda.cpp)
     uint32_t* w = arrW;
     uint32_t* h = arrW + HASH_OFFSET;
-    
+
     uint32_t a = h[0];
     uint32_t b = h[1];
     uint32_t c = h[2];
     uint32_t d = h[3];
     uint32_t e = h[4];
-    
+
     // Expand message schedule (words 16-79) - optimized loop matching generate_d_cuda.cpp
     for (int t = 16; t < 80; t++)
     {
         w[t] = rotl_sha1(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1);
     }
-    
+
     // Rounds 0-19 - matching generate_d_cuda.cpp exactly
     for (int t = 0; t < 20; t++)
     {
@@ -156,7 +156,7 @@ __device__ __forceinline__ void computeHash(uint32_t* arrW)
         b = a;
         a = temp;
     }
-    
+
     // Rounds 20-39
     for (int t = 20; t < 40; t++)
     {
@@ -167,7 +167,7 @@ __device__ __forceinline__ void computeHash(uint32_t* arrW)
         b = a;
         a = temp;
     }
-    
+
     // Rounds 40-59
     for (int t = 40; t < 60; t++)
     {
@@ -178,7 +178,7 @@ __device__ __forceinline__ void computeHash(uint32_t* arrW)
         b = a;
         a = temp;
     }
-    
+
     // Rounds 60-79
     for (int t = 60; t < 80; t++)
     {
@@ -189,7 +189,7 @@ __device__ __forceinline__ void computeHash(uint32_t* arrW)
         b = a;
         a = temp;
     }
-    
+
     // Update hash state
     h[0] += a;
     h[1] += b;
@@ -214,12 +214,12 @@ __device__ __forceinline__ void initSecureRandomState(SecureRandomState* state, 
     constexpr int32_t SEED_SIZE = HASH_OFFSET + EXTRAFRAME_OFFSET;
     constexpr int32_t DIGEST_LENGTH = 20;
     constexpr int32_t HASHBYTES_TO_USE = 20;
-    
+
     // Fast zeroing of needed fields (matching generate_d_cuda.cpp)
     state->nextBIndex = HASHBYTES_TO_USE;
     state->counter = 0;
     state->firstCall = 1;
-    
+
     // Zero arrays
     for (int i = 0; i < SEED_SIZE; i++)
     {
@@ -229,7 +229,7 @@ __device__ __forceinline__ void initSecureRandomState(SecureRandomState* state, 
     {
         state->nextBytes[i] = 0;
     }
-    
+
     // Initialize SHA-1 hash state
     state->seed[BYTES_OFFSET] = 0;
     state->seed[HASH_OFFSET] = d_SHA1_H0;
@@ -237,7 +237,7 @@ __device__ __forceinline__ void initSecureRandomState(SecureRandomState* state, 
     state->seed[HASH_OFFSET + 2] = d_SHA1_H2;
     state->seed[HASH_OFFSET + 3] = d_SHA1_H3;
     state->seed[HASH_OFFSET + 4] = d_SHA1_H4;
-    
+
     // Set seed[3] and seed[4] from parameters
     state->seed[3] = x;
     state->seed[4] = y;
@@ -247,22 +247,22 @@ __device__ __forceinline__ void initSecureRandomState(SecureRandomState* state, 
 __device__ __forceinline__ void nextBytes(SecureRandomState* state, uint8_t* bytes, int bytesLen)
 {
     if (bytesLen == 0) return;
-    
+
     constexpr int32_t HASHBYTES_TO_USE = 20;
     constexpr int32_t extrabytes = 7;
-    
+
     // Precompute lastWord once (matching generate_d_cuda.cpp bug - preserved for compatibility)
-    const int lastWord = (state->seed[BYTES_OFFSET] == 0) ? 0 
-                        : ((state->seed[BYTES_OFFSET] + extrabytes) >> 3 - 1);  // БАГ!
-    
+    const int lastWord = (state->seed[BYTES_OFFSET] == 0) ? 0
+                        :(state->seed[BYTES_OFFSET] + extrabytes) >> (3 - 1);  // БАГ!
+
     if (state->firstCall)
     {
         state->seed[81] = 20;
         state->firstCall = 0;
     }
-    
+
     int nextByteToReturn = 0;
-    
+
     // Use remaining bytes from previous call
     if (state->nextBIndex < HASHBYTES_TO_USE)
     {
@@ -292,23 +292,23 @@ __device__ __forceinline__ void nextBytes(SecureRandomState* state, uint8_t* byt
             nextByteToReturn += n;
         }
     }
-    
+
     if (nextByteToReturn >= bytesLen) return;
-    
+
     // Main loop to generate bytes (optimized, matching generate_d_cuda.cpp)
     uint32_t* seed = state->seed;
     uint64_t counter = state->counter;  // uint64_t as in generate_d_cuda.cpp
-    
+
     while (nextByteToReturn < bytesLen)
     {
         // Insert counter into frame (using local variables)
         seed[lastWord] = static_cast<uint32_t>(counter >> 32);
         seed[lastWord + 1] = static_cast<uint32_t>(counter & 0xFFFFFFFF);
         seed[lastWord + 2] = END_FLAG;
-        
+
         computeHash(seed);
         counter++;
-        
+
         // Extract bytes from hash (big-endian as in Java) - unrolled loop for speed (matching generate_d_cuda.cpp)
         uint32_t* h = state->seed + HASH_OFFSET;
         uint8_t* nb = state->nextBytes;
@@ -337,10 +337,10 @@ __device__ __forceinline__ void nextBytes(SecureRandomState* state, uint8_t* byt
         nb[17] = static_cast<uint8_t>(k4 >> 16);
         nb[18] = static_cast<uint8_t>(k4 >> 8);
         nb[19] = static_cast<uint8_t>(k4);
-        
+
         state->nextBIndex = 0;
-        int bytesToCopy = (HASHBYTES_TO_USE < bytesLen - nextByteToReturn) 
-                         ? HASHBYTES_TO_USE 
+        int bytesToCopy = (HASHBYTES_TO_USE < bytesLen - nextByteToReturn)
+                         ? HASHBYTES_TO_USE
                          : bytesLen - nextByteToReturn;
         if (bytesToCopy > 0)
         {
@@ -365,13 +365,13 @@ __device__ __forceinline__ void nextBytes(SecureRandomState* state, uint8_t* byt
             nextByteToReturn += bytesToCopy;
             state->nextBIndex += bytesToCopy;
         }
-        
+
         if (nextByteToReturn >= bytesLen)
         {
             break;
         }
     }
-    
+
     // Save updated counter
     state->counter = counter;
 }
@@ -423,13 +423,13 @@ __device__ __forceinline__ void generatePrivateKeyBase(const uint2& p, uint256_t
 {
     constexpr int numBits = 256;
     constexpr int numberLength = (numBits + 31) >> 5; // 8 words for 256 bits
-    
+
     // Initialize state once for this x/y (matching generate_d_cuda.cpp initSecureRandom)
     SecureRandomState state;
     initSecureRandomState(&state, p.x, p.y);
-    
+
     uint32_t digits[numberLength];
-    
+
     // Generate 8 words (256 bits) - matching generate_d_cuda.cpp main()
     // State is preserved between calls (matching generate_d_cuda.cpp)
     #pragma unroll
@@ -437,21 +437,21 @@ __device__ __forceinline__ void generatePrivateKeyBase(const uint2& p, uint256_t
     {
         digits[i] = nextInt(&state);
     }
-    
+
     // Using only the necessary bits (matching generate_d_cuda.cpp)
     digits[numberLength - 1] >>= ((-numBits) & 31);
-    
+
     // Convert to bytes (big-endian, as in Java setJavaRepresentation) - matching generate_d_cuda.cpp exactly
     uint8_t bytes[32];
-    for (int i = 0; i < numberLength; i++)
+    for (int i = 0; i < numberLength; ++i)
     {
-        int offset = (numberLength - 1 - i) * 4;
+        const int offset = (numberLength - 1 - i) * 4;
         bytes[offset] = static_cast<uint8_t>(digits[i] >> 24);
         bytes[offset + 1] = static_cast<uint8_t>(digits[i] >> 16);
         bytes[offset + 2] = static_cast<uint8_t>(digits[i] >> 8);
         bytes[offset + 3] = static_cast<uint8_t>(digits[i]);
     }
-    
+
     // Convert to uint256_t (little-endian words format used in the codebase)
     // bytes[0..31] is big-endian representation, convert to little-endian words
     #pragma unroll
@@ -460,8 +460,8 @@ __device__ __forceinline__ void generatePrivateKeyBase(const uint2& p, uint256_t
         const int byte_idx = 7 - i; // Reverse word order for little-endian
         const int base = byte_idx << 2;
         digest.v[i] = (static_cast<uint32_t>(bytes[base]) << 24) |
-                     (static_cast<uint32_t>(bytes[base + 1]) << 16) |
-                     (static_cast<uint32_t>(bytes[base + 2]) << 8) |
-                     static_cast<uint32_t>(bytes[base + 3]);
+                      (static_cast<uint32_t>(bytes[base + 1]) << 16) |
+                      (static_cast<uint32_t>(bytes[base + 2]) << 8) |
+                      static_cast<uint32_t>(bytes[base + 3]);
     }
 }

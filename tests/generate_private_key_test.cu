@@ -7,7 +7,6 @@
 #include "util/utils.h"
 #include "util/cuda_util.h"
 #include "util/secp256k1.h"
-#include "util/bitcoin_utils.h"
 #include "util/address_util.h"
 
 #include <thrust/host_vector.h>
@@ -19,7 +18,7 @@
 // CUDA kernel для тестирования generatePrivateKeyBase
 __global__ void testGeneratePrivateKeyBaseKernel(const uint2* inputs, uint256_t* outputs, int count)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < count)
     {
         generatePrivateKeyBase(inputs[idx], outputs[idx]);
@@ -45,8 +44,8 @@ TEST_CASE("Test generatePrivateKeyBase CUDA vs CPU generatePrivateKey")
     {
         // CPU версия
         uint8_t cpuOutput[32] = {0};
-        crypto::generatePrivateKey(static_cast<int32_t>(x), static_cast<int32_t>(y), cpuOutput);
-        
+        crypto::generatePrivateKey2(static_cast<int32_t>(x), static_cast<int32_t>(y), cpuOutput);
+
         // Выводим результат для (1, 1)
         if (x == 1 && y == 1)
         {
@@ -123,7 +122,7 @@ TEST_CASE("Test generatePrivateKeyBase with multiple inputs")
     // Генерируем тестовые случаи
     for (int i = 0; i < testCount; i++)
     {
-        testCases.push_back({static_cast<uint32_t>(i), static_cast<uint32_t>(i * 2)});
+        testCases.emplace_back(static_cast<uint32_t>(i), static_cast<uint32_t>(i * 2));
     }
 
     // CPU версия
@@ -131,9 +130,9 @@ TEST_CASE("Test generatePrivateKeyBase with multiple inputs")
     for (int i = 0; i < testCount; i++)
     {
         cpuOutputs[i].resize(32);
-        crypto::generatePrivateKey(static_cast<int32_t>(testCases[i].first),
-                                   static_cast<int32_t>(testCases[i].second),
-                                   cpuOutputs[i].data());
+        crypto::generatePrivateKey2(static_cast<int32_t>(testCases[i].first),
+                                     static_cast<int32_t>(testCases[i].second),
+                                     cpuOutputs[i].data());
     }
 
     // CUDA версия
@@ -149,7 +148,7 @@ TEST_CASE("Test generatePrivateKeyBase with multiple inputs")
 
     // Запускаем kernel с несколькими потоками
     constexpr int threadsPerBlock = 256;
-    const int blocks = (testCount + threadsPerBlock - 1) / threadsPerBlock;
+    constexpr int blocks = (testCount + threadsPerBlock - 1) / threadsPerBlock;
     testGeneratePrivateKeyBaseKernel<<<blocks, threadsPerBlock>>>(
         thrust::raw_pointer_cast(d_inputs.data()),
         thrust::raw_pointer_cast(d_outputs.data()),
@@ -230,9 +229,9 @@ TEST_CASE("Test generatePrivateKeyBase output format")
 
     // Проверяем, что результат не нулевой (вероятность нулевого результата очень мала)
     bool allZero = true;
-    for (int i = 0; i < 8; i++)
+    for (const unsigned int i : h_outputs[0].v)
     {
-        if (h_outputs[0].v[i] != 0)
+        if (i != 0)
         {
             allZero = false;
             break;
@@ -264,11 +263,11 @@ TEST_CASE("Test hash160 for (1, 1)")
 
     // Генерируем приватный ключ для (1, 1)
     uint8_t privateKeyBytes[32] = {0};
-    crypto::generatePrivateKey(1, 1, privateKeyBytes);
-    
+    crypto::generatePrivateKey2(1, 1, privateKeyBytes);
+
     std::cout << "\n=== Testing (1, 1) ===" << std::endl;
     std::cout << "Private key (hex): " << utils::toHex(privateKeyBytes, 32) << std::endl;
-    
+
     // Конвертируем в secp256k1::uint256 (big-endian байты -> little-endian слова)
     secp256k1::uint256 privateKey;
     for (int i = 0; i < 8; i++)
@@ -279,36 +278,36 @@ TEST_CASE("Test hash160 for (1, 1)")
                           (static_cast<uint32_t>(privateKeyBytes[byte_idx * 4 + 2]) << 8) |
                           (static_cast<uint32_t>(privateKeyBytes[byte_idx * 4 + 3]));
     }
-    
+
     std::cout << "Private key (uint256): " << privateKey.toString() << std::endl;
-    
+
     // Вычисляем публичный ключ
     secp256k1::ecpoint publicKey = secp256k1::multiplyPoint(privateKey, secp256k1::G());
-    
+
     uint32_t xWords[8]{};
     uint32_t yWords[8]{};
     publicKey.x.exportWords(xWords, 8, secp256k1::uint256::BigEndian);
     publicKey.y.exportWords(yWords, 8, secp256k1::uint256::BigEndian);
-    
+
     std::cout << "Public key X: " << publicKey.x.toString() << std::endl;
     std::cout << "Public key Y: " << publicKey.y.toString() << std::endl;
-    
+
     // Вычисляем hash160
     uint32_t hash160Uncompressed[5]{};
     uint32_t hash160Compressed[5]{};
     Hash::hashPublicKey(xWords, yWords, hash160Uncompressed);
     Hash::hashPublicKeyCompressed(xWords, yWords, hash160Compressed);
-    
+
     // Конвертируем в little-endian для вывода
     uint32_t hash160UncompressedLE[5]{};
     uint32_t hash160CompressedLE[5]{};
     std::ranges::transform(hash160Uncompressed, hash160UncompressedLE, utils::endian);
     std::ranges::transform(hash160Compressed, hash160CompressedLE, utils::endian);
-    
+
     std::cout << "\n--- Hash160 Formats ---" << std::endl;
     std::cout << "Uncompressed (big-endian words, little-endian bytes): " << utils::toHex(hash160UncompressedLE, 5) << std::endl;
     std::cout << "Compressed (big-endian words, little-endian bytes):   " << utils::toHex(hash160CompressedLE, 5) << std::endl;
-    
+
     // Выводим также в формате, как хранится в структуре hash160 (little-endian слова)
     hash160 hash160UncompressedStruct;
     hash160 hash160CompressedStruct;
@@ -317,31 +316,31 @@ TEST_CASE("Test hash160 for (1, 1)")
         hash160UncompressedStruct.h[i] = hash160UncompressedLE[i];
         hash160CompressedStruct.h[i] = hash160CompressedLE[i];
     }
-    
+
     std::cout << "\n--- Hash160 in hash160 struct format (little-endian words) ---" << std::endl;
     std::cout << "Uncompressed struct format: " << utils::toHex(hash160UncompressedStruct.h, 5) << std::endl;
     std::cout << "Compressed struct format:   " << utils::toHex(hash160CompressedStruct.h, 5) << std::endl;
-    
+
     // Выводим также в формате big-endian слов (как может быть в файле)
     std::cout << "\n--- Hash160 in big-endian word format (as might be in file) ---" << std::endl;
     std::cout << "Uncompressed (big-endian words): " << utils::toHex(hash160Uncompressed, 5) << std::endl;
     std::cout << "Compressed (big-endian words):   " << utils::toHex(hash160Compressed, 5) << std::endl;
-    
+
     // Выводим внутреннее представление для диагностики
     std::cout << "\n--- Internal representation (uint32_t array) ---" << std::endl;
     std::cout << "Uncompressed LE words: ";
-    for (int i = 0; i < 5; ++i)
+    for (unsigned int & i : hash160UncompressedLE)
     {
-        std::cout << std::format("{:08x} ", hash160UncompressedLE[i]);
+        std::cout << std::format("{:08x} ", i);
     }
     std::cout << std::endl;
-    
+
     std::cout << "Compressed LE words:   ";
-    for (int i = 0; i < 5; ++i)
+    for (unsigned int & i : hash160CompressedLE)
     {
-        std::cout << std::format("{:08x} ", hash160CompressedLE[i]);
+        std::cout << std::format("{:08x} ", i);
     }
     std::cout << std::endl;
-    
+
     std::cout << "\n✓ Hash160 test for (1, 1) completed!" << std::endl;
 }

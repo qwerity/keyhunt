@@ -1,9 +1,10 @@
 .vs/
 .idea/
+.claude/
 
-build/
-build-cuda*/
+build*/
 out/
+
 # только корневая bin/ (C++ бинарники), rust/src/bin/ — исходники утилит, трекаем
 /bin/
 /versions/
@@ -15,3 +16,6 @@ cmake-build-*/
 rust/target/
 rust/**/*.rs.bk
 rust/.DS_Store
+
+data.bin
+config.json
