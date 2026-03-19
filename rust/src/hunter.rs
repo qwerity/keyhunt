@@ -423,6 +423,18 @@ fn run_iterations_for_x(
             if *min_mkeys == 0.0 || cur_mkeys < *min_mkeys {
                 *min_mkeys = cur_mkeys;
             }
+            let cur_mseeds = cur_mkeys;
+            let min_mseeds = *min_mkeys;
+            log::info!(
+                "{} speed: current={:.0} MSeeds/s min={:.0} MSeeds/s total_seeds={} elapsed={:.0}s iter={}/{}",
+                gpu_tag(device_id),
+                cur_mseeds,
+                min_mseeds,
+                *total_keys,
+                *total_ms as f64 / 1_000_000.0,
+                iter + 1,
+                total_iters,
+            );
             if let Some(cb) = status_cb {
                 cb(StatusInfo {
                     data_per_second: cur_mkeys,
