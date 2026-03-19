@@ -36,6 +36,7 @@ extern "C" {
         h: *mut std::ffi::c_void,
         points_per_thread: u32,
         compression_type: u32,
+        generator_mode: u32,
         grid_size: u32,
         block_size: u32,
     ) -> i32;
@@ -85,11 +86,19 @@ impl KeyhuntHandle {
         &self,
         points_per_thread: u32,
         compression_type: u32,
+        generator_mode: u32,
         grid_size: u32,
         block_size: u32,
     ) -> Result<(), crate::Error> {
         let r = unsafe {
-            keyhunt_set_params(self.ptr, points_per_thread, compression_type, grid_size, block_size)
+            keyhunt_set_params(
+                self.ptr,
+                points_per_thread,
+                compression_type,
+                generator_mode,
+                grid_size,
+                block_size,
+            )
         };
         if r != 0 {
             let msg = unsafe { CStr::from_ptr(keyhunt_last_error()).to_string_lossy().into_owned() };

@@ -38,6 +38,18 @@ __global__ void privateKeysForXKernel(uint32_t xPart, uint32_t yPartIncrementBy,
     out[i] = f(i);
 }
 
+/** Async keygen: writes first/original key to out[i] and second key to out[n+i].
+ *  Buffer must be sized 2n. Use when generator mode selects generatePrivateKeyBase2. */
+__global__ void privateKeysForXKernel2(uint32_t xPart, uint32_t yPartIncrementBy, uint256_t* __restrict__ out, uint32_t n)
+{
+    uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    uint2 p;
+    p.x = xPart;
+    p.y = i + yPartIncrementBy;
+    generatePrivateKeyBase2(p, out[i], out[n + i]);
+}
+
 struct ECC::Impl
 {
     cudaStream_t mGeneratorStream{};
@@ -46,6 +58,7 @@ struct ECC::Impl
     uint32_t mGridSize{32};
     uint32_t mBlockSize{512};
     uint32_t mPointsPerThread{32};
+    uint32_t mGeneratorMode{1};
 
     uint32_t mKeysNumberPerIteration{mGridSize * mBlockSize * mPointsPerThread};
 
@@ -84,10 +97,16 @@ struct ECC::Impl
         cudaStreamDestroy(mInitStream);
     }
 
+    [[nodiscard]] uint32_t generatedKeysMultiplier() const
+    {
+        return (mGeneratorMode == 2) ? 2u : 1u;
+    }
+
     void setPointsPerThread(const uint32_t value)
     {
         mPointsPerThread = value;
-        cudaCheckError(cudaMemcpyToSymbol(d_pointsPerThread, &mPointsPerThread, sizeof(uint32_t)));
+        const uint32_t effectivePPT = generatedKeysMultiplier() * mPointsPerThread;
+        cudaCheckError(cudaMemcpyToSymbol(d_pointsPerThread, &effectivePPT, sizeof(uint32_t)));
     }
 
     void computeResolutionForMaxOccupancy(const uint32_t pointsPerThread, const uint32_t gridSize, const uint32_t blockSize = 0)
@@ -177,8 +196,9 @@ struct ECC::Impl
     void allocatePrivateKeysDeviceMemory()
     {
         const uint32_t keysNumberPerIteration = getKeysNumberPerIteration();
-        d_privateKeys[0].resize(keysNumberPerIteration);
-        d_privateKeys[1].resize(keysNumberPerIteration);
+        const uint32_t totalKeys = keysNumberPerIteration * generatedKeysMultiplier();
+        d_privateKeys[0].resize(totalKeys);
+        d_privateKeys[1].resize(totalKeys);
     }
 
     void getPrivateKeys(thrust::host_vector<uint256_t>& h_privateKeys) const
@@ -204,12 +224,12 @@ struct ECC::Impl
         thrust::copy(h_privateKeys.begin(), h_privateKeys.end(), d_privateKeys[mCurBuf].begin());
     }
 
-    // Legacy sync path — writes to current buffer and waits.
+    // Legacy sync path — writes one or two keys per y seed depending on generator mode and waits.
     void generatePrivateKeysForXPerIteration(const uint32_t privateXPart, const uint32_t iteration)
     {
         const uint32_t keysNumberPerIteration = getKeysNumberPerIteration();
 
-        if (d_privateKeys[mCurBuf].size() != keysNumberPerIteration)
+        if (d_privateKeys[mCurBuf].size() != keysNumberPerIteration * generatedKeysMultiplier())
         {
             throw std::runtime_error("Private keys device storage has wrong size");
         }
@@ -218,12 +238,19 @@ struct ECC::Impl
 
         cudaCheckError(cudaKernelSyncLaunch(mInitStream, [&]()
         {
-            thrust::transform(thrust::cuda::par.on(mInitStream),
-                              thrust::counting_iterator<uint32_t>(0u),
-                              thrust::counting_iterator<uint32_t>(keysNumberPerIteration),
-                              d_privateKeys[mCurBuf].begin(),
-                              PrivateKeyForXWithRandomYFunctor(privateXPart, increment)
-            );
+            if (mGeneratorMode == 2) {
+                uint256_t* ptr = thrust::raw_pointer_cast(d_privateKeys[mCurBuf].data());
+                constexpr uint32_t block = 256u;
+                const uint32_t grid = (keysNumberPerIteration + block - 1u) / block;
+                privateKeysForXKernel2<<<grid, block, 0, mInitStream>>>(privateXPart, increment, ptr, keysNumberPerIteration);
+            } else {
+                thrust::transform(thrust::cuda::par.on(mInitStream),
+                                  thrust::counting_iterator<uint32_t>(0u),
+                                  thrust::counting_iterator<uint32_t>(keysNumberPerIteration),
+                                  d_privateKeys[mCurBuf].begin(),
+                                  PrivateKeyForXWithRandomYFunctor(privateXPart, increment)
+                );
+            }
         }, "generatePrivateKeysForXPerIteration"));
     }
 
@@ -237,9 +264,13 @@ struct ECC::Impl
         const int nextBuf = 1 - mCurBuf;
 
         uint256_t* ptr = thrust::raw_pointer_cast(d_privateKeys[nextBuf].data());
-        const uint32_t block = 256u;
+        constexpr uint32_t block = 256u;
         const uint32_t grid = (keysNumberPerIteration + block - 1u) / block;
-        privateKeysForXKernel<<<grid, block, 0, mInitStream>>>(privateXPart, increment, ptr, keysNumberPerIteration);
+        if (mGeneratorMode == 2) {
+            privateKeysForXKernel2<<<grid, block, 0, mInitStream>>>(privateXPart, increment, ptr, keysNumberPerIteration);
+        } else {
+            privateKeysForXKernel<<<grid, block, 0, mInitStream>>>(privateXPart, increment, ptr, keysNumberPerIteration);
+        }
         // No sync — caller is responsible for synchronizing mInitStream before launchKernelAsync.
     }
 
@@ -441,11 +472,13 @@ struct ECC::Impl
         uploadGTablePointersToConstMem();
     }
 
-    void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t gridSize, const uint32_t blockSize)
+    void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t generatorMode, const uint32_t gridSize, const uint32_t blockSize)
     {
         // From examples: L1 cache helps random GTable access; larger stack for deep kernel frames
         cudaCheckError(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
         cudaCheckError(cudaDeviceSetLimit(cudaLimitStackSize, 32768));
+
+        mGeneratorMode = (generatorMode == 2) ? 2u : 1u;
 
         computeResolutionForMaxOccupancy(pointsPerThread, gridSize, blockSize);
 
@@ -507,9 +540,9 @@ ECC::~ECC() = default;
 ECC::ECC(ECC&& rhs) noexcept = default;
 ECC& ECC::operator=(ECC &&rhs) noexcept = default;
 
-void ECC::init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t gridSize, const uint32_t blockSize) const
+void ECC::init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t generatorMode, const uint32_t gridSize, const uint32_t blockSize) const
 {
-    mImpl->init(pointsPerThread, publicKeyCompressionTypeToCheck, gridSize, blockSize);
+    mImpl->init(pointsPerThread, publicKeyCompressionTypeToCheck, generatorMode, gridSize, blockSize);
 }
 
 uint32_t ECC::getKeysNumberPerIteration() const

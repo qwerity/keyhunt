@@ -25,6 +25,16 @@ __global__ void testGeneratePrivateKeyBaseKernel(const uint2* inputs, uint256_t*
     }
 }
 
+// New generator kernel: emits two keys for the same (x, y).
+__global__ void testGeneratePrivateKeyBase2Kernel(const uint2* inputs, uint256_t* outputs1, uint256_t* outputs2, int count)
+{
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < count)
+    {
+        generatePrivateKeyBase2(inputs[idx], outputs1[idx], outputs2[idx]);
+    }
+}
+
 TEST_CASE("Test generatePrivateKeyBase CUDA vs CPU generatePrivateKey")
 {
     constexpr int defaultCudaDeviceID{0};
@@ -343,4 +353,280 @@ TEST_CASE("Test hash160 for (1, 1)")
     std::cout << std::endl;
 
     std::cout << "\n✓ Hash160 test for (1, 1) completed!" << std::endl;
+}
+
+TEST_CASE("Test generatePrivateKeyBase2 first key and digest match generatePrivateKeyBase")
+{
+    constexpr int defaultCudaDeviceID{0};
+    cu::cudaInit(defaultCudaDeviceID);
+
+    std::vector<std::pair<uint32_t, uint32_t>> testCases = {
+        {1, 1},
+        {1, 1024},
+        {0x12345678, 0xABCDEF00},
+        {std::numeric_limits<uint32_t>::max(), 0},
+        {0, std::numeric_limits<uint32_t>::max()},
+    };
+
+    thrust::host_vector<uint2> h_inputs(testCases.size());
+    for (size_t i = 0; i < testCases.size(); ++i)
+    {
+        h_inputs[i].x = testCases[i].first;
+        h_inputs[i].y = testCases[i].second;
+    }
+
+    thrust::device_vector<uint2> d_inputs = h_inputs;
+    thrust::device_vector<uint256_t> d_base_outputs(testCases.size());
+    thrust::device_vector<uint256_t> d_base2_first_outputs(testCases.size());
+    thrust::device_vector<uint256_t> d_base2_second_outputs(testCases.size());
+
+    constexpr int threadsPerBlock = 256;
+    const int blocks = (static_cast<int>(testCases.size()) + threadsPerBlock - 1) / threadsPerBlock;
+
+    testGeneratePrivateKeyBaseKernel<<<blocks, threadsPerBlock>>>(
+        thrust::raw_pointer_cast(d_inputs.data()),
+        thrust::raw_pointer_cast(d_base_outputs.data()),
+        static_cast<int>(testCases.size()));
+    testGeneratePrivateKeyBase2Kernel<<<blocks, threadsPerBlock>>>(
+        thrust::raw_pointer_cast(d_inputs.data()),
+        thrust::raw_pointer_cast(d_base2_first_outputs.data()),
+        thrust::raw_pointer_cast(d_base2_second_outputs.data()),
+        static_cast<int>(testCases.size()));
+    cudaDeviceSynchronize();
+
+    REQUIRE(cudaGetLastError() == cudaSuccess);
+
+    thrust::host_vector<uint256_t> base_outputs = d_base_outputs;
+    thrust::host_vector<uint256_t> base2_first_outputs = d_base2_first_outputs;
+
+    for (size_t i = 0; i < testCases.size(); ++i)
+    {
+        INFO("x=" << std::hex << testCases[i].first << " y=" << testCases[i].second << std::dec);
+
+        for (int j = 0; j < 8; ++j)
+        {
+            REQUIRE(base_outputs[i].v[j] == base2_first_outputs[i].v[j]);
+        }
+
+        auto toPrivateKey = [](const uint256_t& words)
+        {
+            uint8_t privateKeyBytes[32]{};
+            for (int j = 0; j < 8; ++j)
+            {
+                const int byte_idx = 7 - j;
+                const uint32_t word = words.v[j];
+                privateKeyBytes[byte_idx * 4 + 0] = static_cast<uint8_t>((word >> 24) & 0xFF);
+                privateKeyBytes[byte_idx * 4 + 1] = static_cast<uint8_t>((word >> 16) & 0xFF);
+                privateKeyBytes[byte_idx * 4 + 2] = static_cast<uint8_t>((word >> 8) & 0xFF);
+                privateKeyBytes[byte_idx * 4 + 3] = static_cast<uint8_t>(word & 0xFF);
+            }
+
+            secp256k1::uint256 privateKey;
+            for (int j = 0; j < 8; ++j)
+            {
+                const int byte_idx = 7 - j;
+                privateKey.v[j] = (static_cast<uint32_t>(privateKeyBytes[byte_idx * 4 + 0]) << 24) |
+                                  (static_cast<uint32_t>(privateKeyBytes[byte_idx * 4 + 1]) << 16) |
+                                  (static_cast<uint32_t>(privateKeyBytes[byte_idx * 4 + 2]) << 8) |
+                                  (static_cast<uint32_t>(privateKeyBytes[byte_idx * 4 + 3]));
+            }
+            return privateKey;
+        };
+
+        const secp256k1::uint256 basePrivateKey = toPrivateKey(base_outputs[i]);
+        const secp256k1::uint256 base2PrivateKey = toPrivateKey(base2_first_outputs[i]);
+        const secp256k1::ecpoint basePublicKey = secp256k1::multiplyPoint(basePrivateKey, secp256k1::G());
+        const secp256k1::ecpoint base2PublicKey = secp256k1::multiplyPoint(base2PrivateKey, secp256k1::G());
+
+        uint32_t baseXWords[8]{};
+        uint32_t baseYWords[8]{};
+        uint32_t base2XWords[8]{};
+        uint32_t base2YWords[8]{};
+        basePublicKey.x.exportWords(baseXWords, 8, secp256k1::uint256::BigEndian);
+        basePublicKey.y.exportWords(baseYWords, 8, secp256k1::uint256::BigEndian);
+        base2PublicKey.x.exportWords(base2XWords, 8, secp256k1::uint256::BigEndian);
+        base2PublicKey.y.exportWords(base2YWords, 8, secp256k1::uint256::BigEndian);
+
+        uint32_t baseDigestUncompressed[5]{};
+        uint32_t base2DigestUncompressed[5]{};
+        uint32_t baseDigestCompressed[5]{};
+        uint32_t base2DigestCompressed[5]{};
+
+        Hash::hashPublicKey(baseXWords, baseYWords, baseDigestUncompressed);
+        Hash::hashPublicKey(base2XWords, base2YWords, base2DigestUncompressed);
+        Hash::hashPublicKeyCompressed(baseXWords, baseYWords, baseDigestCompressed);
+        Hash::hashPublicKeyCompressed(base2XWords, base2YWords, base2DigestCompressed);
+
+        for (int j = 0; j < 5; ++j)
+        {
+            REQUIRE(baseDigestUncompressed[j] == base2DigestUncompressed[j]);
+            REQUIRE(baseDigestCompressed[j] == base2DigestCompressed[j]);
+        }
+    }
+}
+
+TEST_CASE("Benchmark generatePrivateKeyBase vs generatePrivateKeyBase2")
+{
+    constexpr int defaultCudaDeviceID{0};
+    cu::cudaInit(defaultCudaDeviceID);
+
+    constexpr int testCount = 10000;
+    constexpr int threadsPerBlock = 256;
+    const int blocks = (testCount + threadsPerBlock - 1) / threadsPerBlock;
+
+    thrust::host_vector<uint2> h_inputs(testCount);
+    for (int i = 0; i < testCount; ++i)
+    {
+        h_inputs[i].x = 1;
+        h_inputs[i].y = static_cast<uint32_t>(i + 1);
+    }
+
+    thrust::device_vector<uint2> d_inputs = h_inputs;
+    thrust::device_vector<uint256_t> d_base_outputs(testCount);
+    thrust::device_vector<uint256_t> d_base2_outputs1(testCount);
+    thrust::device_vector<uint256_t> d_base2_outputs2(testCount);
+
+    cudaEvent_t start{};
+    cudaEvent_t stop{};
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    // Warm up both kernels so the printed timings reflect steady-state work.
+    testGeneratePrivateKeyBaseKernel<<<blocks, threadsPerBlock>>>(
+        thrust::raw_pointer_cast(d_inputs.data()),
+        thrust::raw_pointer_cast(d_base_outputs.data()),
+        testCount);
+    testGeneratePrivateKeyBase2Kernel<<<blocks, threadsPerBlock>>>(
+        thrust::raw_pointer_cast(d_inputs.data()),
+        thrust::raw_pointer_cast(d_base2_outputs1.data()),
+        thrust::raw_pointer_cast(d_base2_outputs2.data()),
+        testCount);
+    cudaDeviceSynchronize();
+
+    float baseMs = 0.0f;
+    float base2Ms = 0.0f;
+    const double baseKeys = static_cast<double>(testCount);
+    const double base2Keys = static_cast<double>(testCount) * 2.0;
+
+    cudaEventRecord(start);
+    testGeneratePrivateKeyBaseKernel<<<blocks, threadsPerBlock>>>(
+        thrust::raw_pointer_cast(d_inputs.data()),
+        thrust::raw_pointer_cast(d_base_outputs.data()),
+        testCount);
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&baseMs, start, stop);
+
+    cudaEventRecord(start);
+    testGeneratePrivateKeyBase2Kernel<<<blocks, threadsPerBlock>>>(
+        thrust::raw_pointer_cast(d_inputs.data()),
+        thrust::raw_pointer_cast(d_base2_outputs1.data()),
+        thrust::raw_pointer_cast(d_base2_outputs2.data()),
+        testCount);
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&base2Ms, start, stop);
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    REQUIRE(cudaGetLastError() == cudaSuccess);
+
+    // Throughput is reported in millions of generated private keys per second.
+    const double baseMks = (baseMs > 0.0f) ? (baseKeys / (static_cast<double>(baseMs) * 1000.0)) : 0.0;
+    const double base2Mks = (base2Ms > 0.0f) ? (base2Keys / (static_cast<double>(base2Ms) * 1000.0)) : 0.0;
+
+    std::cout << "\nBenchmark x=1, y=1..10000" << std::endl;
+    std::cout << "generatePrivateKeyBase time: " << baseMs << " ms" << std::endl;
+    std::cout << "generatePrivateKeyBase throughput: " << baseMks << " MK/s" << std::endl;
+    std::cout << "generatePrivateKeyBase2 time: " << base2Ms << " ms" << std::endl;
+    std::cout << "generatePrivateKeyBase2 throughput: " << base2Mks << " MK/s" << std::endl;
+}
+
+TEST_CASE("Throughput generatePrivateKeyBase vs generatePrivateKeyBase2")
+{
+    constexpr int defaultCudaDeviceID{0};
+    cu::cudaInit(defaultCudaDeviceID);
+
+    constexpr int testCount = 10000;
+    constexpr int threadsPerBlock = 256;
+    constexpr double targetSeconds = 30.0;
+    const int blocks = (testCount + threadsPerBlock - 1) / threadsPerBlock;
+
+    thrust::host_vector<uint2> h_inputs(testCount);
+    for (int i = 0; i < testCount; ++i)
+    {
+        h_inputs[i].x = 1;
+        h_inputs[i].y = static_cast<uint32_t>(i + 1);
+    }
+
+    thrust::device_vector<uint2> d_inputs = h_inputs;
+    thrust::device_vector<uint256_t> d_base_outputs(testCount);
+    thrust::device_vector<uint256_t> d_base2_outputs1(testCount);
+    thrust::device_vector<uint256_t> d_base2_outputs2(testCount);
+
+    cudaEvent_t start{};
+    cudaEvent_t stop{};
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    testGeneratePrivateKeyBaseKernel<<<blocks, threadsPerBlock>>>(
+        thrust::raw_pointer_cast(d_inputs.data()),
+        thrust::raw_pointer_cast(d_base_outputs.data()),
+        testCount);
+    testGeneratePrivateKeyBase2Kernel<<<blocks, threadsPerBlock>>>(
+        thrust::raw_pointer_cast(d_inputs.data()),
+        thrust::raw_pointer_cast(d_base2_outputs1.data()),
+        thrust::raw_pointer_cast(d_base2_outputs2.data()),
+        testCount);
+    cudaDeviceSynchronize();
+
+    auto runForTargetSeconds = [&](auto kernelLaunch, double keysPerLaunch, const char* label)
+    {
+        uint64_t launches = 0;
+        float totalMs = 0.0f;
+
+        // Measure steady-state kernel time until the accumulated GPU work reaches 30 s.
+        while (static_cast<double>(totalMs) < targetSeconds * 1000.0)
+        {
+            cudaEventRecord(start);
+            kernelLaunch();
+            cudaEventRecord(stop);
+            cudaEventSynchronize(stop);
+
+            float iterMs = 0.0f;
+            cudaEventElapsedTime(&iterMs, start, stop);
+            totalMs += iterMs;
+            ++launches;
+        }
+
+        const double totalKeys = static_cast<double>(launches) * keysPerLaunch;
+        const double throughputMks = (totalMs > 0.0f) ? (totalKeys / (static_cast<double>(totalMs) * 1000.0)) : 0.0;
+
+        std::cout << label << " duration: " << totalMs << " ms" << std::endl;
+        std::cout << label << " throughput: " << throughputMks << " MK/s" << std::endl;
+    };
+
+    std::cout << "\nSustained throughput benchmark x=1, y=1..10000" << std::endl;
+    runForTargetSeconds([&]()
+    {
+        testGeneratePrivateKeyBaseKernel<<<blocks, threadsPerBlock>>>(
+            thrust::raw_pointer_cast(d_inputs.data()),
+            thrust::raw_pointer_cast(d_base_outputs.data()),
+            testCount);
+    }, static_cast<double>(testCount), "generatePrivateKeyBase");
+
+    runForTargetSeconds([&]()
+    {
+        testGeneratePrivateKeyBase2Kernel<<<blocks, threadsPerBlock>>>(
+            thrust::raw_pointer_cast(d_inputs.data()),
+            thrust::raw_pointer_cast(d_base2_outputs1.data()),
+            thrust::raw_pointer_cast(d_base2_outputs2.data()),
+            testCount);
+    }, static_cast<double>(testCount) * 2.0, "generatePrivateKeyBase2");
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    REQUIRE(cudaGetLastError() == cudaSuccess);
 }

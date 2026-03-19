@@ -42,6 +42,9 @@ struct Args {
     #[arg(long = "comp", alias = "public-key-compression-type-to-check", default_value_t = 2)]
     comp: u32,
 
+    #[arg(long = "gen-mode", alias = "generator-mode", default_value_t = 1)]
+    gen_mode: u32,
+
     #[arg(long = "grid", alias = "grid-size", default_value_t = 0)]
     grid: u32,
 
@@ -140,6 +143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.y_offset,
         args.xs,
         args.comp,
+        args.gen_mode,
         args.grid,
         server,
         log,

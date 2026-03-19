@@ -178,9 +178,10 @@ fn run_one_gpu(
         };
         let pts = config.points_per_thread();
         let comp = config.public_key_compression_type_to_check();
+        let gen_mode = config.generator_mode();
         let grid = config.grid_size();
         let block = config.block_size();
-        if handle.set_params(pts, comp, grid, block).is_err() {
+        if handle.set_params(pts, comp, gen_mode, grid, block).is_err() {
             log::error!("{} set_params failed", gpu_tag(device_id));
             return;
         }
@@ -193,8 +194,8 @@ fn run_one_gpu(
             return;
         }
         let keys_per_iter = handle.keys_per_iteration();
-        log::info!("{} batchesPerThread={} grid={} block={} → batchesPerIteration={}",
-            gpu_tag(device_id), pts, grid, block, keys_per_iter);
+        log::info!("{} batchesPerThread={} gen_mode={} grid={} block={} → batchesPerIteration={}",
+            gpu_tag(device_id), pts, gen_mode, grid, block, keys_per_iter);
         // Как в C++: при 0 берём u32::MAX ключей (полное пространство Y для одного X), не u64::MAX
         let total_to_generate = if config.keys_number_to_generate() == 0 {
             u32::MAX as u64

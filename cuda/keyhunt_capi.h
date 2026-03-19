@@ -44,9 +44,10 @@ KeyhuntHandle keyhunt_init(int device_id);
 /**
  * Set run parameters. Call before set_targets.
  * compression_type: 0=compressed, 1=uncompressed, 2=both
+ * generator_mode: 1=generatePrivateKeyBase, 2=generatePrivateKeyBase2
  */
 int keyhunt_set_params(KeyhuntHandle h, uint32_t points_per_thread, uint32_t compression_type,
-                       uint32_t grid_size, uint32_t block_size);
+                       uint32_t generator_mode, uint32_t grid_size, uint32_t block_size);
 
 /**
  * Set hash160 targets. targets = array of KeyhuntHash160, count = number of elements.

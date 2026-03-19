@@ -465,3 +465,96 @@ __device__ __forceinline__ void generatePrivateKeyBase(const uint2& p, uint256_t
                       static_cast<uint32_t>(bytes[base + 3]);
     }
 }
+
+// Generate two private keys for a given (x, y) seed pair.
+//
+// Mirrors generateBytes3Kernel in gen2/kernel.cu: three SHA1 blocks are computed,
+// one shared Block 1 plus two independent Block 2 variants that differ in the
+// counter word placement (lastWord):
+//
+//   Block 1  (counter=0, lastWord=0): seed = {0, 0, END_FLAG, x, y, 0...}
+//   Block 2a (counter=1, lastWord=6): seed[7]=1, seed[8]=END_FLAG → first key
+//   Block 2b (counter=1, lastWord=0): seed[1]=1  → second key
+//
+// uint256_t convention in this codebase: v[7]=MSW (→ dst[0..3] via
+// uint256_to_secp256k1_bytes_optimized), v[0]=LSW (→ dst[28..31]).
+__device__ __forceinline__ void generatePrivateKeyBase2(const uint2& p, uint256_t& digest1, uint256_t& digest2)
+{
+    constexpr int32_t SEED_SIZE = HASH_OFFSET + EXTRAFRAME_OFFSET; // 87 words
+
+    uint32_t seed[SEED_SIZE];
+
+    // Zero the whole array; x/y go to fixed positions and are set below.
+    #pragma unroll
+    for (int i = 0; i < SEED_SIZE; i++)
+    {
+        seed[i] = 0;
+    }
+
+    // Initial SHA-1 state (IV)
+    seed[HASH_OFFSET]     = d_SHA1_H0;
+    seed[HASH_OFFSET + 1] = d_SHA1_H1;
+    seed[HASH_OFFSET + 2] = d_SHA1_H2;
+    seed[HASH_OFFSET + 3] = d_SHA1_H3;
+    seed[HASH_OFFSET + 4] = d_SHA1_H4;
+
+    // Seed words matching SHA1PRNG init: seed[3]=x, seed[4]=y
+    seed[3] = p.x;
+    seed[4] = p.y;
+
+    // ── Block 1 (shared): counter=0, lastWord=0 ──────────────────────────────
+    // seed[0]=0 (counter hi), seed[1]=0 (counter lo), seed[2]=END_FLAG already set.
+    seed[2] = END_FLAG;
+    computeHash(seed);
+
+    // Save Block 1 hash words — needed for both gen2 and gen1 outputs.
+    const uint32_t b1_0 = seed[HASH_OFFSET];
+    const uint32_t b1_1 = seed[HASH_OFFSET + 1];
+    const uint32_t b1_2 = seed[HASH_OFFSET + 2];
+    const uint32_t b1_3 = seed[HASH_OFFSET + 3];
+    const uint32_t b1_4 = seed[HASH_OFFSET + 4];
+
+    // ── Block 2b (second key): counter=1, lastWord=0 ─────────────────────────
+    // Only seed[1] changes; seed[0]=0 and seed[2]=END_FLAG are already correct.
+    seed[1] = 1;
+    computeHash(seed);
+
+    // Second-key layout (matches out2 from generateBytes3Kernel):
+    //   bytes[0..19]  = Block1 words big-endian, MSB of byte[0] cleared
+    //   bytes[20..31] = Block2b words[0..2] big-endian
+    // → v[7]=MSW=b1_0&~MSB, v[6..3]=b1_1..b1_4, v[2..0]=b2b_0..b2b_2
+    digest2.v[7] = b1_0 & 0x7FFFFFFFu; // clear MSB (matches out2[0] & 0x7F)
+    digest2.v[6] = b1_1;
+    digest2.v[5] = b1_2;
+    digest2.v[4] = b1_3;
+    digest2.v[3] = b1_4;
+    digest2.v[2] = seed[HASH_OFFSET];      // b2b_0
+    digest2.v[1] = seed[HASH_OFFSET + 1];  // b2b_1
+    digest2.v[0] = seed[HASH_OFFSET + 2];  // b2b_2 (LSW)
+
+    // ── Block 2a (first key): counter=1, lastWord=6 ──────────────────────────
+    // Restore Block 1 hash state, then place the counter at words 7-8 instead
+    // of words 0-1, mirroring the "lastWord=6" variant in generateBytes3Kernel.
+    seed[HASH_OFFSET]     = b1_0;
+    seed[HASH_OFFSET + 1] = b1_1;
+    seed[HASH_OFFSET + 2] = b1_2;
+    seed[HASH_OFFSET + 3] = b1_3;
+    seed[HASH_OFFSET + 4] = b1_4;
+    seed[1] = 0;        // restore counter-lo (was 1 for gen2)
+    seed[7] = 1;        // counter lo at lastWord=6 → word index 7
+    seed[8] = END_FLAG; // padding after counter
+    computeHash(seed);
+
+    // First-key layout (matches out1 from generateBytes3Kernel — reversed word order):
+    //   bytes[0..11]  = Block2a words[2..0] big-endian (MSW first)
+    //   bytes[12..31] = Block1 words[4..0] big-endian
+    // → v[7]=MSW=b2a_2, v[6]=b2a_1, v[5]=b2a_0, v[4..0]=b1_4..b1_0
+    digest1.v[7] = seed[HASH_OFFSET + 2];  // b2a_2 (MSW)
+    digest1.v[6] = seed[HASH_OFFSET + 1];  // b2a_1
+    digest1.v[5] = seed[HASH_OFFSET];      // b2a_0
+    digest1.v[4] = b1_4;
+    digest1.v[3] = b1_3;
+    digest1.v[2] = b1_2;
+    digest1.v[1] = b1_1;
+    digest1.v[0] = b1_0; // LSW
+}

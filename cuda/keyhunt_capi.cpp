@@ -25,6 +25,13 @@ static hash160 to_hash160(const KeyhuntHash160* k)
     return h;
 }
 
+static inline uint32_t private_y_from_result_idx(uint32_t iteration, uint32_t keys_per_iteration, uint32_t idx)
+{
+    // Two private keys are generated for each (x, y) seed, so the second half
+    // of the fused-kernel index space maps back onto the same y-range.
+    return iteration * keys_per_iteration + (idx % keys_per_iteration);
+}
+
 struct KeyhuntContext
 {
     int device_id{0};
@@ -55,14 +62,16 @@ KeyhuntHandle keyhunt_init(int device_id)
 }
 
 int keyhunt_set_params(KeyhuntHandle h, uint32_t points_per_thread, uint32_t compression_type,
-                      uint32_t grid_size, uint32_t block_size)
+                      uint32_t generator_mode, uint32_t grid_size, uint32_t block_size)
 {
     if (!h) { KEYHUNT_SET_ERR("keyhunt_set_params: null handle"); return -1; }
     auto* ctx = static_cast<KeyhuntContext*>(h);
     try {
         if (points_per_thread == 0)
             points_per_thread = 128;
-        ctx->ecc->init(points_per_thread, compression_type, grid_size, block_size);
+        if (generator_mode != 1 && generator_mode != 2)
+            generator_mode = 1;
+        ctx->ecc->init(points_per_thread, compression_type, generator_mode, grid_size, block_size);
         ctx->keys_per_iteration = ctx->ecc->getKeysNumberPerIteration();
         return 0;
     } catch (const std::exception& e) {
@@ -149,7 +158,7 @@ uint32_t keyhunt_get_results(KeyhuntHandle h, KeyhuntSearchResult* out_results, 
         for (int j = 0; j < 5; ++j) r->digest[j] = s.digest[j];
         r->iteration = iteration;
         r->private_x_part = private_x_part;
-        r->private_y_part = iteration * keys_per_iter + s.idx;
+        r->private_y_part = private_y_from_result_idx(iteration, keys_per_iter, s.idx);
         for (int j = 0; j < 8; ++j) r->private_key[j] = s.privateKey[j];
     }
     return to_copy;
@@ -211,7 +220,7 @@ uint32_t keyhunt_sync_and_get_results(KeyhuntHandle h, KeyhuntSearchResult* out_
         for (int j = 0; j < 5; ++j) r->digest[j] = s.digest[j];
         r->iteration = iteration;
         r->private_x_part = private_x_part;
-        r->private_y_part = iteration * keys_per_iter + s.idx;
+        r->private_y_part = private_y_from_result_idx(iteration, keys_per_iter, s.idx);
         for (int j = 0; j < 8; ++j) r->private_key[j] = s.privateKey[j];
     }
     return to_copy;

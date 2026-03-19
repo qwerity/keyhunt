@@ -3,6 +3,7 @@
 const DEFAULT_STATUS_CALLBACK_MS: u32 = 1000;
 const DEFAULT_POINTS_PER_THREAD: u32 = 128;
 const DEFAULT_PUBLIC_KEY_COMPRESSION: u32 = 2; // BOTH
+const DEFAULT_GENERATOR_MODE: u32 = 1;
 
 #[derive(Debug, Clone)]
 pub struct LogConfig {
@@ -41,6 +42,7 @@ pub struct Config {
     pub private_y_offset: u32,
     pub specific_x_values: Vec<u32>,
     pub public_key_compression_type_to_check: u32,
+    pub generator_mode: u32,
     pub grid_size: u32,
     pub server: Option<ServerConfig>,
     pub log: Option<LogConfig>,
@@ -98,6 +100,7 @@ impl Config {
         private_y_offset: u32,
         specific_x_values: Vec<u32>,
         public_key_compression_type_to_check: u32,
+        generator_mode: u32,
         grid_size: u32,
         server: Option<ServerConfig>,
         log: Option<LogConfig>,
@@ -118,6 +121,7 @@ impl Config {
             private_y_offset,
             specific_x_values,
             public_key_compression_type_to_check,
+            generator_mode,
             grid_size,
             server,
             log,
@@ -136,6 +140,9 @@ impl Config {
         }
         if self.public_key_compression_type_to_check > 2 {
             self.public_key_compression_type_to_check = DEFAULT_PUBLIC_KEY_COMPRESSION;
+        }
+        if self.generator_mode != 1 && self.generator_mode != 2 {
+            self.generator_mode = DEFAULT_GENERATOR_MODE;
         }
         if let Some(ref mut server) = self.server {
             let resolved = resolve_machine_id(server);
@@ -177,6 +184,14 @@ impl Config {
 
     pub fn public_key_compression_type_to_check(&self) -> u32 {
         self.public_key_compression_type_to_check
+    }
+
+    pub fn generator_mode(&self) -> u32 {
+        if self.generator_mode == 2 {
+            2
+        } else {
+            DEFAULT_GENERATOR_MODE
+        }
     }
 
     pub fn server(&self) -> Option<&ServerConfig> {
