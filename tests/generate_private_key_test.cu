@@ -11,9 +11,29 @@
 
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
+#include <array>
+#include <limits>
 #include <vector>
 #include <iostream>
 #include <ranges>
+
+namespace
+{
+std::array<uint8_t, 32> toBigEndianBytes(const uint256_t& words)
+{
+    std::array<uint8_t, 32> bytes{};
+    for (int i = 0; i < 8; ++i)
+    {
+        const int byte_idx = 7 - i;
+        const uint32_t word = words.v[i];
+        bytes[byte_idx * 4 + 0] = static_cast<uint8_t>((word >> 24) & 0xFF);
+        bytes[byte_idx * 4 + 1] = static_cast<uint8_t>((word >> 16) & 0xFF);
+        bytes[byte_idx * 4 + 2] = static_cast<uint8_t>((word >> 8) & 0xFF);
+        bytes[byte_idx * 4 + 3] = static_cast<uint8_t>(word & 0xFF);
+    }
+    return bytes;
+}
+}
 
 // CUDA kernel для тестирования generatePrivateKeyBase
 __global__ void testGeneratePrivateKeyBaseKernel(const uint2* inputs, uint256_t* outputs, int count)
@@ -465,7 +485,70 @@ TEST_CASE("Test generatePrivateKeyBase2 first key and digest match generatePriva
     }
 }
 
-TEST_CASE("Benchmark generatePrivateKeyBase vs generatePrivateKeyBase2")
+TEST_CASE("gen-mode 1 digest matches gen-mode 2 digest1")
+{
+    constexpr int defaultCudaDeviceID{0};
+    cu::cudaInit(defaultCudaDeviceID);
+
+    // These cases cover small seeds, asymmetric values, and uint32 boundaries.
+    const std::vector<std::pair<uint32_t, uint32_t>> testCases = {
+        {0, 0},
+        {1, 0},
+        {1, 1},
+        {1, 1024},
+        {0x12345678u, 0xABCDEF00u},
+        {std::numeric_limits<uint32_t>::max(), 0},
+        {0, std::numeric_limits<uint32_t>::max()},
+        {std::numeric_limits<uint32_t>::max(), std::numeric_limits<uint32_t>::max()},
+    };
+
+    thrust::host_vector<uint2> h_inputs(testCases.size());
+    for (size_t i = 0; i < testCases.size(); ++i)
+    {
+        h_inputs[i].x = testCases[i].first;
+        h_inputs[i].y = testCases[i].second;
+    }
+
+    thrust::device_vector<uint2> d_inputs = h_inputs;
+    thrust::device_vector<uint256_t> d_gen1_outputs(testCases.size());
+    thrust::device_vector<uint256_t> d_gen2_digest1_outputs(testCases.size());
+    thrust::device_vector<uint256_t> d_gen2_digest2_outputs(testCases.size());
+
+    constexpr int threadsPerBlock = 256;
+    const int blocks = (static_cast<int>(testCases.size()) + threadsPerBlock - 1) / threadsPerBlock;
+
+    testGeneratePrivateKeyBaseKernel<<<blocks, threadsPerBlock>>>(
+        thrust::raw_pointer_cast(d_inputs.data()),
+        thrust::raw_pointer_cast(d_gen1_outputs.data()),
+        static_cast<int>(testCases.size()));
+    testGeneratePrivateKeyBase2Kernel<<<blocks, threadsPerBlock>>>(
+        thrust::raw_pointer_cast(d_inputs.data()),
+        thrust::raw_pointer_cast(d_gen2_digest1_outputs.data()),
+        thrust::raw_pointer_cast(d_gen2_digest2_outputs.data()),
+        static_cast<int>(testCases.size()));
+    cudaDeviceSynchronize();
+
+    REQUIRE(cudaGetLastError() == cudaSuccess);
+
+    const thrust::host_vector<uint256_t> gen1_outputs = d_gen1_outputs;
+    const thrust::host_vector<uint256_t> gen2_digest1_outputs = d_gen2_digest1_outputs;
+
+    for (size_t i = 0; i < testCases.size(); ++i)
+    {
+        INFO("x=" << std::hex << testCases[i].first << " y=" << testCases[i].second << std::dec);
+
+        for (int j = 0; j < 8; ++j)
+        {
+            REQUIRE(gen1_outputs[i].v[j] == gen2_digest1_outputs[i].v[j]);
+        }
+
+        const auto gen1Bytes = toBigEndianBytes(gen1_outputs[i]);
+        const auto gen2Digest1Bytes = toBigEndianBytes(gen2_digest1_outputs[i]);
+        REQUIRE(gen1Bytes == gen2Digest1Bytes);
+    }
+}
+
+TEST_CASE("Benchmark generatePrivateKeyBase vs generatePrivateKeyBase2 [.]")
 {
     constexpr int defaultCudaDeviceID{0};
     cu::cudaInit(defaultCudaDeviceID);
@@ -543,7 +626,7 @@ TEST_CASE("Benchmark generatePrivateKeyBase vs generatePrivateKeyBase2")
     std::cout << "generatePrivateKeyBase2 throughput: " << base2Mks << " MK/s" << std::endl;
 }
 
-TEST_CASE("Throughput generatePrivateKeyBase vs generatePrivateKeyBase2")
+TEST_CASE("Throughput generatePrivateKeyBase vs generatePrivateKeyBase2 [.]")
 {
     constexpr int defaultCudaDeviceID{0};
     cu::cudaInit(defaultCudaDeviceID);
