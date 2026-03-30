@@ -17,6 +17,7 @@
 extern __constant__ int d_publicKeyCompressionTypeToCheck;
 
 __constant__ uint32_t d_pointsPerThread{};
+__constant__ uint32_t d_seedPairsPerThread{};
 
 __constant__ uint256_t *d_publicKeyXPtr{};
 __constant__ uint256_t *d_publicKeyYPtr{};
@@ -106,6 +107,7 @@ struct ECC::Impl
     {
         mPointsPerThread = value;
         const uint32_t effectivePPT = generatedKeysMultiplier() * mPointsPerThread;
+        cudaCheckError(cudaMemcpyToSymbol(d_seedPairsPerThread, &mPointsPerThread, sizeof(uint32_t)));
         cudaCheckError(cudaMemcpyToSymbol(d_pointsPerThread, &effectivePPT, sizeof(uint32_t)));
     }
 
@@ -116,7 +118,8 @@ struct ECC::Impl
         // Use the kernel we actually run (fused) for occupancy — it uses more registers than publicKeyGenerationKernel
         int minGridSizeFused{};
         int recommendedBlockSizeFused{};
-        cudaCheckError(cudaOccupancyMaxPotentialBlockSize(&minGridSizeFused, &recommendedBlockSizeFused, publicKeyAndCheckHash160FusedKernel));
+        auto* fusedKernel = (mGeneratorMode == 2) ? publicKeyAndCheckHash160FusedKernel2 : publicKeyAndCheckHash160FusedKernel;
+        cudaCheckError(cudaOccupancyMaxPotentialBlockSize(&minGridSizeFused, &recommendedBlockSizeFused, fusedKernel));
 
         const uint32_t actualBlockSize = (blockSize != 0) ? blockSize : static_cast<uint32_t>(recommendedBlockSizeFused);
 
@@ -138,12 +141,12 @@ struct ECC::Impl
             const int dynamicSMemSize = 0;
             cudaCheckError(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
                 &numBlocksPerSM,
-                publicKeyAndCheckHash160FusedKernel,
+                fusedKernel,
                 mBlockSize,
                 dynamicSMemSize));
 
             cudaFuncAttributes attr{};
-            cudaCheckError(cudaFuncGetAttributes(&attr, publicKeyAndCheckHash160FusedKernel));
+            cudaCheckError(cudaFuncGetAttributes(&attr, fusedKernel));
             const int warpsPerBlock = (mBlockSize + 31) / 32;
             const int activeWarpsPerSM = numBlocksPerSM * warpsPerBlock;
             const int maxWarpsPerSM = deviceProp.maxThreadsPerMultiProcessor / 32;
@@ -285,7 +288,14 @@ struct ECC::Impl
 
         const uint256_t* privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys[mCurBuf].data());
         constexpr uint32_t sharedMem = 0;
-        publicKeyAndCheckHash160FusedKernel<<<mGridSize, mBlockSize, sharedMem, mGeneratorStream>>>(privateKeysPtr);
+        if (mGeneratorMode == 2)
+        {
+            publicKeyAndCheckHash160FusedKernel2<<<mGridSize, mBlockSize, sharedMem, mGeneratorStream>>>(privateKeysPtr);
+        }
+        else
+        {
+            publicKeyAndCheckHash160FusedKernel<<<mGridSize, mBlockSize, sharedMem, mGeneratorStream>>>(privateKeysPtr);
+        }
         cudaError_t err = cudaGetLastError();
         if (err != cudaSuccess)
         {
@@ -503,7 +513,14 @@ struct ECC::Impl
 
         constexpr uint32_t mSharedMemSize{0};
         const uint256_t *privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys[mCurBuf].data());
-        publicKeyAndCheckHash160FusedKernel <<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+        if (mGeneratorMode == 2)
+        {
+            publicKeyAndCheckHash160FusedKernel2<<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+        }
+        else
+        {
+            publicKeyAndCheckHash160FusedKernel<<<mGridSize, mBlockSize, mSharedMemSize, mGeneratorStream>>>(privateKeysPtr);
+        }
         cudaError_t err = cudaGetLastError();
         if (err != cudaSuccess)
         {
