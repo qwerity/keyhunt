@@ -1,6 +1,7 @@
 #include "ecc_helper.cuh"
 #include "common_kernels.cuh"
 #include "ec_4limb_math.cuh"
+#include "sha1.cuh"
 
 #include "secp256k1_v2/bip32.cuh"
 #include "secp256k1_v2/secp256k1.cuh"
@@ -478,6 +479,66 @@ __global__ void __launch_bounds__(256, 2) publicKeyAndCheckHash160FusedKernel2(c
             uint256_to_16bit_chunks(batchPrivateKeys[secondSlot], chunks);
             ec4limb_PointMultiJacobianFast(batchQx[secondSlot], batchQy[secondSlot], batchQz[secondSlot], chunks,
                                            gTableX, gTableY);
+        }
+
+        ec4limb_BatchJacobianToAffine<MAX_POINT_BATCH_SIZE>(batchQx, batchQy, batchQz,
+                                                            static_cast<int>(pointBatchSize));
+
+        for (uint32_t i = 0; i < pointBatchSize; ++i) {
+            uint256_t publicX, publicY;
+            ec4limb_to_uint256(batchQx[i], publicX);
+            ec4limb_to_uint256(batchQy[i], publicY);
+            fusedHashAndCheck(publicX, publicY, batchPrivateKeys[i], batchIndices[i]);
+        }
+    }
+}
+
+/**
+ * Mode-2 fused kernel driven directly from the (x, y) seed space.
+ * Avoids materializing the two private-key arrays in global memory before ECC.
+ */
+__global__ void __launch_bounds__(256, 2) publicKeyAndCheckHash160FusedKernel2Seed(
+    const uint32_t privateXPart,
+    const uint32_t yPartIncrementBy)
+{
+    const uint32_t totalThreads = gridDim.x * blockDim.x;
+    const uint32_t threadId = blockDim.x * blockIdx.x + threadIdx.x;
+    constexpr uint32_t MAX_SEED_BATCH_SIZE = 8;
+    constexpr uint32_t MAX_POINT_BATCH_SIZE = MAX_SEED_BATCH_SIZE * 2;
+    const uint64_t* gTableX = d_gTableX_4limb_ptr;
+    const uint64_t* gTableY = d_gTableY_4limb_ptr;
+    const uint32_t secondKeyDepthBase = d_seedPairsPerThread;
+
+    for (uint32_t batchStart = 0; batchStart < d_seedPairsPerThread; batchStart += MAX_SEED_BATCH_SIZE) {
+        const uint32_t seedBatchSize = (MAX_SEED_BATCH_SIZE < (d_seedPairsPerThread - batchStart))
+                                           ? MAX_SEED_BATCH_SIZE
+                                           : (d_seedPairsPerThread - batchStart);
+        const uint32_t pointBatchSize = seedBatchSize * 2;
+
+        uint64_t batchQx[MAX_POINT_BATCH_SIZE][4];
+        uint64_t batchQy[MAX_POINT_BATCH_SIZE][4];
+        uint64_t batchQz[MAX_POINT_BATCH_SIZE][4];
+        uint256_t batchPrivateKeys[MAX_POINT_BATCH_SIZE];
+        uint32_t batchIndices[MAX_POINT_BATCH_SIZE];
+        uint16_t chunks[16];
+
+        for (uint32_t i = 0; i < seedBatchSize; ++i) {
+            const uint32_t firstDepth = batchStart + i;
+            const uint32_t seedY = yPartIncrementBy + firstDepth * totalThreads + threadId;
+            const uint32_t firstSlot = i * 2;
+            const uint32_t secondSlot = firstSlot + 1;
+            const uint32_t secondDepth = secondKeyDepthBase + firstDepth;
+
+            const uint2 seed{privateXPart, seedY};
+            generatePrivateKeyBase2(seed, batchPrivateKeys[firstSlot], batchPrivateKeys[secondSlot]);
+
+            batchIndices[firstSlot] = firstDepth * totalThreads + threadId;
+            uint256_to_16bit_chunks(batchPrivateKeys[firstSlot], chunks);
+            ec4limb_PointMultiJacobianFast(batchQx[firstSlot], batchQy[firstSlot], batchQz[firstSlot], chunks, gTableX, gTableY);
+
+            batchIndices[secondSlot] = secondDepth * totalThreads + threadId;
+            uint256_to_16bit_chunks(batchPrivateKeys[secondSlot], chunks);
+            ec4limb_PointMultiJacobianFast(batchQx[secondSlot], batchQy[secondSlot], batchQz[secondSlot], chunks, gTableX, gTableY);
         }
 
         ec4limb_BatchJacobianToAffine<MAX_POINT_BATCH_SIZE>(batchQx, batchQy, batchQz,

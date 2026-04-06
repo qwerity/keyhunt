@@ -53,6 +53,13 @@ __global__ void privateKeysForXKernel2(uint32_t xPart, uint32_t yPartIncrementBy
 
 struct ECC::Impl
 {
+    struct SeedLaunchMeta
+    {
+        uint32_t privateXPart{0};
+        uint32_t yPartIncrementBy{0};
+        bool valid{false};
+    };
+
     cudaStream_t mGeneratorStream{};
     cudaStream_t mInitStream{};
 
@@ -70,6 +77,7 @@ struct ECC::Impl
     // key-gen writes to d_privateKeys[1 - mCurBuf].
     thrust::udevice_vector<uint256_t> d_privateKeys[2];
     int mCurBuf{0};  // index currently in use by the kernel
+    SeedLaunchMeta mSeedLaunchMeta[2];
 
     // Legacy alias for old single-buffer path (points to d_privateKeys[mCurBuf])
     thrust::udevice_vector<uint256_t>& d_privateKeysCur() { return d_privateKeys[mCurBuf]; }
@@ -238,6 +246,7 @@ struct ECC::Impl
         }
 
         const uint32_t increment = iteration * keysNumberPerIteration;
+        mSeedLaunchMeta[mCurBuf] = {};
 
         cudaCheckError(cudaKernelSyncLaunch(mInitStream, [&]()
         {
@@ -266,34 +275,50 @@ struct ECC::Impl
         const uint32_t increment = iteration * keysNumberPerIteration;
         const int nextBuf = 1 - mCurBuf;
 
+        if (mGeneratorMode == 2) {
+            mSeedLaunchMeta[nextBuf] = {
+                .privateXPart = privateXPart,
+                .yPartIncrementBy = increment,
+                .valid = true,
+            };
+            return;
+        }
+
+        mSeedLaunchMeta[nextBuf] = {};
+
         uint256_t* ptr = thrust::raw_pointer_cast(d_privateKeys[nextBuf].data());
         constexpr uint32_t block = 256u;
         const uint32_t grid = (keysNumberPerIteration + block - 1u) / block;
-        if (mGeneratorMode == 2) {
-            privateKeysForXKernel2<<<grid, block, 0, mInitStream>>>(privateXPart, increment, ptr, keysNumberPerIteration);
-        } else {
-            privateKeysForXKernel<<<grid, block, 0, mInitStream>>>(privateXPart, increment, ptr, keysNumberPerIteration);
-        }
+        privateKeysForXKernel<<<grid, block, 0, mInitStream>>>(privateXPart, increment, ptr, keysNumberPerIteration);
         // No sync — caller is responsible for synchronizing mInitStream before launchKernelAsync.
     }
 
     // Pipeline step 2: sync key-gen, swap buffers, launch kernel async.
     void launchKernelAsync()
     {
-        // Wait for the key-gen (mInitStream) to finish writing to the staging buffer.
-        cudaCheckError(cudaStreamSynchronize(mInitStream));
-
         // Promote staging buffer → current.
-        mCurBuf = 1 - mCurBuf;
+        const int nextBuf = 1 - mCurBuf;
+        if (mGeneratorMode != 2 || !mSeedLaunchMeta[nextBuf].valid) {
+            // Wait for the key-gen (mInitStream) to finish writing to the staging buffer.
+            cudaCheckError(cudaStreamSynchronize(mInitStream));
+        }
+        mCurBuf = nextBuf;
 
-        const uint256_t* privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys[mCurBuf].data());
         constexpr uint32_t sharedMem = 0;
         if (mGeneratorMode == 2)
         {
-            publicKeyAndCheckHash160FusedKernel2<<<mGridSize, mBlockSize, sharedMem, mGeneratorStream>>>(privateKeysPtr);
+            const auto meta = mSeedLaunchMeta[mCurBuf];
+            if (meta.valid) {
+                publicKeyAndCheckHash160FusedKernel2Seed<<<mGridSize, mBlockSize, sharedMem, mGeneratorStream>>>(
+                    meta.privateXPart, meta.yPartIncrementBy);
+            } else {
+                const uint256_t* privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys[mCurBuf].data());
+                publicKeyAndCheckHash160FusedKernel2<<<mGridSize, mBlockSize, sharedMem, mGeneratorStream>>>(privateKeysPtr);
+            }
         }
         else
         {
+            const uint256_t* privateKeysPtr = thrust::raw_pointer_cast(d_privateKeys[mCurBuf].data());
             publicKeyAndCheckHash160FusedKernel<<<mGridSize, mBlockSize, sharedMem, mGeneratorStream>>>(privateKeysPtr);
         }
         cudaError_t err = cudaGetLastError();
