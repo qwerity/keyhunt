@@ -155,15 +155,14 @@ struct ECC::Impl
 
             cudaFuncAttributes attr{};
             cudaCheckError(cudaFuncGetAttributes(&attr, fusedKernel));
-            const int warpsPerBlock = (mBlockSize + 31) / 32;
-            const int activeWarpsPerSM = numBlocksPerSM * warpsPerBlock;
-            const int maxWarpsPerSM = deviceProp.maxThreadsPerMultiProcessor / 32;
-            const int occupancyPct = (maxWarpsPerSM > 0) ? (activeWarpsPerSM * 100 / maxWarpsPerSM) : 0;
-
             const int optimalGridSize = deviceProp.multiProcessorCount * numBlocksPerSM;
             mGridSize = static_cast<uint32_t>(std::max(minGridSizeFused, optimalGridSize));
 
 #ifdef KEYHUNT_CUDA_VERBOSE
+            const int warpsPerBlock = (mBlockSize + 31) / 32;
+            const int activeWarpsPerSM = numBlocksPerSM * warpsPerBlock;
+            const int maxWarpsPerSM = deviceProp.maxThreadsPerMultiProcessor / 32;
+            const int occupancyPct = (maxWarpsPerSM > 0) ? (activeWarpsPerSM * 100 / maxWarpsPerSM) : 0;
             fprintf(stdout, "[GPU %d] %s | SMs %d Blocks/SM %d | grid %u block %u | occupancy %d%%\n",
                     deviceId, deviceProp.name, deviceProp.multiProcessorCount, numBlocksPerSM,
                     mGridSize, mBlockSize, occupancyPct);

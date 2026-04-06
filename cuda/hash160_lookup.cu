@@ -28,7 +28,7 @@ namespace
     /**
     * Copies the target hashes to constant memory
     */
-    void setTargetConstantMemory(const std::unordered_set<hash160> &targets)
+    void setTargetConstantMemory(const Hash160Set &targets)
     {
         const size_t count = targets.size();
         uint32_t i{0};
@@ -88,7 +88,7 @@ namespace
         return static_cast<uint32_t>(ceil(log(m) / log(2)));
     }
 
-    void initializeBloomFilter(const std::unordered_set<hash160> &targets, thrust::host_vector<uint32_t> &filter, const uint32_t mask)
+    void initializeBloomFilter(const Hash160Set &targets, thrust::host_vector<uint32_t> &filter, const uint32_t mask)
     {
         // Use the low 16 bits of each word in the hash as the index into the bloom filter
         for (const auto& target : targets)
@@ -103,7 +103,7 @@ namespace
         }
     }
 
-    void initializeBloomFilter64(const std::unordered_set<hash160> & targets, thrust::host_vector<uint32_t> &filter, const uint64_t mask)
+    void initializeBloomFilter64(const Hash160Set & targets, thrust::host_vector<uint32_t> &filter, const uint64_t mask)
     {
         for (const auto& target : targets)
         {
@@ -164,7 +164,7 @@ struct Hash160Lookup::Impl
     /**
     * Populates the bloom filter with the target hashes
     */
-    void setTargetBloomFilter(const std::unordered_set<hash160> &targets)
+    void setTargetBloomFilter(const Hash160Set &targets)
     {
         // ОПТИМИЗАЦИЯ: Уменьшаем false positive rate для большого количества целей (72M+)
         // Это уменьшает нагрузку на CPU при проверке false positives
@@ -174,9 +174,9 @@ struct Hash160Lookup::Impl
         const uint32_t bloomFilterBits = getOptimalBloomFilterBits(requiredProbability, targets.size());
 
         const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
-        const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
         const uint64_t bloomFilterMask = (1ULL << bloomFilterBits) - 1;
 #ifdef KEYHUNT_CUDA_VERBOSE
+        const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
         fprintf(stderr, "Allocating bloom filter (%d bits): %.02fMb\n", bloomFilterBits, static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
 #endif
 
@@ -212,9 +212,9 @@ struct Hash160Lookup::Impl
         constexpr double requiredProbability{1.0e-12};
         const uint32_t bloomFilterBits = getOptimalBloomFilterBits(requiredProbability, count);
         const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
-        const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
         const uint64_t bloomFilterMask = (1ULL << bloomFilterBits) - 1;
 #ifdef KEYHUNT_CUDA_VERBOSE
+        const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
         fprintf(stderr, "Allocating bloom filter (%d bits): %.02fMb\n", bloomFilterBits, static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
 #endif
 
@@ -243,26 +243,13 @@ struct Hash160Lookup::Impl
     /**
     * Copies the target hashes to either constant memory, or the bloom filter depending on how many targets there are
     */
-    void setTargets(const std::unordered_set<hash160>& hash160Targets)
+    void setTargets(const Hash160Set& hash160Targets)
     {
         thrust::release(d_bloomFilter);
 
-        // ОПТИМИЗАЦИЯ: Увеличиваем порог для использования bloom фильтра
-        // Для малого количества целей constant memory быстрее (нет чтений из global memory)
-        // Bloom фильтр полезен только для большого количества целей (>100)
-        constexpr uint32_t bloomFilterThreshold = 100;
-        
         if (hash160Targets.size() <= maxTargetsConstantMem)
         {
             setTargetConstantMemory(hash160Targets);
-        }
-        else if (hash160Targets.size() <= bloomFilterThreshold)
-        {
-            // Для среднего количества целей используем constant memory с расширенным массивом
-            // Но так как maxTargetsConstantMem = 16, используем bloom фильтр только если > 16
-            // Для оптимизации: если целей <= 100, лучше использовать constant memory напрямую
-            // Но так как ограничение 16, используем bloom фильтр
-            setTargetBloomFilter(hash160Targets);
         }
         else
         {
@@ -273,14 +260,9 @@ struct Hash160Lookup::Impl
     void setTargets(const hash160* ptr, size_t count)
     {
         thrust::release(d_bloomFilter);
-        constexpr uint32_t bloomFilterThreshold = 100;
         if (count <= maxTargetsConstantMem)
         {
             setTargetConstantMemory(ptr, count);
-        }
-        else if (count <= bloomFilterThreshold)
-        {
-            setTargetBloomFilter(ptr, count);
         }
         else
         {
@@ -291,7 +273,6 @@ struct Hash160Lookup::Impl
     void setTargets(size_t count, const void* user_data, Hash160GetterFn getter)
     {
         thrust::release(d_bloomFilter);
-        constexpr uint32_t bloomFilterThreshold = 100;
         if (count <= maxTargetsConstantMem)
         {
             setTargetConstantMemoryFromGetter(count, user_data, getter);
@@ -307,9 +288,9 @@ struct Hash160Lookup::Impl
         constexpr double requiredProbability{1.0e-12};
         const uint32_t bloomFilterBits = getOptimalBloomFilterBits(requiredProbability, count);
         const uint64_t bloomFilterSizeWords = 1ULL << (bloomFilterBits - 5);
-        const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
         const uint64_t bloomFilterMask = (1ULL << bloomFilterBits) - 1;
 #ifdef KEYHUNT_CUDA_VERBOSE
+        const uint64_t bloomFilterBytes = 1ULL << (bloomFilterBits - 3);
         fprintf(stderr, "Allocating bloom filter (%d bits): %.02fMb\n", bloomFilterBits, static_cast<double>(bloomFilterBytes) / (1024.0 * 1024.0));
 #endif
 
@@ -370,7 +351,7 @@ Hash160Lookup& Hash160Lookup::operator=(Hash160Lookup &&rhs) noexcept = default;
 /**
 * Copies the target hashes to either constant memory, or the bloom filter depending on how many targets there are
 */
-void Hash160Lookup::setTargets(const std::unordered_set<hash160>& hash160Targets) const
+void Hash160Lookup::setTargets(const Hash160Set& hash160Targets) const
 {
     mImpl->setTargets(hash160Targets);
 }

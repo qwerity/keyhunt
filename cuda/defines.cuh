@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <cassert>
 #include <cstdio>
+#include <functional>
+#include <unordered_set>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
@@ -147,24 +149,20 @@ struct alignas(32) hash160
     }
 };
 
-#ifndef __CUDA_ARCH__
-#include <functional>
-
-// std::hash specialization for hash160
-template<>
-struct std::hash<hash160>
+struct Hash160Hash
 {
     std::size_t operator()(const hash160& h) const noexcept
     {
         std::size_t seed = 0;
-        for (unsigned int hi : h.h)
+        for (const uint32_t hi : h.h)
         {
             seed ^= std::hash<uint32_t>{}(hi) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
         }
         return seed;
     }
 };
-#endif
+
+using Hash160Set = std::unordered_set<hash160, Hash160Hash>;
 
 template <typename LambdaFunc>
 cudaError_t cudaKernelSyncLaunch(const cudaStream_t& stream, LambdaFunc&& kernelLambda, const char* origin = "kernel")

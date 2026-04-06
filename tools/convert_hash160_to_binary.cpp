@@ -3,8 +3,6 @@
 #include "util/config.h"
 
 #include <string>
-#include <unordered_set>
-
 #include <boost/log/trivial.hpp>
 #include <boost/log/utility/setup.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
@@ -21,7 +19,7 @@ int main(int argc, char* argv[])
     }
 
     const std::string hash160TargetsFilepath = argv[1];
-    std::unordered_set<hash160> hash160Set;
+    Hash160Set hash160Set;
 
     if (!utils::readHash160HexStrFileToSet(hash160TargetsFilepath, hash160Set))
     {
@@ -34,7 +32,7 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    std::unordered_set<hash160> hash160SetFromBin;
+    Hash160Set hash160SetFromBin;
     if (!utils::readSetFromHash160BinaryFile(hash160TargetsBinFilepath, hash160SetFromBin))
     {
         return -1;

@@ -4,7 +4,6 @@
 
 #include <cstddef>
 #include <memory>
-#include <unordered_set>
 
 __device__ bool checkHash(const uint32_t hash[5]);
 __device__ bool checkHash(const hash160& hash);
@@ -21,7 +20,7 @@ public:
     Hash160Lookup(Hash160Lookup&& rhs) noexcept;
     Hash160Lookup& operator=(Hash160Lookup&& rhs) noexcept;
 
-    void setTargets(const std::unordered_set<hash160> &hash160Targets) const;
+    void setTargets(const Hash160Set &hash160Targets) const;
 
     /// Set targets from contiguous array (no internal copy; use from C API / Rust to avoid duplicate storage).
     void setTargets(const hash160* targets, size_t count) const;

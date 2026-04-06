@@ -6,7 +6,6 @@
 #include "cuda/hash160_lookup.cuh"
 
 #include <iostream>
-#include <unordered_set>
 #include <format>
 #include <iomanip>
 #include <sstream>
@@ -73,7 +72,7 @@ TEST_CASE("Test hash160 file loading and search", "[hash160]")
     // Хеш для поиска
     const std::string targetHashHex = "65c49a515584681366cdbac2ccfb985f4be1427a";
     
-    std::unordered_set<hash160> hash160Targets;
+    Hash160Set hash160Targets;
     
     // Загружаем hash160 цели из файла
     std::cout << "Loading hash160 targets from: " << hash160File << std::endl;

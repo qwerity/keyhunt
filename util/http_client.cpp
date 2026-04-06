@@ -143,7 +143,7 @@ struct HttpClient::Impl
     {
         beast::error_code ec;
         ec.clear();
-        net::ip::address_v4 ipv4 = net::ip::address_v4::from_string(config.host.c_str(), ec);
+        net::ip::address_v4 ipv4 = net::ip::make_address_v4(config.host, ec);
         if (!ec)
         {
             uint16_t portNum = static_cast<uint16_t>(std::stoul(config.port));

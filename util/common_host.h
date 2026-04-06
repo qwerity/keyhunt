@@ -8,8 +8,6 @@
 
 #include <boost/lockfree/queue.hpp>
 
-#include <unordered_set>
-
 class XPartManager;
 
 /*################################################################################################################################################################################*/
@@ -23,7 +21,7 @@ struct GlobalContext
     Config config{"config.json"};
     std::shared_ptr<HttpClient> httpClient;
     std::shared_ptr<XPartManager> xPartManager;
-    std::unordered_set<hash160> hash160Targets;
+    Hash160Set hash160Targets;
     std::shared_ptr<Hash160SearchResultsQueue> hash160SearchResultsQueue;
     std::shared_ptr<MnemonicMasterKeyHash160SearchResultsQueue> mnemonicMasterKeyHash160SearchResultsQueue;
     std::shared_ptr<MnemonicMasterKeysQueue> mnemonicMasterKeysQueue;

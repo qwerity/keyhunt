@@ -300,7 +300,7 @@ namespace utils
         return hash;
     }
 
-    bool readHash160HexStrFileToSet(const std::string& hash160TargetsFile, std::unordered_set<hash160> &hashSet)
+    bool readHash160HexStrFileToSet(const std::string& hash160TargetsFile, Hash160Set &hashSet)
     {
         try
         {
@@ -366,7 +366,7 @@ namespace utils
         return true;
     }
 
-    bool writeHash160SetToBinaryFile(const std::string& filename, const std::unordered_set<hash160>& hashSet)
+    bool writeHash160SetToBinaryFile(const std::string& filename, const Hash160Set& hashSet)
     {
         try
         {
@@ -400,7 +400,7 @@ namespace utils
         return true;
     }
 
-    bool readSetFromHash160BinaryFile(const std::string& filename, std::unordered_set<hash160>& hashSet)
+    bool readSetFromHash160BinaryFile(const std::string& filename, Hash160Set& hashSet)
     {
         try
         {
@@ -453,7 +453,7 @@ namespace utils
         return true;
     }
 
-    void readHash160Targets(const std::vector<std::string>& ripemd160TargetsFilePaths, std::unordered_set<hash160>& targets)
+    void readHash160Targets(const std::vector<std::string>& ripemd160TargetsFilePaths, Hash160Set& targets)
     {
         if (ripemd160TargetsFilePaths.empty())
             return;
@@ -935,4 +935,3 @@ namespace utils
         return bip32GetDerivationPathsFromPatterns(derivationPathsPatters, accountsToGenerate, addressesToGenerate, allExpandedPaths);
     }
 }
-
