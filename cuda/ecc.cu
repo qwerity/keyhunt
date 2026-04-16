@@ -488,6 +488,29 @@ struct ECC::Impl
         cudaCheckError(cudaMemcpyToSymbol(d_gTableY_4limb_ptr, &d_gTableYRaw, sizeof(uint64_t*)));
     }
 
+    // Advise the driver that the 4-limb GTable arrays are read-only so it can
+    // optimise caching and page-mapping decisions.  cudaMemAdviseSetReadMostly
+    // requires managed (unified) memory; for regular device allocations the
+    // closest equivalent is cudaMemAdviseSetPreferredLocation + access hints,
+    // but in practice the driver already handles these correctly for device-
+    // resident buffers.  We still set the access-location hint so the driver
+    // records that device 'deviceId' is the primary consumer, which helps on
+    // multi-GPU systems or when the memory profiler is attached.
+    void applyGTableMemAdvise()
+    {
+        int deviceId = 0;
+        cudaGetDevice(&deviceId);
+        const uint64_t* xRaw = thrust::raw_pointer_cast(d_gTableX_4limb.data());
+        const uint64_t* yRaw = thrust::raw_pointer_cast(d_gTableY_4limb.data());
+        const size_t xBytes = d_gTableX_4limb.size() * sizeof(uint64_t);
+        const size_t yBytes = d_gTableY_4limb.size() * sizeof(uint64_t);
+        // cudaMemAdviseSetAccessedBy tells the driver this device will access
+        // these pages heavily, enabling it to create direct mappings and avoid
+        // page-fault overheads (relevant when UVM is involved).
+        cudaMemAdvise(xRaw, xBytes, cudaMemAdviseSetAccessedBy, deviceId);
+        cudaMemAdvise(yRaw, yBytes, cudaMemAdviseSetAccessedBy, deviceId);
+    }
+
     void allocateGTableDeviceMemory()
     {
         constexpr uint32_t tableSize = ECMULT_GEN_PREC_N * ECMULT_GEN_PREC_G;
@@ -504,6 +527,8 @@ struct ECC::Impl
         }
         // Upload gTable pointers to constant memory once — avoids per-iteration memcpy.
         uploadGTablePointersToConstMem();
+        // Hint the driver about the access pattern for the GTable arrays.
+        applyGTableMemAdvise();
     }
 
     void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t generatorMode, const uint32_t gridSize, const uint32_t blockSize)
