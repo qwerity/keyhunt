@@ -388,7 +388,9 @@ __global__ void __launch_bounds__(256, 2) publicKeyAndCheckHash160FusedKernel(co
         {
             const uint32_t nextDepth = batchStart + MAX_BATCH_SIZE;
             const uint32_t nextIndex = nextDepth * totalThreads + threadId;
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 1000
+            asm volatile("prefetch.global.L1 [%0];" : : "l"(&privateKeys[nextIndex]) : "memory");
+#elif defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
             asm volatile("prefetch.global.L2 [%0];" : : "l"(&privateKeys[nextIndex]) : "memory");
 #endif
         }
@@ -444,7 +446,10 @@ __global__ void __launch_bounds__(256, 2) publicKeyAndCheckHash160FusedKernel2(c
             const uint32_t nextDepth = batchStart + MAX_SEED_BATCH_SIZE;
             const uint32_t nextIndex1 = nextDepth * totalThreads + threadId;
             const uint32_t nextIndex2 = (secondKeyDepthBase + nextDepth) * totalThreads + threadId;
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 1000
+            asm volatile("prefetch.global.L1 [%0];" : : "l"(&privateKeys[nextIndex1]) : "memory");
+            asm volatile("prefetch.global.L1 [%0];" : : "l"(&privateKeys[nextIndex2]) : "memory");
+#elif defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
             asm volatile("prefetch.global.L2 [%0];" : : "l"(&privateKeys[nextIndex1]) : "memory");
             asm volatile("prefetch.global.L2 [%0];" : : "l"(&privateKeys[nextIndex2]) : "memory");
 #endif
