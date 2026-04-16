@@ -531,6 +531,58 @@ struct ECC::Impl
         applyGTableMemAdvise();
     }
 
+    // Pin the 4-limb GTable X/Y arrays in the L2 persistent set so they are
+    // not evicted by other global-memory traffic during kernel execution.
+    // On RTX 5090 (Blackwell) the L2 is 96 MB; the combined GTable is ~64 MB,
+    // so up to 75 % of L2 is reserved for persistence — enough to hold both
+    // halves.  Falls back silently on older GPUs that have smaller L2 budgets
+    // (hitRatio is clamped to available quota by the driver).
+    void pinGTableInL2Persistent()
+    {
+        cudaDeviceProp prop{};
+        int deviceId = 0;
+        cudaGetDevice(&deviceId);
+        cudaGetDeviceProperties(&prop, deviceId);
+
+        // Reserve at most 75 % of L2 for persistence to leave headroom for
+        // private keys, bloom filter, and result buffers.
+        const size_t l2Budget = static_cast<size_t>(prop.l2CacheSize * 0.75f);
+
+        const uint64_t* xRaw = thrust::raw_pointer_cast(d_gTableX_4limb.data());
+        const uint64_t* yRaw = thrust::raw_pointer_cast(d_gTableY_4limb.data());
+        const size_t xBytes  = d_gTableX_4limb.size() * sizeof(uint64_t);
+        const size_t yBytes  = d_gTableY_4limb.size() * sizeof(uint64_t);
+
+        // Pin GTable X first (covers the full budget if table > budget/2).
+        const size_t xPin = std::min(xBytes, l2Budget);
+        cudaStreamAttrValue attrX{};
+        attrX.accessPolicyWindow.base_ptr  = const_cast<uint64_t*>(xRaw);
+        attrX.accessPolicyWindow.num_bytes = xPin;
+        attrX.accessPolicyWindow.hitRatio  = 1.0f;
+        attrX.accessPolicyWindow.hitProp   = cudaAccessPropertyPersisting;
+        attrX.accessPolicyWindow.missProp  = cudaAccessPropertyStreaming;
+        cudaStreamSetAttribute(mGeneratorStream, cudaStreamAttributeAccessPolicyWindow, &attrX);
+
+        // Pin as much of GTable Y as the remaining budget allows.
+        if (l2Budget > xPin) {
+            const size_t yPin = std::min(yBytes, l2Budget - xPin);
+            cudaStreamAttrValue attrY{};
+            attrY.accessPolicyWindow.base_ptr  = const_cast<uint64_t*>(yRaw);
+            attrY.accessPolicyWindow.num_bytes = yPin;
+            attrY.accessPolicyWindow.hitRatio  = 1.0f;
+            attrY.accessPolicyWindow.hitProp   = cudaAccessPropertyPersisting;
+            attrY.accessPolicyWindow.missProp  = cudaAccessPropertyStreaming;
+            cudaStreamSetAttribute(mGeneratorStream, cudaStreamAttributeAccessPolicyWindow, &attrY);
+        }
+
+#ifdef KEYHUNT_CUDA_VERBOSE
+        fprintf(stdout, "[GPU %d] L2 cache %zu MB: pinning GTable X %zu MB + Y %zu MB (budget %zu MB)\n",
+                deviceId, prop.l2CacheSize >> 20,
+                xPin >> 20, std::min(yBytes, l2Budget > xPin ? l2Budget - xPin : 0UL) >> 20,
+                l2Budget >> 20);
+#endif
+    }
+
     void init(const uint32_t pointsPerThread, const uint32_t publicKeyCompressionTypeToCheck, const uint32_t generatorMode, const uint32_t gridSize, const uint32_t blockSize)
     {
         // From examples: L1 cache helps random GTable access; larger stack for deep kernel frames
@@ -553,6 +605,11 @@ struct ECC::Impl
         allocateGTableDeviceMemory();
         allocatePrivateKeysDeviceMemory();
         allocatePublicKeysDeviceMemory();
+
+        // Pin the GTable in L2 persistent cache after streams and GTable are ready.
+        // On RTX 5090 the 96 MB L2 can hold the full 64 MB table, effectively
+        // eliminating DRAM traffic for all GTable lookups during kernel execution.
+        pinGTableInL2Persistent();
     }
 
     void calculatePublicKeysAndCheckHash160()
