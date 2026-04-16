@@ -65,7 +65,7 @@ struct ECC::Impl
 
     uint32_t mGridSize{32};
     uint32_t mBlockSize{512};
-    uint32_t mPointsPerThread{32};
+    uint32_t mPointsPerThread{64};
     uint32_t mGeneratorMode{1};
 
     uint32_t mKeysNumberPerIteration{mGridSize * mBlockSize * mPointsPerThread};
