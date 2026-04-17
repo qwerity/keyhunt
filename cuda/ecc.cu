@@ -507,8 +507,17 @@ struct ECC::Impl
         // cudaMemAdviseSetAccessedBy tells the driver this device will access
         // these pages heavily, enabling it to create direct mappings and avoid
         // page-fault overheads (relevant when UVM is involved).
+        // CUDA 13 replaced the int deviceId overload with cudaMemLocation.
+#if CUDART_VERSION >= 13000
+        cudaMemLocation loc{};
+        loc.type = cudaMemLocationTypeDevice;
+        loc.id   = deviceId;
+        cudaMemAdvise(xRaw, xBytes, cudaMemAdviseSetAccessedBy, loc);
+        cudaMemAdvise(yRaw, yBytes, cudaMemAdviseSetAccessedBy, loc);
+#else
         cudaMemAdvise(xRaw, xBytes, cudaMemAdviseSetAccessedBy, deviceId);
         cudaMemAdvise(yRaw, yBytes, cudaMemAdviseSetAccessedBy, deviceId);
+#endif
     }
 
     void allocateGTableDeviceMemory()
