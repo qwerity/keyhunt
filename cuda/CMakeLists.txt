@@ -29,7 +29,9 @@ set(NVCC_COMPILATION_FLAGS "--split-compile=0 --threads=0")
 
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr -Xptxas -dlcm=ca ${CUDA_PROFILING_OUTPUT} ${CUDA_SUPPRESS_WARNINGS} ${NVCC_COMPILATION_FLAGS}")
 set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -O0 -G") # -G enables device-side debugging but significantly slows down the compilation
-set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE} -O3") # Explicit -O3; default release is only -O2
+# Do NOT add -O3 here: nvcc -O3 inlines ec4limb_ModInv aggressively and blows
+# the __launch_bounds__(256, 2) register budget (204 > 128), causing nvlink
+# to reject the fused kernels.  Default release (-O2) is the working setting.
 
 #message("CMAKE_CUDA_FLAGS: ${CMAKE_CUDA_FLAGS}")
 #message("CMAKE_CUDA_FLAGS_DEBUG: ${CMAKE_CUDA_FLAGS_DEBUG}")
